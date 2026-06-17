@@ -1,124 +1,87 @@
 # AGENTS.md
 
 ## Project Overview
-本專案是「北科遊戲化學業交流區」的前端展示 Demo。
-目標是做出一個可以在瀏覽器中打開的靜態網站，展示：
-- 跨科系看板介面（如資財系、電機系）
-- 虛擬角色與生命值（愛心）狀態
-- 發問與解答的互動流程
-- 金幣獲取與商城購買食物的機制
-- 資料結構如何被使用（例如文章與留言的關聯）
+本專案是「北科遊戲化學業交流區 (PetScholar)」—— 一個結合**論壇討論**與**虛擬寵物養成**的
+遊戲化校園學業 Q&A 平台。使用者解答同學的課業問題賺取金幣，用金幣在商城購買食物餵食虛擬
+寵物、恢復生命值（愛心），形成學習互助的遊戲化回饋。
 
-本專案主要用於課堂展示與期末報告，不是實際連線的論壇系統。
+> 原本是純前端靜態 Demo，已遷移為 **Next.js 全端應用**（含真實資料庫與登入）。
+> 舊的靜態站存放在 `legacy/` 僅供參考，請勿在新功能中引用。
 
 ## Tech Stack
-請只使用：
-- HTML
-- CSS
-- JavaScript
-- 不使用後端
-- 不使用資料庫
-- 不使用登入系統
-- 不使用 npm / React / Vue 等框架
-
-最終作品必須可以直接用 `index.html` 開啟。
+- **Next.js 16**（App Router、React 19、Turbopack）
+- **TypeScript**（strict）
+- **Tailwind CSS v4**（設計 token 移植自舊站的 Material 3 主題，定義於 `app/globals.css`）
+- **PostgreSQL + Drizzle ORM**（schema 於 `db/schema.ts`，部署於 Zeabur）
+- **Auth.js v5（next-auth beta）+ @auth/drizzle-adapter**，Google 登入、資料庫 session
+- **KaTeX**（數學式渲染）
+- 部署平台：**Zeabur**（完整 Node server，不需 basePath / 不做靜態匯出）
 
 ## File Structure
-請維持以下檔案結構：
 ```text
-├── index.html
-├── style.css
-├── script.js
-├── data/  # 任何其他資料都放置於此
-│   ├── boardsData.js
-│   └── userData.js
-├── AGENTS.md
-├── PRD.md
-├── USER_STORY.md
-└── README.md
+app/
+  layout.tsx              # root layout：載 Header、深淺模式、抓 session/寵物
+  page.tsx                # 首頁 → 導向 /boards
+  globals.css             # Tailwind v4 @theme：設計 token + 深色模式
+  boards/                 # 看板總覽 / [board] 看板內提問列表
+  posts/[id]/             # 文章內容 + 樹狀留言 + SVG；posts/new 發問；actions.ts
+  discussion/             # 全站提問列表 + 狀態篩選
+  pet/feed/               # 寵物餵食、簽到、配件；pet/actions.ts
+  shop/                   # 寵物商城（購買）
+  study-rooms/            # 自習室（加入/離開）；actions.ts
+  leaderboard/            # 排行榜 + 成就
+  professor/  admin/      # 教授後台 / 系統管理後台（role-gated）；admin/actions.ts
+  profile/                # 個人檔案（編輯）；actions.ts
+  login/                  # Google 登入
+  api/auth/[...nextauth]/ # Auth.js route handler
+  actions/auth.ts         # 登入/登出 server actions
+components/               # Header、CommentThread、CommentTreeSvg、PetMascot...
+db/                       # index.ts（Drizzle client）、schema.ts
+lib/                      # rich-content（KaTeX 渲染）、comment-tree、pet、format
+auth.ts                   # NextAuth 設定
+scripts/seed.mjs          # 從 legacy 資料 seed DB
+legacy/                   # 舊靜態站（參考用，勿引用）
 ```
 
-## Must Have
-- 跨科系看板列表與文章總覽
-- 點擊進入文章並模擬新增留言/解答的畫面
-- 虛擬寵物狀態區（顯示生命值與金幣）
-- 模擬商店購買食物恢復生命值的功能
-- 使用 Array / Object / Tree 的說明（用於組織看板、文章與留言結構）
-- 適合簡報展示的畫面
+## Conventions
+- 預設使用 **Server Component**；需互動（usePathname、表單 toggle、SVG 點擊）才用 `"use client"`。
+- 資料異動一律走 **Server Action**（`actions.ts`），server 端驗證身分與權限後再寫 DB。
+- DB 只在 server 端透過 `db`（Drizzle）存取；schema 變更後跑 `npm run db:push`。
+- 沿用 `globals.css` 既有的設計 token（如 `bg-surface`、`text-on-background`、`text-headline-md`、
+  `px-margin-desktop`），不要硬寫色碼，以維持外觀一致與深淺模式。
+- 機密放 `.env.local`（見 `.env.example`），**絕不 commit**。
+
+## Commands
+```bash
+npm run dev         # 本機開發
+npm run build       # 生產建置
+npm run lint        # ESLint
+npm run typecheck   # tsc --noEmit
+npm run db:push     # 套用 schema 到資料庫
+npm run db:seed     # 從 legacy 資料匯入看板/文章/留言/商城/自習室/檢舉
+```
+
+## Must Have（核心功能）
+- 跨學院看板、文章總覽與發問
+- 文章內樹狀（巢狀）留言、採納解答
+- 虛擬寵物狀態（生命值/經驗/等級）、商城購買、餵食、金幣經濟
+- 排行榜與成就、自習室
+- 教授後台與系統管理後台（依角色控管）
 
 ## Do Not Do
-- 不要做太複雜的系統
-- 不要加入真實 API
-- 不要重寫全部程式
-- 不要做需要安裝才能跑的功能
+- 不要引用或修改 `legacy/`（除非是要繼續移植其內容）。
+- 不要把機密寫進程式碼或 commit `.env.local`。
+- 不要在 client component 直接連 DB；改用 server action / server component。
+- 不要硬寫顏色；用設計 token。
 
-## 驗收標準 (重要)
+## 完成定義
+- `npm run lint`、`npm run typecheck`、`npm run build` 皆通過。
+- 主要流程可操作且有明確輸入/處理/輸出。
+- 變更涉及的查詢正確排除被封鎖（hidden）內容、權限正確把關。
 
-### 1. 基本執行
-- 使用者可以直接打開 `index.html` 看到完整畫面
-- 不需要安裝額外套件
-- 不需要登入
-- 不需要後端伺服器
-- 不需要 API key
-- 頁面載入後不能出現明顯錯誤畫面
-- 瀏覽器 console 不應該有會影響功能的 JavaScript error
-
-### 2. Demo 流程
-使用者必須能完成一個完整展示流程：
-1. 進入首頁，看到預設的虛擬寵物狀態與看板列表。
-2. 選擇或看到一個明確的情境（例如：去電機系看板看微積分題目）。
-3. 操作主要功能（例如：模擬發表解答獲得金幣，或去商店買飼料）。
-4. 系統產生明確結果（例如：金幣增加、愛心恢復）。
-5. 結果可以被截圖或口頭說明。
-6. 整個流程可以在 3 分鐘內展示完。
-
-如果是互動式作品，至少要有一條「保證可成功展示」的 demo path
-
-### 3. 核心功能
-- 至少完成 MVP 中定義的核心功能。
-- 核心功能不能只是靜態文字描述，必須有可操作或可觀察的結果。
-- 每個按鈕或主要互動元件都應該有明確作用。
-- 不應存在點了沒有反應、但看起來像主要功能的按鈕。
-- 如果功能尚未完成，請不要放在主要畫面上誤導使用者。
-
-完成時必須能回答：
-- 使用了哪一種資料結構？
-- 資料是怎麼存的？
-- 為什麼這裡適合用這種資料結構？
-- 這個資料結構如何影響功能運作？
-
-### 4. 檔案與程式碼
-- 主要檔案命名清楚，例如 `index.html`, `style.css`, `script.js`。
-- 不要把大量 JavaScript 全部塞在 HTML 裡。
-- 不要留下大量沒用到的程式碼。
-- 不要留下測試用假按鈕、假頁面或無意義文字。
-- 函式名稱應該能看出用途。
-- 如果有資料檔，資料結構要清楚，不要全部寫成難以閱讀的一大坨字串。
-
-### 5. 穩定性
-- 重新整理頁面後仍可以正常使用。
-- 操作順序稍微不同時，不應直接壞掉。
-- 沒有選資料就按按鈕時，系統應該給出提示，而不是報錯。
-- 如果輸入錯誤，畫面應該有清楚回饋。
-- Demo 前應至少完整跑過 3 次主要流程。
-
-### 6. 範圍控制
-以下內容不是必要項目，不應該影響 MVP 完成：
-- 登入系統
-- 後端資料庫
-- 真實金流
-- 真實通知系統
-- 真實 GPS 或雷達配對
-- 複雜 AI 模型
-- 大量頁面
-- 過度精緻但無法操作的動畫
-
-### 10. 最終完成定義
-當以下條件都達成時，才算完成：
-- 可以正常開啟作品。
-- 可以完成主要 demo 流程。
-- 有清楚的輸入、處理、輸出。
-- 至少一個資料結構有被實際用在功能中。
-- 畫面適合展示。
-- 團隊能說明作品邏輯。
-- 沒有明顯會讓 demo 中斷的錯誤。
+## 資料結構（期末報告答詢）
+雖然資料已存入 PostgreSQL，核心資料結構觀念仍適用：
+- **Tree（樹）**：留言以自我參照的 `comment.parentId` 構成樹；`lib/comment-tree.ts` 以
+  DFS 還原成巢狀結構渲染，並在 `CommentTreeSvg` 畫成 Node-Link 樹狀圖（點節點跳至留言）。
+- **Object / Map**：看板以 id 為鍵查找；前端用 `Map` 做 O(1) 對照（如商城庫存、已加入自習室）。
+- **Array**：文章、留言、商品、排行榜等線性集合。
