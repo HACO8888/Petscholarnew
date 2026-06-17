@@ -5,6 +5,9 @@ import {
   primaryKey,
   integer,
   varchar,
+  boolean,
+  jsonb,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -71,3 +74,55 @@ export const verificationTokens = pgTable(
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Role = "student" | "ta" | "professor" | "admin";
+
+// ---- 論壇：看板 / 文章 / 樹狀留言 ----
+
+export const boards = pgTable("board", {
+  id: varchar("id", { length: 32 }).primaryKey(),
+  name: text("name").notNull(),
+  icon: text("icon"),
+  color: varchar("color", { length: 16 }),
+  description: text("description"),
+  departments: jsonb("departments").$type<string[]>().default([]).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+});
+
+export const posts = pgTable("post", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  boardId: varchar("board_id", { length: 32 })
+    .notNull()
+    .references(() => boards.id, { onDelete: "cascade" }),
+  authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+  authorName: text("author_name").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  department: text("department"),
+  tags: jsonb("tags").$type<string[]>().default([]).notNull(),
+  bounty: integer("bounty").default(0).notNull(),
+  solved: boolean("solved").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const comments = pgTable("comment", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  postId: text("post_id")
+    .notNull()
+    .references(() => posts.id, { onDelete: "cascade" }),
+  // 樹狀結構：自我參照父留言
+  parentId: text("parent_id").references((): AnyPgColumn => comments.id, {
+    onDelete: "cascade",
+  }),
+  authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+  authorName: text("author_name").notNull(),
+  content: text("content").notNull(),
+  isAdopted: boolean("is_adopted").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Board = typeof boards.$inferSelect;
+export type Post = typeof posts.$inferSelect;
+export type Comment = typeof comments.$inferSelect;
