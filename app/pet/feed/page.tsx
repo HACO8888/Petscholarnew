@@ -4,17 +4,9 @@ import { and, eq, gt } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, shopItems, inventory } from "@/db/schema";
-import {
-  getOrCreatePet,
-  statusFromHp,
-  maxExpForLevel,
-  isSameDay,
-  CHECKIN_REWARD,
-  HP_PER_HEART,
-} from "@/lib/pet";
+import { getOrCreatePet, statusFromHp } from "@/lib/pet";
 import PetMascot from "@/components/PetMascot";
-import HeartBar from "@/components/HeartBar";
-import { feedPet, claimCheckin, toggleEquip } from "@/app/pet/actions";
+import { feedPet } from "@/app/pet/actions";
 
 export default async function PetFeedPage() {
   const session = await auth();
@@ -35,7 +27,6 @@ export default async function PetFeedPage() {
       name: shopItems.name,
       icon: shopItems.icon,
       hpRestore: shopItems.hpRestore,
-      expGain: shopItems.expGain,
     })
     .from(inventory)
     .innerJoin(shopItems, eq(inventory.itemId, shopItems.id))
@@ -47,88 +38,26 @@ export default async function PetFeedPage() {
       ),
     );
 
-  const accessoryRowsRaw = await db
-    .select({
-      itemId: inventory.itemId,
-      accessoryType: shopItems.accessoryType,
-      name: shopItems.name,
-      icon: shopItems.icon,
-    })
-    .from(inventory)
-    .innerJoin(shopItems, eq(inventory.itemId, shopItems.id))
-    .where(
-      and(
-        eq(inventory.userId, userId),
-        eq(shopItems.type, "accessory"),
-        gt(inventory.quantity, 0),
-      ),
-    );
-
-  // 裝備狀態以 accessoryType（boolean 欄位）為單位，每種型別只能裝備一件。
-  // 故同型配件只取第一件，避免重複的 React key 與相互衝突的裝備控制項。
-  const seenAccessoryTypes = new Set<string>();
-  const accessoryRows = accessoryRowsRaw.filter((a) => {
-    if (!a.accessoryType || seenAccessoryTypes.has(a.accessoryType)) return false;
-    seenAccessoryTypes.add(a.accessoryType);
-    return true;
-  });
-
   const status = statusFromHp(pet.hp, pet.maxHp);
-  const maxExp = maxExpForLevel(pet.level);
-  const expPct = Math.min(100, Math.round((pet.exp / maxExp) * 100));
-  const checkedIn = isSameDay(pet.lastCheckIn, new Date());
-  const equippedMap: Record<string, boolean> = {
-    hat: pet.equippedHat,
-    background: pet.equippedBackground,
-    rareStyle: pet.equippedRareStyle,
-  };
-
-  // 生命值愛心：與 <HeartBar> 共用同一套算法（每 100 HP 一顆心，隨 maxHp 成長）
-  const maxHearts = Math.max(1, Math.round(pet.maxHp / HP_PER_HEART));
-  const heartFull = Math.floor(pet.hp / HP_PER_HEART);
 
   return (
-    <div className="relative flex flex-col">
-      {/* 狀態膠囊：生命值 + 金幣 */}
-      <div className="mb-md flex w-fit items-center gap-lg rounded-full border border-surface-container-high bg-surface-container-low/80 p-sm px-md shadow-sm backdrop-blur-sm">
-        <div className="flex items-center gap-sm">
-          <span className="text-label-md text-on-surface-variant">生命值</span>
-          <div className="flex text-error">
-            {Array.from({ length: maxHearts }).map((_, i) => (
-              <span
-                key={i}
-                className="material-symbols-outlined text-[18px]"
-                style={{ fontVariationSettings: `'FILL' ${i < heartFull ? 1 : 0}` }}
-              >
-                favorite
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="h-4 w-px bg-outline-variant" />
-        <div className="flex items-center gap-sm">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container">
-            <span
-              className="material-symbols-outlined text-[16px]"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              monetization_on
-            </span>
-          </div>
-          <span className="text-body-lg font-bold text-on-surface">{pet.coins}</span>
-        </div>
+    <section>
+      <div className="mb-lg">
+        <h1 className="font-semibold text-headline-lg text-on-background">寵物餵食</h1>
+        <p className="text-secondary text-body-md">
+          在這裡與您的電子雞夥伴「北科科」近距離互動，使用背包中的食物餵食牠以恢復 HP！
+        </p>
       </div>
 
-      {/* 中央英雄區：虛擬寵物 */}
-      <div className="relative mb-xl flex min-h-[40vh] flex-1 flex-col items-center justify-center md:min-h-[50vh]">
-        {/* 環境光暈 */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-20">
-          <div className="h-[300px] w-[300px] rounded-full bg-primary-fixed blur-3xl md:h-[500px] md:w-[500px]" />
+      {/* Center Stage mascot display */}
+      <div className="bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-2xl p-lg shadow-sm flex flex-col items-center justify-center min-h-[420px] relative mb-lg">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+          <div className="w-[280px] h-[280px] md:w-[420px] md:h-[420px] rounded-full bg-primary-fixed blur-3xl" />
         </div>
 
-        {/* 寵物容器 */}
-        <div className="group relative mb-md">
-          <div className="relative z-10 flex h-64 w-64 items-center justify-center md:h-80 md:w-80">
+        <div className="relative group cursor-pointer mb-md">
+          {/* SVG Mascot scaled up for center stage */}
+          <div className="w-48 h-48 md:w-64 md:h-64 flex justify-center items-center">
             <PetMascot
               petStyle={me?.petStyle ?? "classic"}
               face={status.face}
@@ -137,177 +66,92 @@ export default async function PetFeedPage() {
               equippedRareStyle={pet.equippedRareStyle}
             />
           </div>
-          {/* 底部陰影 */}
-          <div className="absolute bottom-0 left-1/2 z-0 h-8 w-48 -translate-x-1/2 rounded-full bg-black/10 blur-xl" />
         </div>
 
-        <div className="z-10 mt-sm flex flex-wrap items-center justify-center gap-2 text-center">
-          <h1 className="text-headline-lg font-semibold text-on-surface">{pet.name}</h1>
-          <span className="rounded-full bg-primary-container px-3 py-0.5 text-label-md font-medium text-on-primary-container">
-            Lv.{pet.level}
-          </span>
-          <span className="rounded-full bg-surface-container-high px-3 py-0.5 text-label-md text-on-surface-variant">
-            {status.label}
-          </span>
-        </div>
-        <p className="z-10 mt-xs text-center text-body-lg text-on-surface-variant">
-          從背包中選擇食物進行餵食。
-        </p>
-
-        {/* 愛心條 + 經驗條 + 簽到 */}
-        <div className="z-10 mt-md w-full max-w-md">
-          <HeartBar hp={pet.hp} maxHp={pet.maxHp} />
-
-          <div className="mt-3">
-            <div className="mb-1 flex justify-between text-label-md text-secondary">
-              <span>經驗值</span>
-              <span>
-                {pet.exp} / {maxExp}
+        <h2 className="font-bold text-headline-md text-on-surface text-center mb-1">
+          {pet.name}
+        </h2>
+        <p className="text-secondary text-body-md text-center max-w-md">
+          {pet.hp <= 35 ? (
+            <>
+              😴{" "}
+              <span className="text-red-500 font-bold">
+                {pet.name}現在非常疲憊 (HP: {pet.hp})！
               </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container-high">
-              <div
-                className="h-full bg-tertiary transition-all"
-                style={{ width: `${expPct}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex justify-center">
-            <form action={claimCheckin}>
-              <button
-                type="submit"
-                disabled={checkedIn}
-                className="rounded-full bg-primary px-4 py-1.5 text-label-md font-bold text-on-primary transition-colors hover:bg-surface-tint active:bg-secondary disabled:opacity-50"
-              >
-                {checkedIn ? "今日已簽到" : `每日簽到 +${CHECKIN_REWARD}`}
-              </button>
-            </form>
-          </div>
-        </div>
+              需要餵食一些歐趴便當來補滿活力！
+            </>
+          ) : (
+            <>
+              😊 活力值良好 (HP: {pet.hp})。餵食點心可以讓我的經驗值 (EXP) 持續增長喔！
+            </>
+          )}
+        </p>
       </div>
 
-      {/* 互動區：食物背包 */}
-      <div
-        className="relative z-20 mt-auto w-full rounded-[24px] border border-surface-container-high p-lg shadow-sm"
-        style={{
-          background: "rgba(255, 255, 255, 0.7)",
-          backdropFilter: "blur(10px)",
-          WebkitBackdropFilter: "blur(10px)",
-        }}
-      >
-        <div className="mb-md flex items-end justify-between">
-          <h2 className="text-headline-md font-semibold text-on-surface">食物背包</h2>
+      {/* Food slider panel */}
+      <div className="bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-2xl p-md shadow-sm">
+        <div className="flex justify-between items-center mb-sm">
+          <h3 className="font-bold text-body-lg text-on-surface">背包裡的美味食物</h3>
           <Link
-            className="flex items-center gap-1 text-label-md text-primary transition-colors hover:text-primary-fixed"
             href="/shop"
+            className="text-primary hover:underline text-xs flex items-center gap-0.5"
           >
-            前往商城
-            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+            前往商城選購{" "}
+            <span className="material-symbols-outlined text-xs">arrow_forward</span>
           </Link>
         </div>
 
-        {foodRows.length === 0 ? (
-          <div className="flex w-full flex-col items-center justify-center gap-sm p-4 py-lg text-center">
-            <span
-              className="material-symbols-outlined text-outline"
-              style={{ fontSize: "48px" }}
-            >
-              shopping_bag
-            </span>
-            <p className="mt-2 text-body-md text-secondary">
-              背包目前沒有食物，餵食需要先前往商城購買喔！
-            </p>
-            <Link
-              href="/shop"
-              className="mt-3 inline-flex items-center gap-1 rounded-lg bg-primary px-md py-sm text-label-md text-on-primary shadow-sm transition-all hover:bg-surface-tint"
-            >
-              <span className="material-symbols-outlined text-sm">storefront</span>
-              前往寵物商城購買
-            </Link>
-          </div>
-        ) : (
-          <div
-            className="flex snap-x snap-mandatory gap-md overflow-x-auto px-xs pb-xs"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {foodRows.map((f) => (
+        <div className="flex overflow-x-auto gap-md pb-2 pt-2 hide-scrollbar snap-x px-1">
+          {foodRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-lg text-center w-full gap-sm p-4 col-span-full">
+              <span
+                className="material-symbols-outlined text-4xl text-outline"
+                style={{ fontSize: "48px", color: "#73777c" }}
+              >
+                shopping_bag
+              </span>
+              <p className="font-body-md text-body-md text-secondary mt-2">
+                背包目前沒有食物，餵食需要先前往商城購買喔！
+              </p>
+              <Link
+                href="/shop"
+                className="bg-primary text-on-primary font-label-md text-label-md px-md py-sm rounded-lg hover:bg-surface-tint transition-all mt-3 inline-flex items-center gap-1 shadow-sm"
+                style={{ padding: "8px 16px" }}
+              >
+                <span className="material-symbols-outlined text-sm">storefront</span> 前往寵物商城購買
+              </Link>
+            </div>
+          ) : (
+            foodRows.map((f) => (
               <div
                 key={f.itemId}
-                className="group flex w-32 flex-shrink-0 snap-center flex-col items-center justify-between rounded-xl border border-surface-container-low bg-surface p-sm shadow-sm transition-shadow hover:shadow-md md:w-40"
+                className="flex-shrink-0 w-32 md:w-36 bg-surface-container-low dark:bg-surface rounded-xl p-3 flex flex-col items-center justify-between border border-outline-variant/30 hover:shadow-md transition-all snap-center group"
               >
-                <div className="mb-sm flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-surface-container-lowest p-2 text-4xl md:h-24 md:w-24 md:text-5xl">
-                  <span className="transition-transform duration-300 group-hover:scale-110">
+                <div className="w-16 h-16 rounded-lg bg-surface-container-lowest dark:bg-surface-container-high flex items-center justify-center p-2 mb-2 overflow-hidden shadow-inner">
+                  <span className="text-3xl group-hover:scale-110 transition-transform duration-300">
                     {f.icon}
                   </span>
                 </div>
-                <span className="mb-1 line-clamp-1 text-center text-label-md text-on-surface">
-                  {f.name}
+                <span className="text-xs font-bold text-on-surface text-center mb-1">
+                  {f.name} (x{f.quantity})
                 </span>
-                <span className="mb-sm text-center text-label-md text-secondary">
-                  +{f.hpRestore} HP · +{f.expGain} EXP · x{f.quantity}
+                <span className="text-[9px] text-secondary text-center mb-2.5">
+                  +{f.hpRestore} HP
                 </span>
                 <form action={feedPet} className="w-full">
                   <input type="hidden" name="itemId" value={f.itemId} />
                   <button
                     type="submit"
-                    className="w-full rounded-lg bg-primary py-2 text-label-md font-bold text-on-primary transition-colors hover:bg-surface-tint active:bg-secondary"
+                    className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs py-1.5 rounded-lg shadow-sm transition-all"
                   >
                     餵食
                   </button>
                 </form>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 配件裝備 */}
-      {accessoryRows.length > 0 && (
-        <div
-          className="relative z-20 mt-md w-full rounded-[24px] border border-surface-container-high p-lg shadow-sm"
-          style={{
-            background: "rgba(255, 255, 255, 0.7)",
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-          }}
-        >
-          <h2 className="mb-md text-headline-md font-semibold text-on-surface">配件裝備</h2>
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
-            {accessoryRows.map((a) => {
-              const equipped = a.accessoryType ? equippedMap[a.accessoryType] : false;
-              return (
-                <div
-                  key={a.itemId}
-                  className="flex items-center gap-3 rounded-xl border border-surface-container-low bg-surface p-4 shadow-sm"
-                >
-                  <span className="text-3xl">{a.icon}</span>
-                  <div className="flex-1">
-                    <p className="text-body-md font-semibold text-on-surface">{a.name}</p>
-                  </div>
-                  <form action={toggleEquip}>
-                    <input
-                      type="hidden"
-                      name="accessoryType"
-                      value={a.accessoryType ?? ""}
-                    />
-                    <button
-                      type="submit"
-                      className={`rounded-full px-4 py-1.5 text-label-md font-bold transition-colors ${
-                        equipped
-                          ? "border border-outline-variant text-on-surface-variant hover:bg-surface-container"
-                          : "bg-primary text-on-primary hover:bg-surface-tint active:bg-secondary"
-                      }`}
-                    >
-                      {equipped ? "卸下" : "裝備"}
-                    </button>
-                  </form>
-                </div>
-              );
-            })}
-          </div>
+            ))
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    </section>
   );
 }

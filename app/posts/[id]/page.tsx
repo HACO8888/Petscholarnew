@@ -37,134 +37,131 @@ export default async function PostPage({
   const total = countNodes(tree);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-lg">
-      {/* Back Button */}
-      <div>
+    <section>
+      {/* Top bar: back button + bounty pill */}
+      <div className="flex justify-between items-center mb-md">
         <Link
           href={board ? `/boards/${board.id}` : "/boards"}
-          className="inline-flex items-center gap-xs text-secondary no-underline transition-colors hover:text-primary text-label-md"
+          className="text-secondary hover:text-primary font-bold text-body-md flex items-center gap-1 py-1.5 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 transition-all no-underline"
         >
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          {board ? `返回 ${board.icon} ${board.name}` : "返回討論版列表"}
+          <span className="material-symbols-outlined text-[18px]">arrow_back</span> 返回看板列表
         </Link>
-      </div>
 
-      {/* Question Detail Card */}
-      <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container">
-        <div className="flex flex-col gap-md">
-          {/* Author + bounty/status row */}
-          <div className="flex items-center justify-between border-b border-outline-variant pb-sm">
-            <div className="flex items-center gap-sm text-secondary text-label-md">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary-container">
-                <span className="material-symbols-outlined text-[18px] text-on-secondary-container">person</span>
-              </div>
-              <div>
-                <div className="text-[14px] font-bold text-on-surface">{post.authorName}</div>
-                <div className="text-[11px] text-secondary">
-                  {post.department ? `${post.department} • ` : ""}
-                  {formatDateTime(post.createdAt)}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-xs">
-              {post.solved ? (
-                <div className="flex items-center gap-xs rounded-full border border-outline-variant/20 bg-primary-container px-md py-[4px] text-on-primary-container shadow-sm">
-                  <span className="material-symbols-outlined text-[16px] icon-fill">check_circle</span>
-                  <span className="text-label-md font-bold">已解決</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-xs rounded-full bg-surface-container-high px-md py-[4px] text-secondary">
-                  <span className="material-symbols-outlined text-[16px]">schedule</span>
-                  <span className="text-label-md font-bold">待解答</span>
-                </div>
-              )}
-              {post.bounty > 0 && (
-                <div className="flex items-center gap-xs rounded-full border border-outline-variant/20 bg-tertiary-container px-md py-[4px] text-on-tertiary-container shadow-sm">
-                  <span className="material-symbols-outlined text-[16px]">generating_tokens</span>
-                  <span className="text-label-md font-bold">💰 懸賞 {post.bounty}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Title */}
-          <h2 className="mt-sm text-[24px] font-bold text-primary text-headline-md">{post.title}</h2>
-
-          {/* Content (RichContent / KaTeX) */}
-          <RichContent
-            html={renderContentHtml(post.content)}
-            className="whitespace-pre-wrap py-md leading-relaxed text-on-surface-variant text-body-lg"
-          />
-
-          {/* Tags */}
-          {post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-xs pt-sm">
-              {post.tags.map((t) => (
-                <span
-                  key={t}
-                  className="rounded-sm bg-secondary-container px-sm py-[2px] text-[11px] text-on-secondary-container text-label-md"
-                >
-                  #{t}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Report */}
-          {session?.user && (
-            <details className="pt-sm text-secondary text-label-md">
-              <summary className="cursor-pointer hover:text-primary">檢舉此提問</summary>
-              <form action={reportPost} className="mt-2 flex flex-wrap items-center gap-2">
-                <input type="hidden" name="postId" value={post.id} />
-                <input
-                  type="text"
-                  name="reason"
-                  placeholder="檢舉原因"
-                  maxLength={100}
-                  className="flex-1 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-on-surface outline-none focus:border-primary text-label-md"
-                />
-                <button
-                  type="submit"
-                  className="rounded-full border border-outline-variant px-3 py-1 text-on-surface-variant hover:bg-surface-container text-label-md"
-                >
-                  送出檢舉
-                </button>
-              </form>
-            </details>
-          )}
+        <div className="bg-tertiary-container text-on-tertiary-container px-4 py-1.5 rounded-full font-bold text-body-md flex items-center gap-1 shadow-sm">
+          <span className="material-symbols-outlined text-[18px] text-tertiary icon-fill">monetization_on</span>
+          <span>懸賞金幣:</span>
+          <strong>{post.bounty}</strong>
         </div>
       </div>
 
-      {/* Comment Tree Visualizer */}
-      <div className="flex flex-col gap-sm">
-        <h3 className="flex items-center gap-xs text-body-lg font-bold text-on-surface">
+      {/* Main post card */}
+      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm mb-lg">
+        <div className="flex flex-wrap gap-2 items-center mb-sm">
+          <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-primary-container text-on-primary-container">
+            {post.department || "未分系"}
+          </span>
+          {post.solved ? (
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-green-100 text-green-700">已解決</span>
+          ) : (
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-yellow-100 text-yellow-700">未解決</span>
+          )}
+          <span className="text-secondary text-xs ml-auto">{formatDateTime(post.createdAt)}</span>
+        </div>
+        <h2 className="font-bold text-headline-lg text-on-surface mb-md">{post.title}</h2>
+
+        {/* Metadata author */}
+        <div className="flex items-center gap-sm mb-lg text-secondary text-xs pb-3 border-b border-outline-variant/20">
+          <span className="material-symbols-outlined text-[16px]">person</span>
+          <span>
+            提問學生: <strong className="text-on-surface">{post.authorName}</strong>
+          </span>
+
+          {session?.user && (
+            <div className="ml-auto flex items-center gap-3">
+              <details className="text-error font-medium">
+                <summary className="hover:underline flex items-center gap-0.5 cursor-pointer list-none">
+                  <span className="material-symbols-outlined text-xs">flag</span> 檢舉此文
+                </summary>
+                <form action={reportPost} className="mt-2 flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="postId" value={post.id} />
+                  <input
+                    type="text"
+                    name="reason"
+                    placeholder="檢舉原因"
+                    maxLength={100}
+                    className="flex-1 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-on-surface outline-none focus:border-primary text-label-md"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-full border border-outline-variant px-3 py-1 text-on-surface-variant hover:bg-surface-container text-label-md"
+                  >
+                    送出檢舉
+                  </button>
+                </form>
+              </details>
+            </div>
+          )}
+        </div>
+
+        <RichContent
+          html={renderContentHtml(post.content)}
+          className="text-on-surface-variant text-body-lg leading-relaxed mb-lg whitespace-pre-wrap"
+        />
+
+        {/* Tags list */}
+        {post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-sm mt-md">
+            {post.tags.map((t) => (
+              <span
+                key={t}
+                className="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] rounded"
+              >
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Comment tree visualizer */}
+      <div className="mb-lg">
+        <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1 mb-sm">
           <span className="material-symbols-outlined">account_tree</span> 留言樹狀結構
         </h3>
-        <p className="text-secondary text-label-md">點擊節點可跳至對應留言。</p>
+        <p className="text-secondary text-xs mb-sm">點擊節點可跳至對應留言。</p>
         <CommentTreeSvg nodes={tree} rootLabel={post.title} />
       </div>
 
-      {/* Answers Section */}
-      <div className="flex flex-col gap-md">
-        <h3 className="flex items-center gap-xs text-headline-md font-bold text-primary">
-          <span className="material-symbols-outlined">forum</span> 解答與回覆 ({total})
+      {/* Answers tree header */}
+      <div className="flex items-center justify-between mb-md border-b border-outline-variant/30 pb-2">
+        <h3 className="font-bold text-headline-md text-on-surface flex items-center gap-1">
+          <span className="material-symbols-outlined text-primary">forum</span> 學霸解答與留言回覆 ({total})
         </h3>
+        {!post.solved && session?.user && (
+          <a
+            href="#reply-content"
+            className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-4 py-2 rounded-lg flex items-center gap-1 transition-all shadow-sm no-underline"
+          >
+            <span className="material-symbols-outlined text-[18px]">rate_review</span> 我來解答
+          </a>
+        )}
+      </div>
 
-        <div className="flex flex-col gap-sm">
-          <CommentThread
-            nodes={tree}
-            postId={post.id}
-            postAuthorId={post.authorId}
-            currentUserId={session?.user?.id ?? null}
-            currentUserRole={session?.user?.role ?? null}
-            postSolved={post.solved}
-          />
-        </div>
+      {/* Comment list (rendered as Tree recursively) */}
+      <div className="space-y-md">
+        <CommentThread
+          nodes={tree}
+          postId={post.id}
+          postAuthorId={post.authorId}
+          currentUserId={session?.user?.id ?? null}
+          currentUserRole={session?.user?.role ?? null}
+          postSolved={post.solved}
+        />
       </div>
 
       {/* Write Answer Card */}
-      <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container">
-        <h3 className="mb-md flex items-center gap-xs text-body-lg font-bold text-on-surface">
+      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm mt-lg">
+        <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1 mb-md">
           <span className="material-symbols-outlined">edit_square</span> 撰寫您的解答 / 回覆
         </h3>
 
@@ -188,7 +185,7 @@ export default async function PostPage({
             <div className="mt-sm flex justify-end">
               <button
                 type="submit"
-                className="flex items-center gap-xs rounded-lg bg-primary px-lg py-sm text-on-primary shadow-sm transition-colors hover:bg-surface-tint text-label-md"
+                className="flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-bold text-on-primary shadow-sm transition-all hover:bg-surface-tint text-body-md"
               >
                 <span className="material-symbols-outlined text-[18px]">send</span> 發表解答
               </button>
@@ -203,6 +200,6 @@ export default async function PostPage({
           </p>
         )}
       </div>
-    </div>
+    </section>
   );
 }

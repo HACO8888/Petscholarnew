@@ -10,7 +10,7 @@ import { blockReport, rejectReport, deletePost, restorePost } from "./actions";
 
 /** 後台子面板（對應 legacy 的 admin-panel-tab）。 */
 const PANELS = [
-  { id: "overview", label: "總覽與統計" },
+  { id: "overview", label: "總覽與上線" },
   { id: "questions", label: "全站提問紀錄" },
   { id: "reports", label: "檢舉案件與日誌" },
   { id: "analytics", label: "提問方向洞悉" },
@@ -25,12 +25,6 @@ const QUESTION_FILTERS = [
   { id: "blocked", label: "封鎖帳號及問題" },
 ] as const;
 type QuestionFilter = (typeof QUESTION_FILTERS)[number]["id"];
-
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  pending: { label: "待處理", cls: "bg-tertiary-container text-on-tertiary-container" },
-  blocked: { label: "已封鎖", cls: "bg-error-container text-on-error-container" },
-  rejected: { label: "已駁回", cls: "bg-surface-container-high text-on-surface-variant" },
-};
 
 /** 保留目前 searchParams、覆寫部分鍵的小工具，供子面板/篩選連結使用。 */
 function buildHref(base: Record<string, string | undefined>, override: Record<string, string | undefined>) {
@@ -104,7 +98,7 @@ export default async function AdminPage({
   const pendingReports = allReports.filter((r) => r.status === "pending");
   const resolvedReports = allReports.filter((r) => r.status !== "pending");
 
-  // ---- 分析資料（由真實 posts 聚合，不含已隱藏內容才反映「對外可見」分布；此處用全部含隱藏以反映提問方向） ----
+  // ---- 分析資料（由真實 posts 聚合，反映提問方向；含隱藏內容） ----
   const allPostsForAnalytics = await db
     .select({ boardId: posts.boardId, boardName: boards.name, tags: posts.tags, solved: posts.solved })
     .from(posts)
@@ -123,386 +117,386 @@ export default async function AdminPage({
   const topBoards = [...boardCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   const analyticsTotal = allPostsForAnalytics.length;
   const unsolvedCount = allPostsForAnalytics.filter((p) => !p.solved).length;
+  const topTag = topTags[0]?.[0] ?? "尚無明顯主題";
+  const topBoard = topBoards[0]?.[0] ?? "尚無集中學院";
 
   const tabBase = { board: boardFilter, q: questionFilter };
 
   return (
-    <section className="tab-section active">
-      {/* 頁面標題（仿 legacy admin 抬頭，帶警示底色與 Admin Only 標籤） */}
-      <div className="mb-lg rounded-lg border-b border-outline-variant/30 bg-gradient-to-r from-error/10 via-tertiary/10 to-transparent p-md pb-3">
-        <div className="flex flex-col gap-md lg:flex-row lg:items-center lg:justify-between">
+    <section className="tab-section active" id="sect-admin">
+      <div className="mb-lg border-b border-outline-variant/30 pb-3 bg-gradient-to-r from-red-500/10 via-orange-500/10 to-transparent p-md rounded-lg">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-md">
           <div>
-            <h1 className="mb-xs flex items-center gap-1 font-semibold text-headline-lg text-error">
-              <span className="material-symbols-outlined">shield</span> 系統管理員後台
-            </h1>
-            <p className="text-body-md text-secondary">
-              查看全站提問紀錄、審核待處理檢舉、追蹤處理日誌，並分析近期提問方向。
+            <h1 className="font-semibold text-headline-lg text-red-600 dark:text-red-400">🛡️ 系統管理員後台</h1>
+            <p className="text-secondary text-body-md">
+              只有切換為「系統管理員」身分時才會顯示。可查看全站提問紀錄、上線狀態、刪除不恰當問題、封鎖帳號並分析近期提問方向。
             </p>
           </div>
-          <span className="inline-flex w-fit items-center gap-1 rounded-full bg-error-container px-3 py-1 text-xs font-bold text-on-error-container">
+          <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 px-3 py-1 rounded-full text-xs font-bold w-fit">
             <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
             Admin Only
           </span>
         </div>
       </div>
 
-      {/* 子面板分頁列（仿 legacy admin-panel-tab，以 searchParams.panel 切換） */}
-      <div className="mb-lg overflow-x-auto rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-sm shadow-sm dark:bg-surface-container-high">
-        <div className="flex min-w-max gap-sm">
-          {PANELS.map((p) => (
-            <Link
-              key={p.id}
-              href={buildHref(tabBase, { panel: p.id })}
-              className={`rounded-lg border px-md py-sm text-xs font-bold no-underline transition-all ${
-                panel === p.id
-                  ? "border-primary bg-primary text-on-primary"
-                  : "border-outline-variant/30 bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
-              }`}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* ====================== 總覽與統計 ====================== */}
-      {panel === "overview" && (
-        <div className="space-y-lg">
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-2 xl:grid-cols-3">
-            <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-md shadow-sm dark:bg-surface-container-high">
-              <p className="mb-1 text-xs text-secondary">全站問題總數</p>
-              <h3 className="text-3xl font-bold text-primary">{totalPosts}</h3>
-              <p className="mt-1 text-[10px] text-secondary">跨所有學院看板</p>
-            </div>
-            <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-md shadow-sm dark:bg-surface-container-high">
-              <p className="mb-1 text-xs text-secondary">待處理檢舉</p>
-              <h3 className="text-3xl font-bold text-error">{pendingReports.length}</h3>
-              <p className="mt-1 text-[10px] text-secondary">可直接封鎖或駁回</p>
-            </div>
-            <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-md shadow-sm dark:bg-surface-container-high">
-              <p className="mb-1 text-xs text-secondary">已封鎖問題</p>
-              <h3 className="text-3xl font-bold text-tertiary">{blockedPosts}</h3>
-              <p className="mt-1 text-[10px] text-secondary">已被隱藏、不對外顯示</p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-            <h3 className="mb-md flex items-center gap-1 border-b border-outline-variant/20 pb-2 text-body-lg font-bold text-on-surface">
-              <span className="material-symbols-outlined text-[20px]">groups</span> 帳號與上線狀態
-            </h3>
-            <p className="text-body-md text-secondary">
-              本系統採資料庫 session，目前未提供「即時上線人數」與「帳號封鎖名單」資料來源（schema 無對應欄位），
-              故此處不顯示估計數字以避免誤導。提問與檢舉之管理請使用上方各子面板。
-            </p>
+      <div id="admin-dashboard-content" className="space-y-lg">
+        <div className="bg-surface-container-lowest dark:bg-surface-container-high rounded-xl border border-outline-variant/30 shadow-sm p-sm overflow-x-auto">
+          <div className="flex gap-sm min-w-max">
+            {PANELS.map((p) => (
+              <Link
+                key={p.id}
+                href={buildHref(tabBase, { panel: p.id })}
+                className={`admin-panel-tab px-md py-sm rounded-lg border text-xs font-bold transition-all no-underline ${
+                  panel === p.id
+                    ? "bg-primary text-on-primary border-primary"
+                    : "bg-surface-container-high text-on-surface-variant border-outline-variant/30 hover:bg-surface-container"
+                }`}
+              >
+                {p.label}
+              </Link>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* ====================== 全站提問紀錄 ====================== */}
-      {panel === "questions" && (
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-          <div className="mb-md flex flex-col gap-sm border-b border-outline-variant/20 pb-2 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h3 className="flex items-center gap-1 text-body-lg font-bold text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">history</span> 全站提問紀錄
-              </h3>
-              <p className="text-xs text-secondary">
-                依學院與狀態篩選，可直接刪除（隱藏）不恰當問題，刪除結果會與全站列表即時同步。
-              </p>
+        {/* ====================== 總覽與上線 ====================== */}
+        {panel === "overview" && (
+          <div className="admin-subpanel space-y-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-md" id="admin-stats-grid">
+              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
+                <p className="text-xs text-secondary mb-1">全站問題總數</p>
+                <h3 className="font-bold text-3xl text-primary">{totalPosts}</h3>
+                <p className="text-[10px] text-secondary mt-1">跨所有學院看板</p>
+              </div>
+              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
+                <p className="text-xs text-secondary mb-1">待處理檢舉</p>
+                <h3 className="font-bold text-3xl text-red-600">{pendingReports.length}</h3>
+                <p className="text-[10px] text-secondary mt-1">可直接屏蔽或駁回</p>
+              </div>
+              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
+                <p className="text-xs text-secondary mb-1">已封鎖問題</p>
+                <h3 className="font-bold text-3xl text-orange-600">{blockedPosts}</h3>
+                <p className="text-[10px] text-secondary mt-1">已被隱藏、不對外顯示</p>
+              </div>
+              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
+                <p className="text-xs text-secondary mb-1">已解決問題</p>
+                <h3 className="font-bold text-3xl text-green-600">{analyticsTotal - unsolvedCount}</h3>
+                <p className="text-[10px] text-secondary mt-1">已被標記為已解決</p>
+              </div>
             </div>
-            {/* 狀態篩選（legacy select#admin-question-filter，以 searchParams.q 過濾） */}
-            <div className="flex flex-wrap gap-2">
-              {QUESTION_FILTERS.map((f) => (
+
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+              <div className="flex items-center justify-between mb-md border-b border-outline-variant/20 pb-2">
+                <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[20px]">groups</span> 上線人數與帳號狀態
+                </h3>
+              </div>
+              <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 hide-scrollbar" id="admin-online-users-list">
+                <p className="text-body-md text-secondary">
+                  本系統採資料庫 session，目前未提供「即時上線人數」與「帳號封鎖名單」資料來源（schema 無對應欄位），
+                  故此處不顯示估計數字以避免誤導。提問與檢舉之管理請使用上方各子面板。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ====================== 全站提問紀錄 ====================== */}
+        {panel === "questions" && (
+          <div className="admin-subpanel">
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-sm mb-md border-b border-outline-variant/20 pb-2">
+                <div>
+                  <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[20px]">history</span> 全站提問紀錄
+                  </h3>
+                  <p className="text-xs text-secondary">
+                    可直接刪除問題；封鎖與屏蔽結果會與檢舉案件即時同步。
+                  </p>
+                </div>
+                <div className="flex items-center gap-sm">
+                  {QUESTION_FILTERS.map((f) => (
+                    <Link
+                      key={f.id}
+                      href={buildHref(tabBase, { panel: "questions", q: f.id })}
+                      className={`rounded-lg border text-xs py-1.5 px-2 no-underline ${
+                        questionFilter === f.id
+                          ? "bg-primary text-on-primary border-primary"
+                          : "bg-surface border-outline-variant text-on-surface hover:bg-surface-container"
+                      }`}
+                    >
+                      {f.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              {/* 學院（board）篩選 pills */}
+              <div className="flex flex-wrap gap-2 mb-md border-b border-outline-variant/30 pb-3">
                 <Link
-                  key={f.id}
-                  href={buildHref(tabBase, { panel: "questions", q: f.id })}
-                  className={`rounded-full px-3 py-1 text-label-md font-medium no-underline ${
-                    questionFilter === f.id
+                  href={buildHref(tabBase, { panel: "questions", board: undefined })}
+                  className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
+                    !boardFilter
                       ? "bg-primary text-on-primary"
                       : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
                   }`}
                 >
-                  {f.label}
+                  全部
                 </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* 學院（board）篩選 pills */}
-          <div className="mb-md flex flex-wrap gap-2 border-b border-outline-variant/30 pb-3">
-            <Link
-              href={buildHref(tabBase, { panel: "questions", board: undefined })}
-              className={`rounded-full px-3 py-1 text-label-md font-medium no-underline ${
-                !boardFilter
-                  ? "bg-primary text-on-primary"
-                  : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
-              }`}
-            >
-              全部
-            </Link>
-            {boardRows.map((b) => (
-              <Link
-                key={b.id}
-                href={buildHref(tabBase, { panel: "questions", board: b.id })}
-                className={`rounded-full px-3 py-1 text-label-md font-medium no-underline ${
-                  boardFilter === b.id
-                    ? "bg-primary text-on-primary"
-                    : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
-                }`}
-              >
-                {b.icon} {b.name}
-              </Link>
-            ))}
-          </div>
-
-          <div className="space-y-md">
-            {postRows.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-outline-variant/40 py-10 text-center text-xs text-secondary">
-                目前沒有符合條件的問題紀錄。
-              </div>
-            ) : (
-              postRows.map((p) => (
-                <div
-                  key={p.id}
-                  className="space-y-2 rounded-xl border border-outline-variant/30 bg-surface-container-low p-md dark:bg-surface-container"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                          {p.boardName}
-                        </span>
-                        {p.hidden ? (
-                          <span className="rounded bg-error-container px-2 py-0.5 text-[10px] font-bold text-on-error-container">
-                            問題已封鎖
-                          </span>
-                        ) : p.solved ? (
-                          <span className="rounded bg-primary-container px-2 py-0.5 text-[10px] font-bold text-on-primary-container">
-                            已解決
-                          </span>
-                        ) : (
-                          <span className="rounded bg-tertiary-container px-2 py-0.5 text-[10px] font-bold text-on-tertiary-container">
-                            未解決
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="line-clamp-1 text-sm font-bold text-on-surface">{p.title}</h4>
-                      <p className="mt-1 line-clamp-2 text-xs text-secondary">{p.content}</p>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5 md:flex-col">
-                      <Link
-                        href={`/posts/${p.id}`}
-                        className="rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-[10px] font-bold text-on-surface-variant no-underline hover:bg-surface-container-high"
-                      >
-                        查看
-                      </Link>
-                      {p.hidden ? (
-                        <form action={restorePost}>
-                          <input type="hidden" name="postId" value={p.id} />
-                          <button
-                            type="submit"
-                            className="w-full rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high"
-                          >
-                            還原問題
-                          </button>
-                        </form>
-                      ) : (
-                        <form action={deletePost}>
-                          <input type="hidden" name="postId" value={p.id} />
-                          <button
-                            type="submit"
-                            className="w-full rounded-lg bg-error px-3 py-1.5 text-[10px] font-bold text-on-error hover:opacity-90"
-                          >
-                            刪除問題
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1 text-[10px] text-secondary">
-                    <span>
-                      作者：<strong>{p.authorName}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>{p.department ?? "未指定科系"}</span>
-                    <span>•</span>
-                    <span>🪙 {p.bounty} 金幣</span>
-                    <span>•</span>
-                    <span>{formatDateTime(p.createdAt)}</span>
-                  </div>
-                  {(p.tags?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {p.tags!.slice(0, 5).map((t) => (
-                        <span
-                          key={t}
-                          className="rounded bg-secondary-container px-2 py-0.5 text-[10px] text-on-secondary-container"
-                        >
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ====================== 檢舉案件與處理日誌 ====================== */}
-      {panel === "reports" && (
-        <div className="grid grid-cols-1 items-start gap-lg lg:grid-cols-2">
-          {/* 待處理檢舉：封鎖/駁回後即從此清單移除 */}
-          <div className="flex min-h-[300px] flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-            <div className="mb-md flex items-center justify-between border-b border-outline-variant/20 pb-2">
-              <h3 className="flex items-center gap-1 text-body-lg font-bold text-error">
-                <span className="material-symbols-outlined text-[20px]">report</span> 封鎖帳號及問題（待處理檢舉）
-              </h3>
-              <span className="rounded-full bg-error-container px-2 py-0.5 text-xs font-bold text-on-error-container">
-                {pendingReports.length} 案待理
-              </span>
-            </div>
-            <div className="flex flex-grow flex-col gap-sm">
-              {pendingReports.length === 0 ? (
-                <div className="rounded-xl bg-surface-container-low p-md py-8 text-center text-xs text-secondary dark:bg-surface-container">
-                  目前沒有待處理的檢舉案件。
-                </div>
-              ) : (
-                pendingReports.map((r) => (
-                  <div
-                    key={r.id}
-                    className="space-y-sm rounded-xl border border-outline-variant/30 bg-surface-container-low p-md dark:bg-surface-container"
+                {boardRows.map((b) => (
+                  <Link
+                    key={b.id}
+                    href={buildHref(tabBase, { panel: "questions", board: b.id })}
+                    className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
+                      boardFilter === b.id
+                        ? "bg-primary text-on-primary"
+                        : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
+                    }`}
                   >
-                    <div className="flex items-center justify-between text-xs text-secondary">
-                      <span className="rounded bg-error-container px-2 py-0.5 font-bold text-on-error-container">
-                        {r.targetType === "post" ? "檢舉文章" : "檢舉回覆"}
-                      </span>
-                      <span>
-                        {r.reporter} • {formatDateTime(r.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-on-surface">
-                      理由：<span className="font-normal text-secondary">{r.reason}</span>
-                    </p>
-                    <div className="line-clamp-2 rounded border border-outline-variant/20 bg-surface-container-high p-sm font-mono text-xs leading-normal text-secondary dark:bg-surface-container">
-                      {r.targetText}
-                    </div>
-                    <div className="flex justify-end gap-sm">
-                      <form action={blockReport}>
-                        <input type="hidden" name="reportId" value={r.id} />
-                        <button
-                          type="submit"
-                          className="flex items-center gap-1 rounded-lg bg-error px-3 py-1.5 text-[10px] font-bold text-on-error hover:opacity-90"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">block</span>
-                          屏蔽內容
-                        </button>
-                      </form>
-                      <form action={rejectReport}>
-                        <input type="hidden" name="reportId" value={r.id} />
-                        <button
-                          type="submit"
-                          className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">close</span>
-                          駁回案件
-                        </button>
-                      </form>
-                    </div>
+                    {b.icon} {b.name}
+                  </Link>
+                ))}
+              </div>
+
+              <div className="space-y-md max-h-[620px] overflow-y-auto pr-1 hide-scrollbar" id="admin-question-records-list">
+                {postRows.length === 0 ? (
+                  <div className="text-center text-secondary text-xs py-10 border border-dashed border-outline-variant/40 rounded-xl">
+                    目前沒有符合條件的問題紀錄。
                   </div>
-                ))
-              )}
+                ) : (
+                  postRows.map((p) => (
+                    <div
+                      key={p.id}
+                      className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface space-y-2"
+                      id={`admin-question-${p.id}`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                              {p.boardName}
+                            </span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded ${
+                                p.solved ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                              }`}
+                            >
+                              {p.solved ? "已解決" : "未解決"}
+                            </span>
+                            {p.hidden && (
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">
+                                問題已封鎖
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-sm text-on-surface line-clamp-1">{p.title}</h4>
+                          <p className="text-xs text-secondary line-clamp-2 mt-1">{p.content}</p>
+                        </div>
+                        <div className="flex md:flex-col gap-1.5 shrink-0">
+                          <Link
+                            href={`/posts/${p.id}`}
+                            className="bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[10px] px-3 py-1.5 rounded-lg border border-outline-variant/30 no-underline"
+                          >
+                            查看
+                          </Link>
+                          {p.hidden ? (
+                            <form action={restorePost}>
+                              <input type="hidden" name="postId" value={p.id} />
+                              <button
+                                type="submit"
+                                className="w-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[10px] px-3 py-1.5 rounded-lg border border-outline-variant/30"
+                              >
+                                還原問題
+                              </button>
+                            </form>
+                          ) : (
+                            <form action={deletePost}>
+                              <input type="hidden" name="postId" value={p.id} />
+                              <button
+                                type="submit"
+                                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
+                              >
+                                刪除問題
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1 text-[10px] text-secondary">
+                        <span>
+                          作者：<strong>{p.authorName}</strong>
+                        </span>
+                        <span>•</span>
+                        <span>{p.department ?? "未指定科系"}</span>
+                        <span>•</span>
+                        <span>🪙 {p.bounty} 金幣</span>
+                        <span>•</span>
+                        <span>{formatDateTime(p.createdAt)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(p.tags ?? []).slice(0, 5).map((t) => (
+                          <span
+                            key={t}
+                            className="text-[10px] px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container"
+                          >
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
+        )}
 
-          {/* 操作歷史日誌：由已處理案件（real reports）衍生為人類可讀條目 */}
-          <div className="flex min-h-[300px] flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-            <h3 className="mb-md flex items-center gap-1 border-b border-outline-variant/20 pb-2 text-body-lg font-bold text-on-surface">
-              <span className="material-symbols-outlined text-[20px]">history</span> 📋 操作歷史日誌
-            </h3>
-            <div className="flex-grow space-y-2 overflow-y-auto text-xs">
-              {resolvedReports.length === 0 ? (
-                <div className="py-8 text-center text-secondary">無歷史操作日誌。</div>
-              ) : (
-                resolvedReports.map((r) => {
-                  const actionText = r.status === "blocked" ? "屏蔽隱藏" : "駁回免置";
-                  const badge = STATUS_BADGE[r.status] ?? STATUS_BADGE.pending;
-                  return (
+        {/* ====================== 檢舉案件與處理日誌 ====================== */}
+        {panel === "reports" && (
+          <div className="admin-subpanel">
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[300px]">
+              <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-2">
+                <h3 className="font-bold text-body-lg text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[20px]">report</span> 檢舉案件與處理日誌
+                </h3>
+                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                  {pendingReports.length} 案待理
+                </span>
+              </div>
+              <div className="space-y-md max-h-[360px] overflow-y-auto pr-1 hide-scrollbar mb-md" id="admin-reports-list">
+                {pendingReports.length === 0 ? (
+                  <div className="bg-surface-container-low p-md rounded-xl text-center text-xs text-secondary py-8">
+                    目前沒有待處理的檢舉案件。
+                  </div>
+                ) : (
+                  pendingReports.map((r) => (
                     <div
                       key={r.id}
-                      className="mb-1.5 rounded border border-outline-variant/10 bg-surface-container-low p-sm leading-normal dark:bg-surface-container"
+                      className="bg-surface-container-low dark:bg-surface p-md rounded-xl border border-outline-variant/30 space-y-sm"
+                      id={`rep-card-${r.id}`}
                     >
-                      <span className={`mr-1 rounded px-1.5 py-0.5 text-[10px] font-bold ${badge.cls}`}>
-                        [{actionText}]
-                      </span>
-                      <span className="text-on-surface">
-                        管理員審查了 {r.reporter ?? "匿名"} 的{r.targetType === "post" ? "文章" : "回覆"}
-                        檢舉案，結果為 [{actionText}]。
-                      </span>
-                      <span className="mt-1 block text-right text-[9px] text-secondary">
-                        {r.resolvedAt ? formatDateTime(r.resolvedAt) : "—"}
-                      </span>
+                      <div className="flex items-center justify-between text-xs text-secondary">
+                        <span className="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded">
+                          {r.targetType === "post" ? "檢舉文章" : "檢舉回覆"}
+                        </span>
+                        <span>
+                          {r.reporter} • {formatDateTime(r.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-on-surface font-bold">
+                        理由：<span className="font-normal text-secondary">{r.reason}</span>
+                      </p>
+                      <div className="bg-surface-container-high dark:bg-surface-container p-sm rounded text-xs text-secondary font-mono leading-normal border border-outline-variant/20 line-clamp-2">
+                        {r.targetText}
+                      </div>
+                      <div className="flex gap-sm justify-end">
+                        <form action={blockReport}>
+                          <input type="hidden" name="reportId" value={r.id} />
+                          <button
+                            type="submit"
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
+                          >
+                            屏蔽內容
+                          </button>
+                        </form>
+                        <form action={rejectReport}>
+                          <input type="hidden" name="reportId" value={r.id} />
+                          <button
+                            type="submit"
+                            className="bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[10px] px-3 py-1.5 rounded-lg border border-outline-variant/30"
+                          >
+                            駁回案件
+                          </button>
+                        </form>
+                      </div>
                     </div>
-                  );
-                })
-              )}
+                  ))
+                )}
+              </div>
+              <h4 className="font-bold text-xs text-on-surface mb-2 border-t border-outline-variant/20 pt-3">
+                📋 操作歷史日誌
+              </h4>
+              <div className="flex-grow space-y-2 text-xs overflow-y-auto max-h-[360px] pr-1 hide-scrollbar" id="admin-logs-list">
+                {resolvedReports.length === 0 ? (
+                  <div className="text-center text-secondary py-8">無歷史操作日誌。</div>
+                ) : (
+                  resolvedReports.map((r) => {
+                    const actionText = r.status === "blocked" ? "屏蔽隱藏" : "駁回免置";
+                    return (
+                      <div
+                        key={r.id}
+                        className="p-sm bg-surface-container-low dark:bg-surface rounded border border-outline-variant/10 leading-normal mb-1.5"
+                      >
+                        <span className="font-bold text-primary dark:text-primary-fixed-dim">[{actionText}]</span>{" "}
+                        <span>
+                          管理員審查了 {r.reporter ?? "匿名"} 的{r.targetType === "post" ? "文章" : "回覆"}
+                          檢舉案，結果為 [{actionText}]。
+                        </span>
+                        <span className="block text-[9px] text-secondary text-right mt-1">
+                          {r.resolvedAt ? formatDateTime(r.resolvedAt) : "—"}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ====================== 提問方向洞悉 ====================== */}
-      {panel === "analytics" && (
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-          <div className="mb-md flex items-center justify-between border-b border-outline-variant/20 pb-2">
-            <h3 className="flex items-center gap-1 text-body-lg font-bold text-tertiary">
-              <span className="material-symbols-outlined text-[20px]">query_stats</span> 最近提問方向洞悉
-            </h3>
-            <span className="rounded-full bg-tertiary-container px-2 py-0.5 text-xs font-bold text-on-tertiary-container">
-              {analyticsTotal} 筆資料
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-md md:grid-cols-2">
-            <div>
-              <h4 className="mb-2 text-xs font-bold text-on-surface">熱門標籤</h4>
-              <AdminBars items={topTags} total={analyticsTotal} accent="bg-tertiary" />
+        {/* ====================== 提問方向洞悉 ====================== */}
+        {panel === "analytics" && (
+          <div className="admin-subpanel">
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+              <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-2">
+                <h3 className="font-bold text-body-lg text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[20px]">query_stats</span> 最近提問方向洞悉
+                </h3>
+                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                  {analyticsTotal} 筆資料
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                <div>
+                  <h4 className="font-bold text-xs text-on-surface mb-2">熱門標籤</h4>
+                  <div className="space-y-2" id="admin-tag-analysis">
+                    <AdminBars items={topTags} total={analyticsTotal} accent="bg-purple-500" />
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-on-surface mb-2">學院分布</h4>
+                  <div className="space-y-2" id="admin-board-analysis">
+                    <AdminBars items={topBoards} total={analyticsTotal} accent="bg-primary" />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-md bg-primary/5 border border-primary/10 rounded-xl p-md">
+                <h4 className="font-bold text-xs text-primary mb-2 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px]">lightbulb</span> 系統洞悉
+                </h4>
+                <div className="space-y-1 text-xs text-secondary" id="admin-insights-list">
+                  {analyticsTotal === 0 ? (
+                    <p>目前尚無足夠的提問資料可供分析。</p>
+                  ) : (
+                    <>
+                      <p>
+                        • 近期最常被提問的方向是 <strong className="text-primary">{topTag}</strong>
+                        ，可安排 TA 或教授補充教材。
+                      </p>
+                      <p>
+                        • 問題主要集中在 <strong className="text-primary">{topBoard}</strong>
+                        ，建議優先觀察該學院的期末學習壓力。
+                      </p>
+                      <p>
+                        • 目前尚有 <strong className="text-primary">{unsolvedCount}</strong> 筆未解決問題，可推播給相關科系學霸或助教。
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <h4 className="mb-2 text-xs font-bold text-on-surface">學院分布</h4>
-              <AdminBars items={topBoards} total={analyticsTotal} accent="bg-primary" />
-            </div>
           </div>
-
-          <div className="mt-md rounded-xl border border-primary/10 bg-primary/5 p-md">
-            <h4 className="mb-2 flex items-center gap-1 text-xs font-bold text-primary">
-              <span className="material-symbols-outlined text-[16px]">lightbulb</span> 系統洞悉
-            </h4>
-            <div className="space-y-1 text-xs text-secondary">
-              {analyticsTotal === 0 ? (
-                <p>目前尚無足夠的提問資料可供分析。</p>
-              ) : (
-                <>
-                  <p>
-                    • 近期最常被提問的方向是{" "}
-                    <strong className="text-primary">{topTags[0]?.[0] ?? "尚無明顯主題"}</strong>
-                    ，可安排 TA 或教授補充教材。
-                  </p>
-                  <p>
-                    • 問題主要集中在{" "}
-                    <strong className="text-primary">{topBoards[0]?.[0] ?? "尚無集中學院"}</strong>
-                    ，建議優先觀察該學院的期末學習壓力。
-                  </p>
-                  <p>
-                    • 目前尚有 <strong className="text-primary">{unsolvedCount}</strong>{" "}
-                    筆未解決問題，可推播給相關科系學霸或助教。
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
@@ -519,13 +513,13 @@ function AdminBars({
 }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-lg bg-surface-container-low p-3 text-center text-xs text-secondary dark:bg-surface-container">
+      <div className="text-xs text-secondary bg-surface-container-low p-3 rounded-lg text-center">
         目前沒有足夠資料。
       </div>
     );
   }
   return (
-    <div className="space-y-2">
+    <>
       {items.map(([label, count]) => {
         const pct = total ? Math.max(8, Math.round((count / total) * 100)) : 0;
         return (
@@ -534,12 +528,12 @@ function AdminBars({
               <span>{label}</span>
               <span>{count} 筆</span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container-low dark:bg-surface-container">
-              <div className={`h-full rounded-full ${accent}`} style={{ width: `${pct}%` }} />
+            <div className="w-full bg-surface-container-low h-2 rounded-full overflow-hidden">
+              <div className={`${accent} h-full rounded-full`} style={{ width: `${pct}%` }} />
             </div>
           </div>
         );
       })}
-    </div>
+    </>
   );
 }

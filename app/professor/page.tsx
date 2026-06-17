@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { posts, comments, boards } from "@/db/schema";
+import { posts, boards } from "@/db/schema";
 import AccessDenied from "@/components/AccessDenied";
 import { formatDateTime } from "@/lib/format";
 
@@ -13,28 +13,6 @@ export default async function ProfessorPage() {
   if (session.user.role !== "professor" && session.user.role !== "admin") {
     return <AccessDenied need="課程教授或助教" />;
   }
-
-  const [{ total }] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(posts)
-    .where(eq(posts.hidden, false));
-  const [{ solved }] = await db
-    .select({ solved: sql<number>`count(*)::int` })
-    .from(posts)
-    .where(and(eq(posts.hidden, false), eq(posts.solved, true)));
-  const [{ answers }] = await db
-    .select({ answers: sql<number>`count(*)::int` })
-    .from(comments)
-    .where(eq(comments.hidden, false));
-  const unsolved = total - solved;
-  const solvedRate = total > 0 ? Math.round((solved / total) * 100) : 0;
-
-  const byBoard = await db
-    .select({ name: boards.name, icon: boards.icon, c: sql<number>`count(${posts.id})::int` })
-    .from(boards)
-    .leftJoin(posts, and(eq(posts.boardId, boards.id), eq(posts.hidden, false)))
-    .groupBy(boards.id, boards.name, boards.icon, boards.sortOrder)
-    .orderBy(boards.sortOrder);
 
   // 課程 Hashtags / 學習難點：依真實貼文標籤彙整，並計算各標籤的採納（已解決）比例。
   const tagRows = await db
@@ -78,142 +56,88 @@ export default async function ProfessorPage() {
     .orderBy(desc(posts.createdAt))
     .limit(10);
 
-  const stats = [
-    { label: "總提問數", value: total },
-    { label: "已解決", value: solved },
-    { label: "待解答", value: unsolved },
-    { label: "解決率", value: `${solvedRate}%` },
-    { label: "總回覆數", value: answers },
-  ];
-
   return (
     <section className="tab-section active" id="sect-professor">
-      <div className="mb-lg rounded-lg border-b border-outline-variant/30 bg-gradient-to-r from-purple-500/10 to-transparent p-md pb-3">
-        <h1 className="text-headline-lg font-semibold text-purple-700 dark:text-purple-400">🎓 課程教授管理主頁</h1>
-        <p className="text-body-md text-secondary">追蹤本學期核心課程 Hashtags 標籤，掌握學生在解題遇到的常見盲點與難度。</p>
+      <div className="mb-lg border-b border-outline-variant/30 pb-3 bg-gradient-to-r from-purple-500/10 to-transparent p-md rounded-lg">
+        <h1 className="font-semibold text-headline-lg text-purple-700 dark:text-purple-400">🎓 課程教授管理主頁</h1>
+        <p className="text-secondary text-body-md">管理本學期核心課程 Hashtags 標籤，追蹤學生在解題遇到的常見盲點與難度。</p>
       </div>
 
-      <div className="mb-lg grid grid-cols-2 gap-md sm:grid-cols-5">
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-sm dark:bg-surface-container-high"
-          >
-            <p className="text-headline-md font-bold text-primary">{s.value}</p>
-            <p className="text-label-md text-secondary">{s.label}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
+        {/* Hashtag management */}
+        <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+          <h3 className="font-bold text-body-lg text-purple-700 dark:text-purple-400 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined">local_offer</span> 課程專屬 Hashtags 管理
+          </h3>
+          <p className="text-secondary text-xs">新增或管理討論版專屬課程標籤，引導學生發問方向。</p>
+
+          <div className="flex gap-2 mt-md">
+            <input
+              className="flex-grow bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+              id="new-hashtag-input"
+              placeholder="例：#拉氏轉換..."
+            />
+            <button className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg transition-all">
+              新增標籤
+            </button>
           </div>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
-        {/* 課程熱門 Hashtags（依真實貼文標籤彙整） */}
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-          <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
-            <span className="material-symbols-outlined">local_offer</span> 課程熱門 Hashtags
-          </h3>
-          <p className="text-xs text-secondary">彙整討論版上學生實際使用的課程標籤與提問數，掌握學生的發問方向。</p>
-
-          {topTags.length === 0 ? (
-            <p className="mt-lg text-body-md text-secondary">目前尚無任何課程標籤。</p>
-          ) : (
-            <div className="mt-lg flex flex-wrap gap-2">
-              {topTags.map((t) => (
-                <span
-                  key={t.tag}
-                  className="inline-flex items-center gap-1 rounded-full border border-outline-variant/30 bg-secondary-container px-3 py-1 text-label-md text-on-secondary-container"
-                >
-                  <span>#{t.tag}</span>
-                  <span className="rounded-full bg-on-secondary-container/15 px-1.5 text-[10px] font-bold">{t.total}</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 學生學習難點統計分析（依真實貼文標籤與採納狀況計算） */}
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-          <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
-            <span className="material-symbols-outlined">analytics</span> 學生學習難點統計分析
-          </h3>
-          <p className="text-xs text-secondary">依各標籤的提問與採納解答比例，找出待解決最多的學習難點。</p>
-
-          {difficulty.length === 0 ? (
-            <p className="mt-lg text-body-md text-secondary">目前尚無足夠的提問資料可供分析。</p>
-          ) : (
-            <div className="mt-lg space-y-sm">
-              {difficulty.map((d) => (
-                <div key={d.tag}>
-                  <div className="mb-1 flex justify-between text-xs font-semibold">
-                    <span>#{d.tag}</span>
-                    <span className="font-bold text-primary">
-                      {d.rate}% ({d.solved}/{d.total} 已解決)
-                    </span>
-                  </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-container-low">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${d.rate}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 各學院提問分佈 */}
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-          <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
-            <span className="material-symbols-outlined">dashboard</span> 各學院提問分佈
-          </h3>
-          <p className="text-xs text-secondary">依討論版統計目前的提問數量，掌握各學院的發問熱度。</p>
-
-          <div className="mt-lg space-y-sm">
-            {byBoard.map((b) => (
-              <div key={b.name}>
-                <div className="mb-1 flex justify-between text-xs font-semibold">
-                  <span className="flex items-center gap-1">
-                    <span>{b.icon}</span>
-                    <span>{b.name}</span>
-                  </span>
-                  <span className="font-bold text-primary">
-                    {b.c} 篇 ({total > 0 ? Math.round((b.c / total) * 100) : 0}%)
-                  </span>
-                </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-container-low">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${total > 0 ? (b.c / total) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
+          <div className="flex flex-wrap gap-2 mt-lg" id="professor-tags-list">
+            {topTags.map((t) => (
+              <span
+                key={t.tag}
+                className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 font-bold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1 shadow-sm"
+              >
+                # {t.tag}
+                <button className="text-purple-500 hover:text-purple-700 font-bold ml-1">&times;</button>
+              </span>
             ))}
           </div>
         </div>
 
-        {/* 待解答的提問 */}
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
-          <h3 className="mb-md flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
-            <span className="material-symbols-outlined">lightbulb</span> 待解答的提問
+        {/* Misconceptions & Charts */}
+        <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+          <h3 className="font-bold text-body-lg text-purple-700 dark:text-purple-400 mb-md flex items-center gap-1">
+            <span className="material-symbols-outlined">analytics</span> 學生學習難點統計分析
           </h3>
 
-          <div className="space-y-2 text-xs">
+          {/* Custom stat bars */}
+          <div className="space-y-sm mb-lg">
+            {difficulty.map((d) => (
+              <div key={d.tag}>
+                <div className="flex justify-between text-xs font-semibold mb-1">
+                  <span>#{d.tag}</span>
+                  <span className="text-primary font-bold">
+                    {d.rate}% ({d.solved}/{d.total} 已解決)
+                  </span>
+                </div>
+                <div className="w-full bg-surface-container-low h-2.5 rounded-full overflow-hidden">
+                  <div className="bg-primary h-full rounded-full" style={{ width: `${d.rate}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h4 className="font-bold text-xs text-on-surface border-t border-outline-variant/20 pt-md mb-2 flex items-center gap-0.5">
+            <span className="material-symbols-outlined text-sm">lightbulb</span> 待解答的提問
+          </h4>
+          <div className="space-y-2 text-xs" id="professor-misconceptions">
             {pending.length === 0 ? (
-              <p className="text-body-md text-secondary">目前沒有待解答的提問 🎉</p>
+              <p className="text-secondary text-[11px]">目前沒有待解答的提問 🎉</p>
             ) : (
               pending.map((p) => (
                 <Link
                   key={p.id}
                   href={`/posts/${p.id}`}
-                  className="group relative block rounded border border-outline-variant/20 bg-surface-container p-sm no-underline transition-colors hover:border-primary/40"
+                  className="block bg-surface-container-low dark:bg-surface p-md rounded-xl border-l-4 border-yellow-500 no-underline"
                 >
-                  <div className="mb-1 flex items-center gap-1 font-bold text-primary">
-                    <span className="rounded bg-primary-container px-1.5 py-[1px] text-[10px] text-on-primary-container">
-                      #{p.boardName}
-                    </span>
-                    {p.authorName ? (
-                      <span className="text-[11px] font-normal text-secondary">{p.authorName}</span>
-                    ) : null}
-                  </div>
-                  <p className="text-[13px] leading-relaxed text-on-surface">{p.title}</p>
-                  <p className="mt-1 text-[11px] text-secondary">{formatDateTime(p.createdAt)}</p>
+                  <h4 className="font-bold text-xs text-on-surface">
+                    #{p.boardName}　{p.title}
+                  </h4>
+                  <p className="text-secondary text-[11px] mt-1">
+                    {p.authorName ? `${p.authorName} · ` : ""}
+                    {formatDateTime(p.createdAt)}
+                  </p>
                 </Link>
               ))
             )}

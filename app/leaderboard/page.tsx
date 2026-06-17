@@ -45,6 +45,57 @@ function unitFor(key: TabKey): string {
   return "分";
 }
 
+/** 成就徽章（對齊 legacy badges-showcase 四項），解鎖狀態由真實資料判定 */
+type Badge = {
+  name: string;
+  icon: string;
+  desc: string;
+  owned: boolean;
+};
+
+/** 福利社特約折價券（legacy WELFARE_ITEMS，靜態設定），解鎖由真實寵物等級/徽章判定 */
+const WELFARE_ITEMS: {
+  id: string;
+  name: string;
+  desc: string;
+  icon: string;
+  reqType: "level" | "badge";
+  reqValue: number | string;
+}[] = [
+  {
+    id: "welfare-fries",
+    name: "麥當勞大薯升級券",
+    desc: "北科校內麥當勞專屬！中薯免費升級大薯，考試熬夜解饞必備。",
+    icon: "🍟",
+    reqType: "level",
+    reqValue: 4,
+  },
+  {
+    id: "welfare-boba",
+    name: "連鎖手搖飲免費加珍券",
+    desc: "北科正門手搖特約店！購買大杯純茶免費加蜂蜜波霸珍珠一份。",
+    icon: "🧋",
+    reqType: "badge",
+    reqValue: "解題達人",
+  },
+  {
+    id: "welfare-waffle",
+    name: "北科周邊特約鬆餅折10元",
+    desc: "校園後門特約手作鬆餅，憑此券折抵任意口味鬆餅 10 元。",
+    icon: "🧇",
+    reqType: "badge",
+    reqValue: "好學新手",
+  },
+  {
+    id: "welfare-study-tea",
+    name: "K書中心特大杯烏龍綠茶兌換券",
+    desc: "達特定成就，免費獲得大杯冰烏龍綠茶一杯，邊讀邊喝超清涼！",
+    icon: "🍵",
+    reqType: "level",
+    reqValue: 5,
+  },
+];
+
 /** 互助榜：依 authorId 聚合留言，被採納解答 ×20 + 一般回覆 ×5 */
 async function loadHelpers(): Promise<RankRow[]> {
   const rows = await db
@@ -234,280 +285,247 @@ export default async function LeaderboardPage({
     ];
   }
 
-  const unlockedCount = achievements
-    ? achievements.filter((a) => a.earned).length
-    : 0;
+  // 成就徽章（legacy badges-showcase 四項），解鎖以真實資料判定
+  let petLevel = 0;
+  let badges: Badge[] | null = null;
+  if (userId && achievements) {
+    const adoptedEarned =
+      achievements.find((a) => a.id === "calc_savior")?.earned ?? false;
+    const repliesCount =
+      achievements.find((a) => a.id === "lab_master")?.current ?? 0;
+    const roomsCount =
+      achievements.find((a) => a.id === "room_creator")?.current ?? 0;
+    petLevel = achievements.find((a) => a.id === "lit_collector")?.current ?? 0;
 
-  // 領獎台前三名（依序：第 2 名、第 1 名、第 3 名）
-  const rank1 = ranked[0] ?? null;
-  const rank2 = ranked[1] ?? null;
-  const rank3 = ranked[2] ?? null;
+    badges = [
+      {
+        name: "好學新手",
+        icon: "🌱",
+        desc: "註冊成為北科遊戲化論壇的一員。",
+        owned: true,
+      },
+      {
+        name: "解題達人",
+        icon: "🎓",
+        desc: "發表解答被他人成功採納為最佳解答。",
+        owned: adoptedEarned,
+      },
+      {
+        name: "共讀先鋒",
+        icon: "📡",
+        desc: "加入或建立一個課業共讀自修室。",
+        owned: roomsCount >= 1,
+      },
+      {
+        name: "熱心助人",
+        icon: "💖",
+        desc: "發表你的第一個解答留言。",
+        owned: repliesCount >= 1,
+      },
+    ];
+  }
+  const ownedBadgeNames = badges
+    ? badges.filter((b) => b.owned).map((b) => b.name)
+    : [];
 
   return (
-    <main className="w-full max-w-7xl flex flex-col gap-xl">
-      {/* Header Section */}
-      <header className="flex flex-col gap-sm">
-        <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
-          學術榮譽榜
+    <section className="w-full max-w-7xl">
+      <div className="mb-lg border-b border-outline-variant/30 pb-3">
+        <h1 className="font-semibold text-headline-lg text-on-background">
+          排行榜與成就福利社
         </h1>
-        <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
-          表彰在解答與探索領域展現卓越成就的學習者。展現你的實力，解鎖專屬成就勳章。
+        <p className="text-secondary text-body-md">
+          解鎖成就徽章以在福利社兌換校園實體優惠折價券。
         </p>
-      </header>
-
-      {/* Leaderboard Tab Selector */}
-      <div className="flex bg-surface-container-low p-1 rounded-full border border-outline-variant/30 w-full max-w-xl self-start mb-sm">
-        {TABS.map((t) => {
-          const isActive = t.key === activeKey;
-          return (
-            <Link
-              key={t.key}
-              href={t.key === "helpers" ? "/leaderboard" : `/leaderboard?tab=${t.key}`}
-              className={`flex-1 py-2 px-4 font-bold text-body-md rounded-full transition-all text-center ${
-                isActive
-                  ? "bg-primary text-on-primary shadow-sm"
-                  : "text-secondary hover:text-primary"
-              }`}
-            >
-              {t.tab}
-            </Link>
-          );
-        })}
       </div>
 
-      {/* Top 3 Podium Section */}
-      <section className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-lg flex flex-col items-center justify-center min-h-[360px] relative pt-16">
-        <div
-          className="absolute inset-0 opacity-5"
-          style={{
-            backgroundImage: "radial-gradient(circle at center, #4b6172 2px, transparent 2px)",
-            backgroundSize: "24px 24px",
-          }}
-        ></div>
-        {ranked.length === 0 ? (
-          <p className="z-10 font-body-md text-body-md text-secondary">尚無排行資料。</p>
-        ) : (
-          <div className="flex items-end justify-center gap-sm md:gap-lg h-64 z-10 w-full max-w-3xl">
-            {/* 2nd Place */}
-            {rank2 ? (
-              <div className="flex flex-col items-center w-1/3">
-                <div className="relative mb-sm">
-                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-secondary-container flex items-center justify-center">
-                    {rank2.image ? (
-                       
-                      <img src={rank2.image} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-secondary font-bold bg-surface-container-highest text-lg">
-                        {rank2.name?.[0] ?? "?"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute -bottom-2 -right-2 bg-surface-container text-on-surface-variant w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border border-outline-variant font-label-md">
-                    2
-                  </div>
-                </div>
-                <div className="font-label-md text-label-md text-on-surface font-bold text-center truncate w-full">
-                  {rank2.name ?? "匿名使用者"}
-                </div>
-                <div className="font-body-md text-body-md text-secondary">
-                  {rank2.score.toLocaleString()} {unit}
-                </div>
-                <div className="w-full bg-secondary-container h-24 md:h-32 mt-md rounded-t-xl border-t border-x border-outline-variant opacity-80"></div>
-              </div>
-            ) : (
-              <div className="w-1/3"></div>
-            )}
-
-            {/* 1st Place */}
-            {rank1 ? (
-              <div className="flex flex-col items-center w-1/3 relative">
-                <div className="absolute -top-10 text-tertiary-container animate-pulse">
-                  <span className="material-symbols-outlined text-4xl icon-fill" style={{ fontSize: "40px" }}>
-                    kid_star
-                  </span>
-                </div>
-                <div className="relative mb-sm">
-                  <div className="w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-tertiary-container shadow-lg overflow-hidden bg-primary-container flex items-center justify-center">
-                    {rank1.image ? (
-                       
-                      <img src={rank1.image} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center font-bold text-secondary text-lg bg-surface-container-highest">
-                        {rank1.name?.[0] ?? "?"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute -bottom-2 -right-2 bg-tertiary-container text-on-tertiary-container w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-md border border-tertiary-fixed font-headline-md text-lg">
-                    1
-                  </div>
-                </div>
-                <div className="font-label-md text-label-md text-on-surface font-bold text-center truncate w-full text-base">
-                  {rank1.name ?? "匿名使用者"}
-                </div>
-                <div className="font-body-md text-body-md text-primary font-semibold">
-                  {rank1.score.toLocaleString()} {unit}
-                </div>
-                <div className="w-full bg-primary-container h-32 md:h-40 mt-md rounded-t-xl border-t border-x border-primary-fixed-dim shadow-[inset_0_4px_6px_rgba(0,0,0,0.05)]"></div>
-              </div>
-            ) : (
-              <div className="w-1/3"></div>
-            )}
-
-            {/* 3rd Place */}
-            {rank3 ? (
-              <div className="flex flex-col items-center w-1/3">
-                <div className="relative mb-sm">
-                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-tertiary-fixed-dim flex items-center justify-center">
-                    {rank3.image ? (
-                       
-                      <img src={rank3.image} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-secondary font-bold bg-surface-container-highest text-lg">
-                        {rank3.name?.[0] ?? "?"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute -bottom-2 -right-2 bg-surface-variant text-on-surface-variant w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border border-outline-variant font-label-md">
-                    3
-                  </div>
-                </div>
-                <div className="font-label-md text-label-md text-on-surface font-bold text-center truncate w-full">
-                  {rank3.name ?? "匿名使用者"}
-                </div>
-                <div className="font-body-md text-body-md text-secondary">
-                  {rank3.score.toLocaleString()} {unit}
-                </div>
-                <div className="w-full bg-surface-container-highest h-20 md:h-28 mt-md rounded-t-xl border-t border-x border-outline-variant opacity-70"></div>
-              </div>
-            ) : (
-              <div className="w-1/3"></div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* Two Column Layout: Rankings List & Achievements Bento */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-xl">
-        {/* Rankings List */}
-        <section className="flex flex-col gap-md">
-          <div className="flex items-center justify-between">
-            <h2 className="font-headline-md text-headline-md text-on-surface">{activeTab.title}</h2>
-            <span className="font-label-md text-label-md text-secondary">{activeTab.subtitle}</span>
-          </div>
-          <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant overflow-hidden">
-            {ranked.length === 0 ? (
-              <p className="p-md font-body-md text-body-md text-secondary">尚無排行資料。</p>
-            ) : (
-              ranked.map((r, i) => (
-                <div
-                  key={r.userId}
-                  className="flex items-center justify-between p-md border-b border-surface-variant last:border-b-0 hover:bg-surface-container-low transition-colors"
-                >
-                  <div className="flex items-center gap-md">
-                    <div className="w-8 font-label-md text-label-md text-secondary font-bold text-center">
-                      {i + 1}
-                    </div>
-                    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container flex items-center justify-center">
-                      {r.image ? (
-                         
-                        <img src={r.image} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-secondary font-bold bg-surface-container">
-                          {r.name?.[0] ?? "?"}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="font-body-md text-body-md font-medium text-on-surface">
-                        {r.name ?? "匿名使用者"}
-                      </div>
-                      {r.detail && (
-                        <div className="text-[10px] text-secondary">{r.detail}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="font-body-md text-body-md text-on-surface-variant">
-                    {r.score.toLocaleString()} {unit}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* Achievement Showcase (Bento Grid) */}
-        <section className="flex flex-col gap-md">
-          <div className="flex items-center justify-between">
-            <h2 className="font-headline-md text-headline-md text-on-surface">成就展示館</h2>
-            {achievements && (
-              <span className="bg-primary-container text-on-primary-container px-sm py-1 rounded-full font-label-md text-label-md">
-                已解鎖 {unlockedCount}/{achievements.length}
-              </span>
-            )}
-          </div>
-          {achievements ? (
-            <div className="grid grid-cols-2 gap-sm md:gap-md auto-rows-[140px]">
-              {achievements.map((a) => {
-                const isLocked = !a.earned;
-                const percent = Math.min(100, Math.round((a.current / a.target) * 100));
-                return (
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-lg items-start">
+        {/* Left: Achievements & Welfare Coupons */}
+        <div className="lg:col-span-7 space-y-lg">
+          {/* Badge Showcase */}
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+            <h3 className="font-bold text-body-lg text-on-surface mb-3 flex items-center gap-1">
+              <span className="material-symbols-outlined text-primary">
+                military_tech
+              </span>{" "}
+              我的成就徽章
+            </h3>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-sm">
+              {badges ? (
+                badges.map((b) => (
                   <div
-                    key={a.id}
-                    className={`bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-md flex flex-col justify-between hover:-translate-y-1 transition-transform relative overflow-hidden group ${
-                      isLocked ? "opacity-65" : ""
+                    key={b.name}
+                    title={b.desc}
+                    className={`flex flex-col items-center justify-center p-2 bg-surface-container-low dark:bg-surface border border-outline-variant/30 rounded-xl relative group ${
+                      b.owned ? "" : "opacity-40 filter grayscale"
                     }`}
                   >
-                    <div className="flex justify-between items-start">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-2xl ${
-                          isLocked
-                            ? "bg-surface-container-highest grayscale"
-                            : "bg-tertiary-container"
-                        }`}
-                      >
-                        {a.icon}
-                      </div>
-                      {isLocked ? (
-                        <span className="material-symbols-outlined text-outline text-sm">lock</span>
-                      ) : (
-                        <span className="text-tertiary font-bold text-[10px] flex items-center gap-xs">
-                          <span className="material-symbols-outlined text-sm icon-fill text-tertiary">
-                            check_circle
-                          </span>
-                          已解鎖
+                    <span className="text-3xl">{b.icon}</span>
+                    <span className="text-[10px] font-bold text-on-surface mt-1">
+                      {b.name}
+                    </span>
+                    {b.owned && (
+                      <span className="absolute top-1 right-1 text-[8px] bg-green-100 text-green-700 px-1 rounded-full">
+                        已得
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="col-span-full text-secondary text-body-md">
+                  登入後可查看你的成就徽章。
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Coupon Welfare Shop */}
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+            <h3 className="font-bold text-body-lg text-tertiary flex items-center gap-1 mb-3">
+              <span className="material-symbols-outlined">local_activity</span>{" "}
+              學生特約福利社
+            </h3>
+            <div className="space-y-md">
+              {WELFARE_ITEMS.map((coupon) => {
+                let reqText: string;
+                let isUnlocked: boolean;
+                if (coupon.reqType === "level") {
+                  reqText = `Lv.${coupon.reqValue} 級解鎖`;
+                  isUnlocked = petLevel >= (coupon.reqValue as number);
+                } else {
+                  reqText = `需解鎖徽章: ${coupon.reqValue}`;
+                  isUnlocked = ownedBadgeNames.includes(
+                    coupon.reqValue as string,
+                  );
+                }
+                const btnStyle = isUnlocked
+                  ? "bg-tertiary text-on-tertiary hover:opacity-95"
+                  : "bg-surface-container text-secondary cursor-not-allowed border border-outline-variant/30";
+                return (
+                  <div
+                    key={coupon.id}
+                    className="flex items-center justify-between p-3 rounded-xl bg-surface-container-low dark:bg-surface border border-outline-variant/20"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{coupon.icon}</span>
+                      <div>
+                        <h4 className="font-bold text-xs text-on-surface">
+                          {coupon.name}
+                        </h4>
+                        <p className="text-[10px] text-secondary leading-normal">
+                          {coupon.desc}
+                        </p>
+                        <span className="text-[9px] font-bold text-tertiary">
+                          {reqText}
                         </span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-label-md text-label-md text-on-surface font-bold text-base mb-xs truncate">
-                        {a.name}
-                      </h3>
-                      <p className="font-label-md text-[10px] text-secondary line-clamp-1 mb-1">
-                        {a.desc}
-                      </p>
-                      <div className="flex items-center gap-xs">
-                        <div className="flex-1 bg-surface-container h-1 rounded-full overflow-hidden">
-                          <div
-                            className={`${isLocked ? "bg-secondary" : "bg-tertiary"} h-full rounded-full`}
-                            style={{ width: `${percent}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-[9px] font-bold text-secondary shrink-0">
-                          {Math.min(a.current, a.target)}/{a.target}
-                        </span>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      className={`font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all ${btnStyle}`}
+                      disabled={!isUnlocked}
+                    >
+                      免費兌換
+                    </button>
                   </div>
                 );
               })}
             </div>
-          ) : (
-            <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-lg">
-              <p className="font-body-md text-body-md text-secondary">登入後可查看你的成就徽章。</p>
+          </div>
+        </div>
+
+        {/* Right: Leaderboards */}
+        <div className="lg:col-span-5 bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
+          <div className="flex border-b border-outline-variant/30 mb-md">
+            {TABS.map((t) => {
+              const isActive = t.key === activeKey;
+              return (
+                <Link
+                  key={t.key}
+                  href={
+                    t.key === "helpers"
+                      ? "/leaderboard"
+                      : `/leaderboard?tab=${t.key}`
+                  }
+                  className={`flex-1 py-2 font-bold text-body-md text-center ${
+                    isActive
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-secondary border-b-2 border-transparent hover:text-primary"
+                  }`}
+                >
+                  {t.tab}
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="space-y-md">
+            <div className="grid grid-cols-12 text-xs font-bold text-secondary pb-1 border-b border-outline-variant/20">
+              <span className="col-span-2">排名</span>
+              <span className="col-span-7">系所/姓名</span>
+              <span className="col-span-3 text-right">{activeTab.subtitle}</span>
             </div>
-          )}
-        </section>
+            <div className="space-y-2.5">
+              {ranked.length === 0 ? (
+                <p className="text-xs text-secondary py-2">尚無排行資料。</p>
+              ) : (
+                ranked.map((u, i) => {
+                  const isSelf = userId != null && u.userId === userId;
+                  const selfBg = isSelf
+                    ? "bg-primary-container/20 border border-primary/20 rounded-lg"
+                    : "";
+                  const nameDisplay = `${u.name ?? "匿名使用者"}${
+                    isSelf ? " (我)" : ""
+                  }`;
+                  return (
+                    <div
+                      key={u.userId}
+                      className={`grid grid-cols-12 items-center text-xs py-1.5 px-2 ${selfBg}`}
+                    >
+                      <div className="col-span-2">
+                        {i === 0 ? (
+                          <span className="text-xl">🥇</span>
+                        ) : i === 1 ? (
+                          <span className="text-xl">🥈</span>
+                        ) : i === 2 ? (
+                          <span className="text-xl">🥉</span>
+                        ) : (
+                          <span className="font-bold text-secondary text-xs">
+                            {i + 1}
+                          </span>
+                        )}
+                      </div>
+                      <div className="col-span-7 font-bold text-on-surface flex items-center gap-1.5">
+                        {u.image ? (
+                          <span className="w-5 h-5 rounded-full overflow-hidden inline-flex shrink-0">
+                            { }
+                            <img
+                              src={u.image}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </span>
+                        ) : (
+                          <span>👤</span>
+                        )}
+                        <span>{nameDisplay}</span>
+                        {u.detail && (
+                          <span className="text-[9px] text-secondary ml-1 font-normal">
+                            ({u.detail})
+                          </span>
+                        )}
+                      </div>
+                      <div className="col-span-3 text-right font-bold text-primary dark:text-primary-fixed-dim">
+                        {u.score.toLocaleString()} {unit}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-    </main>
+    </section>
   );
 }

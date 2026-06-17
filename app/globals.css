@@ -88,6 +88,23 @@
   /* ---- 圓角 token ----
      各 code.html 原頁面用 lg=0.5rem / xl=0.75rem，正好等於 Tailwind v4 預設，
      故不覆寫（先前照 index.html 設 1rem/1.5rem 會讓圓角比原頁面大）。 */
+
+  /* ---- 容器/最大寬度 token ----
+     自訂的 --spacing-xl/lg/md/sm 會讓 max-w-xl/lg/md/sm 變成間距值(32/24/16/8px)，
+     在此明確定義 --container-* 還原 t-shirt 尺寸，讓 max-w-* 用對寬度。 */
+  --container-3xs: 16rem;
+  --container-2xs: 18rem;
+  --container-xs: 20rem;
+  --container-sm: 24rem;
+  --container-md: 28rem;
+  --container-lg: 32rem;
+  --container-xl: 36rem;
+  --container-2xl: 42rem;
+  --container-3xl: 48rem;
+  --container-4xl: 56rem;
+  --container-5xl: 64rem;
+  --container-6xl: 72rem;
+  --container-7xl: 80rem;
 }
 
 /* Material Symbols 圖示 */
@@ -112,3 +129,27 @@
 body {
   font-family: var(--font-sans);
 }
+
+/* ==== 移植自 legacy style.css 的動畫與狀態條 ==== */
+.anim-float { animation: float-bot 4s ease-in-out infinite; transform-origin: center; }
+@keyframes float-bot { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+.anim-spin-slow { animation: spin-slow 8s linear infinite; display: inline-block; }
+@keyframes spin-slow { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
+
+.animate-fade-in-up { animation: fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes fade-in-up { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
+
+.hearts-glow { filter: drop-shadow(0 0 3px rgba(255, 80, 80, 0.5)); }
+
+.hp-bar { background: linear-gradient(90deg, #34d399, #10b981); }
+.exp-bar { background: linear-gradient(90deg, #60a5fa, #4b6172); }
+
+/* 修正命名空間衝突：自訂 --spacing-{xs,sm,md,lg,xl} 會讓 max-w-{xs,sm,md,lg,xl}
+   變成間距值(8~32px)。這裡以未分層規則還原 t-shirt 容器寬度（unlayered 優先於
+   Tailwind 的 @layer utilities，保證生效）。 */
+.max-w-xs { max-width: 20rem; }
+.max-w-sm { max-width: 24rem; }
+.max-w-md { max-width: 28rem; }
+.max-w-lg { max-width: 32rem; }
+.max-w-xl { max-width: 36rem; }
