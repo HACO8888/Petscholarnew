@@ -2,7 +2,7 @@ import postgres from "postgres";
 import { readFileSync } from "fs";
 import { config } from "dotenv";
 
-config({ path: ".env.local" });
+config({ path: [".env.local", ".env"] });
 
 const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 

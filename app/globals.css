@@ -85,9 +85,9 @@
   --spacing-sm: 8px;
   --spacing-base: 8px;
 
-  /* ---- 圓角 token ---- */
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
+  /* ---- 圓角 token ----
+     各 code.html 原頁面用 lg=0.5rem / xl=0.75rem，正好等於 Tailwind v4 預設，
+     故不覆寫（先前照 index.html 設 1rem/1.5rem 會讓圓角比原頁面大）。 */
 }
 
 /* Material Symbols 圖示 */
