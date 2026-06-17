@@ -36,6 +36,34 @@ export default async function ProfessorPage() {
     .groupBy(boards.id, boards.name, boards.icon, boards.sortOrder)
     .orderBy(boards.sortOrder);
 
+  // 課程 Hashtags / 學習難點：依真實貼文標籤彙整，並計算各標籤的採納（已解決）比例。
+  const tagRows = await db
+    .select({ tags: posts.tags, solved: posts.solved })
+    .from(posts)
+    .where(eq(posts.hidden, false));
+  const tagStats = new Map<string, { total: number; solved: number }>();
+  for (const r of tagRows) {
+    for (const t of r.tags) {
+      const cur = tagStats.get(t) ?? { total: 0, solved: 0 };
+      cur.total += 1;
+      if (r.solved) cur.solved += 1;
+      tagStats.set(t, cur);
+    }
+  }
+  const tagList = [...tagStats.entries()]
+    .map(([tag, s]) => ({
+      tag,
+      total: s.total,
+      solved: s.solved,
+      rate: s.total > 0 ? Math.round((s.solved / s.total) * 100) : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+  // 熱門 Hashtags 取前 12 名；學習難點以「未解決最多」優先排序取前 6 名。
+  const topTags = tagList.slice(0, 12);
+  const difficulty = [...tagList]
+    .sort((a, b) => b.total - b.solved - (a.total - a.solved) || a.rate - b.rate)
+    .slice(0, 6);
+
   const pending = await db
     .select({
       id: posts.id,
@@ -62,7 +90,7 @@ export default async function ProfessorPage() {
     <section className="tab-section active" id="sect-professor">
       <div className="mb-lg rounded-lg border-b border-outline-variant/30 bg-gradient-to-r from-purple-500/10 to-transparent p-md pb-3">
         <h1 className="text-headline-lg font-semibold text-purple-700 dark:text-purple-400">🎓 課程教授管理主頁</h1>
-        <p className="text-body-md text-secondary">追蹤學生在解題遇到的常見盲點與難度，掌握各學院提問與解決狀況。</p>
+        <p className="text-body-md text-secondary">追蹤本學期核心課程 Hashtags 標籤，掌握學生在解題遇到的常見盲點與難度。</p>
       </div>
 
       <div className="mb-lg grid grid-cols-2 gap-md sm:grid-cols-5">
@@ -78,10 +106,62 @@ export default async function ProfessorPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
+        {/* 課程熱門 Hashtags（依真實貼文標籤彙整） */}
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
+          <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
+            <span className="material-symbols-outlined">local_offer</span> 課程熱門 Hashtags
+          </h3>
+          <p className="text-xs text-secondary">彙整討論版上學生實際使用的課程標籤與提問數，掌握學生的發問方向。</p>
+
+          {topTags.length === 0 ? (
+            <p className="mt-lg text-body-md text-secondary">目前尚無任何課程標籤。</p>
+          ) : (
+            <div className="mt-lg flex flex-wrap gap-2">
+              {topTags.map((t) => (
+                <span
+                  key={t.tag}
+                  className="inline-flex items-center gap-1 rounded-full border border-outline-variant/30 bg-secondary-container px-3 py-1 text-label-md text-on-secondary-container"
+                >
+                  <span>#{t.tag}</span>
+                  <span className="rounded-full bg-on-secondary-container/15 px-1.5 text-[10px] font-bold">{t.total}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 學生學習難點統計分析（依真實貼文標籤與採納狀況計算） */}
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
+          <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
+            <span className="material-symbols-outlined">analytics</span> 學生學習難點統計分析
+          </h3>
+          <p className="text-xs text-secondary">依各標籤的提問與採納解答比例，找出待解決最多的學習難點。</p>
+
+          {difficulty.length === 0 ? (
+            <p className="mt-lg text-body-md text-secondary">目前尚無足夠的提問資料可供分析。</p>
+          ) : (
+            <div className="mt-lg space-y-sm">
+              {difficulty.map((d) => (
+                <div key={d.tag}>
+                  <div className="mb-1 flex justify-between text-xs font-semibold">
+                    <span>#{d.tag}</span>
+                    <span className="font-bold text-primary">
+                      {d.rate}% ({d.solved}/{d.total} 已解決)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-container-low">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${d.rate}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* 各學院提問分佈 */}
         <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
           <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
-            <span className="material-symbols-outlined">local_offer</span> 各學院提問分佈
+            <span className="material-symbols-outlined">dashboard</span> 各學院提問分佈
           </h3>
           <p className="text-xs text-secondary">依討論版統計目前的提問數量，掌握各學院的發問熱度。</p>
 

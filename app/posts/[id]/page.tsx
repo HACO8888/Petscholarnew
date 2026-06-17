@@ -156,6 +156,8 @@ export default async function PostPage({
             postId={post.id}
             postAuthorId={post.authorId}
             currentUserId={session?.user?.id ?? null}
+            currentUserRole={session?.user?.role ?? null}
+            postSolved={post.solved}
           />
         </div>
       </div>

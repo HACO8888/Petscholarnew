@@ -13,20 +13,50 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
+const SORTS = [
+  { key: "latest", label: "最新發布" },
+  { key: "bounty", label: "最高懸賞" },
+  { key: "comments", label: "最多回覆" },
+] as const;
+
+type SortKey = (typeof SORTS)[number]["key"];
+
+// 依目前的 status / sort 拼出查詢字串，讓兩個篩選可同時生效、互不覆蓋。
+function buildQuery(params: { status?: FilterKey; sort?: SortKey }): string {
+  const sp = new URLSearchParams();
+  if (params.status && params.status !== "all") sp.set("status", params.status);
+  if (params.sort && params.sort !== "latest") sp.set("sort", params.sort);
+  const qs = sp.toString();
+  return qs ? `/discussion?${qs}` : "/discussion";
+}
+
 export default async function DiscussionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; sort?: string }>;
 }) {
-  const { status } = await searchParams;
+  const { status, sort } = await searchParams;
   const active: FilterKey = (FILTERS.some((f) => f.key === status)
     ? status
     : "all") as FilterKey;
+  const activeSort: SortKey = (SORTS.some((s) => s.key === sort)
+    ? sort
+    : "latest") as SortKey;
 
   const conds: SQL[] = [eq(posts.hidden, false)];
   if (active === "solved") conds.push(eq(posts.solved, true));
   else if (active === "unsolved") conds.push(eq(posts.solved, false));
   else if (active === "bounty") conds.push(gt(posts.bounty, 0));
+
+  // 共用的留言數子查詢：同時用於顯示與排序，確保排序依據與畫面數字一致。
+  const commentCount = sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`;
+
+  const orderBy =
+    activeSort === "bounty"
+      ? [desc(posts.bounty), desc(posts.createdAt)]
+      : activeSort === "comments"
+        ? [desc(commentCount), desc(posts.createdAt)]
+        : [desc(posts.createdAt)];
 
   const rows = await db
     .select({
@@ -39,12 +69,12 @@ export default async function DiscussionPage({
       solved: posts.solved,
       createdAt: posts.createdAt,
       boardName: boards.name,
-      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`,
+      commentCount,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(and(...conds))
-    .orderBy(desc(posts.createdAt));
+    .orderBy(...orderBy);
 
   return (
     <>
@@ -73,7 +103,7 @@ export default async function DiscussionPage({
         {FILTERS.map((f) => (
           <Link
             key={f.key}
-            href={f.key === "all" ? "/discussion" : `/discussion?status=${f.key}`}
+            href={buildQuery({ status: f.key, sort: activeSort })}
             className={
               active === f.key
                 ? "px-md py-xs rounded-full bg-primary-container text-on-primary-container border border-transparent font-label-md text-label-md transition-colors no-underline"
@@ -83,19 +113,36 @@ export default async function DiscussionPage({
             {f.label}
           </Link>
         ))}
-        <div className="ml-auto flex items-center gap-xs">
-          <span className="text-secondary text-label-md font-label-md mr-xs">
+        <form method="get" action="/discussion" className="ml-auto flex items-center gap-xs">
+          {/* 保留目前的狀態篩選，避免切換排序時清掉 status */}
+          {active !== "all" && (
+            <input type="hidden" name="status" value={active} />
+          )}
+          <label
+            htmlFor="discussion-sort"
+            className="text-secondary text-label-md font-label-md mr-xs"
+          >
             排序:
-          </span>
+          </label>
           <select
-            defaultValue="最新發布"
+            id="discussion-sort"
+            name="sort"
+            defaultValue={activeSort}
             className="bg-surface border border-outline-variant text-on-surface text-body-md rounded-lg py-xs pl-sm pr-lg focus:ring-primary focus:border-primary cursor-pointer transition-colors"
           >
-            <option>最新發布</option>
-            <option>最高懸賞</option>
-            <option>最多回覆</option>
+            {SORTS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
           </select>
-        </div>
+          <button
+            type="submit"
+            className="px-md py-xs rounded-lg bg-primary-container text-on-primary-container font-label-md text-label-md hover:bg-surface-container transition-colors"
+          >
+            套用
+          </button>
+        </form>
       </div>
 
       {/* Question List */}

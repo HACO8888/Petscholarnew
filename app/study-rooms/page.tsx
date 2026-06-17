@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { studyRooms, studyRoomMembers } from "@/db/schema";
-import { joinRoom, leaveRoom } from "./actions";
+import { studyRooms, studyRoomMembers, users } from "@/db/schema";
+import { createRoom, joinRoom, leaveRoom } from "./actions";
 
 export default async function StudyRoomsPage() {
   const session = await auth();
@@ -19,7 +19,29 @@ export default async function StudyRoomsPage() {
       members: sql<number>`(select count(*)::int from ${studyRoomMembers} where ${studyRoomMembers.roomId} = ${studyRooms.id})`,
     })
     .from(studyRooms)
-    .orderBy(studyRooms.sortOrder);
+    .orderBy(asc(studyRooms.sortOrder));
+
+  // 各房成員（真實使用者頭像/名稱），用於卡片底部頭像堆疊
+  const memberRows = await db
+    .select({
+      roomId: studyRoomMembers.roomId,
+      image: users.image,
+      name: users.name,
+      joinedAt: studyRoomMembers.joinedAt,
+    })
+    .from(studyRoomMembers)
+    .innerJoin(users, eq(studyRoomMembers.userId, users.id))
+    .orderBy(asc(studyRoomMembers.joinedAt));
+
+  const membersByRoom = new Map<
+    string,
+    { image: string | null; name: string | null }[]
+  >();
+  for (const m of memberRows) {
+    const list = membersByRoom.get(m.roomId) ?? [];
+    list.push({ image: m.image, name: m.name });
+    membersByRoom.set(m.roomId, list);
+  }
 
   let joined = new Set<string>();
   if (userId) {
@@ -33,78 +55,10 @@ export default async function StudyRoomsPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-xl">
       {/* Page Header */}
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">自習室</h1>
-          <p className="font-body-md text-body-md text-secondary">加入自習室與其他同學一起專注學習</p>
-        </div>
-        <div className="hidden sm:flex items-center gap-sm bg-surface-container px-md py-sm rounded-full shadow-sm">
-          <span className="material-symbols-outlined text-tertiary">account_balance_wallet</span>
-          <span className="font-label-md text-label-md text-on-surface">餘額: 120 枚金幣</span>
-        </div>
+      <header>
+        <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">自習室</h1>
+        <p className="font-body-md text-body-md text-secondary">加入自習室與其他同學一起專注學習</p>
       </header>
-
-      {/* Study Radar Section */}
-      <section className="bg-surface-container-low rounded-xl p-lg border border-outline-variant/50">
-        <div className="flex items-center justify-between mb-md">
-          <div className="flex items-center gap-sm">
-            <span className="material-symbols-outlined text-primary">radar</span>
-            <h2 className="font-headline-md text-headline-md text-on-surface">學習雷達</h2>
-            <span className="bg-primary-container text-on-primary-container px-2 py-0.5 rounded-full font-label-md text-[10px]">
-              附近在線 24 人
-            </span>
-          </div>
-          <button className="text-primary hover:underline font-label-md text-label-md">查看全部</button>
-        </div>
-        <div className="flex gap-md overflow-x-auto hide-scrollbar pb-sm">
-          {/* Radar Item 1 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
-              <img
-                alt="Student 1"
-                className="w-full h-full rounded-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgxMHO6xe4zUswzQvFNoe85-NrjfXlpT91Lv4XcLSKWLz1ZjW1dc_DEFcCJbEQXRUF9VnnicIWemKTBkdByfMNTSXF6Q8dbO-AVEGp_xIRHfPwmoY-R6Xe8wvbOOgNgVRxC-NmZ1t2fQhTbQUvz4yjwB5m-i_ojzmmRPUuxcW4DKxaPf4fZpApVYSvt-QlE4_wUopPObW84JlD6UC_D2u-gVWU1C2cCuqCMnUIAngqeEYXyPMu6hlGXa2hT-otlxUlQVaFWD_vpHVr"
-              />
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#4ade80] rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">Alice</span>
-          </div>
-          {/* Radar Item 2 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
-              <img
-                alt="Student 2"
-                className="w-full h-full rounded-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuwwTybjO4ML4U7OYzYl8S6-4K8tOtMz08IZZqKXtyI3fios2UykUf0enLDDoY4TR0vKKQAKNKrrvbX9f6WJx_wZL6_C8wl7ZkHPQfzacRfp2LAh4x7B-I_GK0TeKgs9CUCbZWwJi9MCoG1QuKLxmR_rXe2tiVjMJVBY18eHJsvGsVWoVqywAg99ojg-JnZiLlr0H2mngsiusXyCrNxPSYbIfZAf5Ug_yq4gTSxhFHtdCnQMDswrG8e_t97c0WG1W1XAbw29Hm2FeN"
-              />
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#4ade80] rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">Bob M.</span>
-          </div>
-          {/* Radar Item 3 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group opacity-60 hover:opacity-100 transition-opacity">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-secondary transition-colors">
-              <div className="w-full h-full rounded-full bg-secondary-container flex items-center justify-center text-secondary">
-                <span className="material-symbols-outlined">person</span>
-              </div>
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-secondary rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-secondary mt-xs truncate w-full text-center">Charlie</span>
-          </div>
-          {/* Radar Item 4 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
-              <img
-                alt="Student 4"
-                className="w-full h-full rounded-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbrOvwbntl_YpDeGO76BqUGUVtrU2GHssDtmHVh8fBLmcvj0pvF5FSBH9E-LPNmP2OpTPIDFaTDed-bZLm0AQcwpquASQdq1LwKwKjADHSBaYa29Ck68vEmkbO1CM1ymm354mv4i4wuCkmr4PS3lrxG2TX1u9C0YnqQEyeBs91xRjqL9042NvkQvSeqnj84WLWheVMMIwaMVLSf4uiIGcljz7XxbFz5zxE4FbnGxty-deaPNDbIOTbxTgLz6kdVKvS9fZlvKLT3OgV"
-              />
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#facc15] rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">David</span>
-          </div>
-        </div>
-      </section>
 
       {/* Active Study Rooms */}
       <section>
@@ -113,14 +67,117 @@ export default async function StudyRoomsPage() {
             <span className="material-symbols-outlined text-primary">meeting_room</span>
             <h2 className="font-headline-md text-headline-md text-on-surface">活躍自習室</h2>
           </div>
-          <button className="px-md py-xs bg-surface-container text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors shadow-sm flex items-center gap-xs">
-            <span className="material-symbols-outlined text-[16px]">add</span> 建立房間
-          </button>
+          {userId ? (
+            <details className="relative group/create">
+              <summary className="list-none cursor-pointer px-md py-xs bg-surface-container text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors shadow-sm flex items-center gap-xs">
+                <span className="material-symbols-outlined text-[16px]">add</span> 建立房間
+              </summary>
+              <form
+                action={createRoom}
+                className="absolute right-0 z-10 mt-sm w-80 bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/40 shadow-xl p-md space-y-md"
+              >
+                <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
+                  <span>📡</span> 建立自習室
+                </h3>
+                <div>
+                  <label
+                    htmlFor="room-name"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    自習室名稱
+                  </label>
+                  <input
+                    id="room-name"
+                    name="name"
+                    type="text"
+                    required
+                    maxLength={80}
+                    placeholder="例：微積分期末衝刺營"
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="room-subject"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    科目 / 主題（選填）
+                  </label>
+                  <input
+                    id="room-subject"
+                    name="subject"
+                    type="text"
+                    maxLength={40}
+                    placeholder="例：微積分"
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="room-description"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    說明（選填）
+                  </label>
+                  <input
+                    id="room-description"
+                    name="description"
+                    type="text"
+                    maxLength={120}
+                    placeholder="例：專注模式，請勿開麥。"
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="room-capacity"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    人數上限
+                  </label>
+                  <input
+                    id="room-capacity"
+                    name="capacity"
+                    type="number"
+                    min={2}
+                    max={12}
+                    defaultValue={8}
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full px-5 py-2 bg-primary text-on-primary rounded-lg font-bold text-xs hover:bg-surface-tint shadow transition-all"
+                >
+                  建立並加入
+                </button>
+              </form>
+            </details>
+          ) : (
+            <Link
+              href="/login"
+              className="px-md py-xs bg-surface-container text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors shadow-sm flex items-center gap-xs"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span> 登入以建立
+            </Link>
+          )}
         </div>
+        {rooms.length === 0 ? (
+          <div className="bg-surface-container-low rounded-xl p-xl border border-outline-variant/50 text-center">
+            <span className="material-symbols-outlined text-[40px] text-on-surface-variant">meeting_room</span>
+            <p className="font-body-md text-body-md text-secondary mt-sm">
+              目前還沒有自習室
+              {userId ? "，點「建立房間」開一間吧！" : "，登入後即可建立。"}
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
           {rooms.map((room) => {
             const isMember = joined.has(room.id);
             const full = room.members >= room.capacity && !isMember;
+            const roomMembers = membersByRoom.get(room.id) ?? [];
+            const avatars = roomMembers.slice(0, 3);
+            const extra = room.members - avatars.length;
             return (
               <div
                 key={room.id}
@@ -142,10 +199,38 @@ export default async function StudyRoomsPage() {
                   </div>
                   <p className="font-body-md text-body-md text-secondary mb-sm line-clamp-1">{room.description}</p>
                   <div className="flex items-center justify-between gap-sm">
-                    <span className="font-label-md text-label-md text-secondary flex items-center gap-xs">
-                      <span className="material-symbols-outlined text-[16px]">group</span>
-                      {room.members} / {room.capacity}
-                    </span>
+                    <div className="flex items-center gap-sm">
+                      {avatars.length > 0 && (
+                        <div className="flex -space-x-2">
+                          {avatars.map((m, i) =>
+                            m.image ? (
+                              <img
+                                key={i}
+                                alt={m.name ?? "成員"}
+                                src={m.image}
+                                className="w-6 h-6 rounded-full border border-surface object-cover bg-surface-container-high"
+                              />
+                            ) : (
+                              <div
+                                key={i}
+                                className="w-6 h-6 rounded-full border border-surface bg-secondary-container flex items-center justify-center text-on-secondary-container"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">person</span>
+                              </div>
+                            ),
+                          )}
+                          {extra > 0 && (
+                            <div className="w-6 h-6 rounded-full border border-surface bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-secondary">
+                              +{extra}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <span className="font-label-md text-label-md text-secondary flex items-center gap-xs">
+                        <span className="material-symbols-outlined text-[16px]">group</span>
+                        {room.members} / {room.capacity}
+                      </span>
+                    </div>
                     {userId ? (
                       <form action={isMember ? leaveRoom : joinRoom}>
                         <input type="hidden" name="roomId" value={room.id} />
@@ -179,6 +264,7 @@ export default async function StudyRoomsPage() {
             );
           })}
         </div>
+        )}
       </section>
     </div>
   );

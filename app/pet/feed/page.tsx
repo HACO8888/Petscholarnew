@@ -10,6 +10,7 @@ import {
   maxExpForLevel,
   isSameDay,
   CHECKIN_REWARD,
+  HP_PER_HEART,
 } from "@/lib/pet";
 import PetMascot from "@/components/PetMascot";
 import HeartBar from "@/components/HeartBar";
@@ -46,8 +47,9 @@ export default async function PetFeedPage() {
       ),
     );
 
-  const accessoryRows = await db
+  const accessoryRowsRaw = await db
     .select({
+      itemId: inventory.itemId,
       accessoryType: shopItems.accessoryType,
       name: shopItems.name,
       icon: shopItems.icon,
@@ -62,6 +64,15 @@ export default async function PetFeedPage() {
       ),
     );
 
+  // 裝備狀態以 accessoryType（boolean 欄位）為單位，每種型別只能裝備一件。
+  // 故同型配件只取第一件，避免重複的 React key 與相互衝突的裝備控制項。
+  const seenAccessoryTypes = new Set<string>();
+  const accessoryRows = accessoryRowsRaw.filter((a) => {
+    if (!a.accessoryType || seenAccessoryTypes.has(a.accessoryType)) return false;
+    seenAccessoryTypes.add(a.accessoryType);
+    return true;
+  });
+
   const status = statusFromHp(pet.hp, pet.maxHp);
   const maxExp = maxExpForLevel(pet.level);
   const expPct = Math.min(100, Math.round((pet.exp / maxExp) * 100));
@@ -72,8 +83,9 @@ export default async function PetFeedPage() {
     rareStyle: pet.equippedRareStyle,
   };
 
-  // 生命值的滿心數（每顆心 = maxHp / 5）
-  const heartFull = Math.round((pet.hp / pet.maxHp) * 5);
+  // 生命值愛心：與 <HeartBar> 共用同一套算法（每 100 HP 一顆心，隨 maxHp 成長）
+  const maxHearts = Math.max(1, Math.round(pet.maxHp / HP_PER_HEART));
+  const heartFull = Math.floor(pet.hp / HP_PER_HEART);
 
   return (
     <div className="relative flex flex-col">
@@ -82,7 +94,7 @@ export default async function PetFeedPage() {
         <div className="flex items-center gap-sm">
           <span className="text-label-md text-on-surface-variant">生命值</span>
           <div className="flex text-error">
-            {[0, 1, 2, 3, 4].map((i) => (
+            {Array.from({ length: maxHearts }).map((_, i) => (
               <span
                 key={i}
                 className="material-symbols-outlined text-[18px]"
@@ -266,7 +278,7 @@ export default async function PetFeedPage() {
               const equipped = a.accessoryType ? equippedMap[a.accessoryType] : false;
               return (
                 <div
-                  key={a.accessoryType}
+                  key={a.itemId}
                   className="flex items-center gap-3 rounded-xl border border-surface-container-low bg-surface p-4 shadow-sm"
                 >
                   <span className="text-3xl">{a.icon}</span>

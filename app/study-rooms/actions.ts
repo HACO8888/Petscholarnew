@@ -50,6 +50,45 @@ export async function joinRoom(formData: FormData) {
   revalidatePath("/study-rooms");
 }
 
+export async function createRoom(formData: FormData) {
+  const userId = await requireUserId();
+
+  const name = String(formData.get("name") ?? "").trim();
+  const subject = String(formData.get("subject") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  if (!name) throw new Error("請輸入自習室名稱");
+
+  const capacityRaw = Number(formData.get("capacity"));
+  const capacity =
+    Number.isFinite(capacityRaw) && capacityRaw >= 2
+      ? Math.min(Math.floor(capacityRaw), 12)
+      : 8;
+
+  const id = crypto.randomUUID();
+
+  // 讓新建房間排在最前面（既有預設房 sortOrder 通常為 0）
+  const [{ minOrder }] = await db
+    .select({ minOrder: sql<number>`coalesce(min(${studyRooms.sortOrder}), 0)::int` })
+    .from(studyRooms);
+
+  await db.insert(studyRooms).values({
+    id,
+    name,
+    subject: subject || null,
+    description: description || null,
+    capacity,
+    sortOrder: minOrder - 1,
+  });
+
+  // 建立者自動加入
+  await db
+    .insert(studyRoomMembers)
+    .values({ roomId: id, userId })
+    .onConflictDoNothing();
+
+  revalidatePath("/study-rooms");
+}
+
 export async function leaveRoom(formData: FormData) {
   const userId = await requireUserId();
   const roomId = String(formData.get("roomId") ?? "");

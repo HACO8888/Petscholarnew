@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { loginWithGoogle } from "@/app/actions/auth";
 
+const UNAVAILABLE_TITLE = "目前僅支援 Google 登入";
+
 export default async function LoginPage() {
   const session = await auth();
   if (session?.user) {
@@ -42,7 +44,7 @@ export default async function LoginPage() {
         </div>
       </div>
 
-      {/* Right Side: Login / Register Form Area */}
+      {/* Right Side: Login Form Area */}
       <div className="relative flex w-full items-center justify-center bg-surface p-margin-mobile lg:w-1/2 lg:p-margin-desktop">
         {/* Mobile Brand Logo (Visible only on mobile) */}
         <div className="absolute left-margin-mobile top-margin-mobile flex items-center gap-sm lg:hidden">
@@ -59,10 +61,10 @@ export default async function LoginPage() {
           {/* Welcome Text */}
           <div className="mb-xl text-center">
             <h2 className="mb-xs text-headline-lg text-on-surface">歡迎回來</h2>
-            <p className="text-body-md text-on-surface-variant">請登入您的帳號以繼續</p>
+            <p className="text-body-md text-on-surface-variant">使用 Google 帳號登入即可開始</p>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs (登入 active; 註冊 disabled — Google 首次登入會自動建立帳號) */}
           <div className="relative mb-xl flex border-b border-outline-variant">
             <button
               type="button"
@@ -72,7 +74,9 @@ export default async function LoginPage() {
             </button>
             <button
               type="button"
-              className="flex-1 border-b-2 border-transparent pb-sm text-center text-label-md uppercase tracking-wider text-outline transition-colors duration-200 hover:text-primary"
+              disabled
+              title="目前僅支援 Google 登入；首次登入會自動建立帳號"
+              className="flex-1 cursor-not-allowed border-b-2 border-transparent pb-sm text-center text-label-md uppercase tracking-wider text-outline opacity-50"
             >
               註冊
             </button>
@@ -80,8 +84,8 @@ export default async function LoginPage() {
 
           {/* Form Container */}
           <div className="relative">
-            {/* Login Form */}
             <div className="flex flex-col gap-md">
+              {/* Email/Password are not a supported login path — shown for fidelity but disabled */}
               <div className="flex flex-col gap-xs">
                 <label className="text-label-md text-on-surface" htmlFor="login-email">
                   電子郵件
@@ -91,10 +95,12 @@ export default async function LoginPage() {
                     mail
                   </span>
                   <input
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest py-sm pl-xl pr-sm text-body-md text-on-surface outline-none transition-all placeholder:text-outline focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="w-full cursor-not-allowed rounded-lg border border-outline-variant bg-surface-container-lowest py-sm pl-xl pr-sm text-body-md text-on-surface opacity-50 outline-none transition-all placeholder:text-outline focus:border-primary focus:ring-1 focus:ring-primary"
                     id="login-email"
                     placeholder="name@university.edu"
                     type="email"
+                    disabled
+                    title={UNAVAILABLE_TITLE}
                   />
                 </div>
               </div>
@@ -105,29 +111,28 @@ export default async function LoginPage() {
                   htmlFor="login-password"
                 >
                   密碼
-                  <a
-                    className="text-primary transition-colors hover:text-primary-container"
-                    href="#"
-                  >
-                    忘記密碼？
-                  </a>
+                  <span className="text-outline">忘記密碼？</span>
                 </label>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline">
                     lock
                   </span>
                   <input
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest py-sm pl-xl pr-sm text-body-md text-on-surface outline-none transition-all placeholder:text-outline focus:border-primary focus:ring-1 focus:ring-primary"
+                    className="w-full cursor-not-allowed rounded-lg border border-outline-variant bg-surface-container-lowest py-sm pl-xl pr-sm text-body-md text-on-surface opacity-50 outline-none transition-all placeholder:text-outline focus:border-primary focus:ring-1 focus:ring-primary"
                     id="login-password"
                     placeholder="••••••••"
                     type="password"
+                    disabled
+                    title={UNAVAILABLE_TITLE}
                   />
                 </div>
               </div>
 
               <button
                 type="button"
-                className="mt-sm flex w-full items-center justify-center gap-xs rounded-lg bg-primary py-sm text-label-md text-on-primary shadow-sm transition-colors hover:bg-on-primary-container"
+                disabled
+                title={UNAVAILABLE_TITLE}
+                className="mt-sm flex w-full cursor-not-allowed items-center justify-center gap-xs rounded-lg bg-primary py-sm text-label-md text-on-primary opacity-50 shadow-sm"
               >
                 登入
                 <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
@@ -144,36 +149,64 @@ export default async function LoginPage() {
 
               {/* Social Logins */}
               <div className="flex flex-col gap-sm">
+                {/* Google — the only real, working login path. Promoted as primary CTA. */}
+                <form action={loginWithGoogle}>
+                  <button
+                    type="submit"
+                    className="flex w-full items-center justify-center gap-sm rounded-lg border border-primary bg-surface-container-lowest py-sm text-label-md font-medium text-on-surface shadow-sm transition-colors hover:bg-surface-container"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 18 18"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        fill="#4285F4"
+                        d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+                      />
+                    </svg>
+                    使用 Google 帳號登入
+                  </button>
+                </form>
+
+                {/* 北科校園入口 — not wired (no SSO provider). Disabled for honesty. */}
                 <button
                   type="button"
-                  className="flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface transition-colors hover:bg-surface-container-highest"
+                  disabled
+                  title={UNAVAILABLE_TITLE}
+                  className="flex w-full cursor-not-allowed items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface opacity-50"
                 >
                   <span className="material-symbols-outlined text-on-surface-variant">school</span>
                   北科校園入口登入
                 </button>
 
-                <form action={loginWithGoogle}>
-                  <button
-                    type="submit"
-                    className="flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface transition-colors hover:bg-surface-container-highest"
-                  >
-                    <span className="font-bold text-on-surface-variant">G</span>
-                    Google 帳號登入
-                  </button>
-                </form>
-
+                {/* Apple — not wired (no provider). Disabled for honesty. */}
                 <button
                   type="button"
-                  className="flex w-full items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface transition-colors hover:bg-surface-container-highest"
+                  disabled
+                  title={UNAVAILABLE_TITLE}
+                  className="flex w-full cursor-not-allowed items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface opacity-50"
                 >
-                  <span className="text-lg font-bold text-on-surface-variant"></span>
+                  <span className="text-lg font-bold leading-none text-on-surface-variant"></span>
                   Apple 帳號登入
                 </button>
 
                 <p className="mt-xs text-[11px] leading-4 text-outline">
-                  此頁已串接北科校園入口、Google、Apple 登入流程；正式驗證前請先在根目錄{" "}
-                  <code>auth-config.js</code> 填入各平台核發的 Client ID / Service ID / SSO
-                  授權網址。
+                  目前僅支援 Google 登入。首次使用 Google 登入時會自動為您建立帳號。
                 </p>
               </div>
             </div>

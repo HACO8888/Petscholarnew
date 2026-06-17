@@ -6,7 +6,9 @@ import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, comments, boards, pets, reports } from "@/db/schema";
-import { getOrCreatePet } from "@/lib/pet";
+import { getOrCreatePet, applyExp } from "@/lib/pet";
+
+const ADOPT_EXP = 20;
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -132,7 +134,11 @@ export async function adoptAnswer(formData: FormData) {
 
   // 僅發問者可採納
   const [post] = await db
-    .select({ authorId: posts.authorId, bounty: posts.bounty })
+    .select({
+      authorId: posts.authorId,
+      bounty: posts.bounty,
+      solved: posts.solved,
+    })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
@@ -140,9 +146,13 @@ export async function adoptAnswer(formData: FormData) {
   if (post.authorId !== session.user.id) {
     throw new Error("只有發問者可以採納解答");
   }
+  // 以 post.solved 作為唯一發放閘門：已解決即中止，避免換留言重複發放懸賞
+  if (post.solved) {
+    throw new Error("此提問已採納解答");
+  }
 
   const [target] = await db
-    .select({ authorId: comments.authorId, isAdopted: comments.isAdopted })
+    .select({ authorId: comments.authorId })
     .from(comments)
     .where(and(eq(comments.id, commentId), eq(comments.postId, postId)))
     .limit(1);
@@ -154,19 +164,116 @@ export async function adoptAnswer(formData: FormData) {
     .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
   await db.update(posts).set({ solved: true }).where(eq(posts.id, postId));
 
-  // 將懸賞金幣發給被採納的解答者（避免重複發放、不發給自己）
-  if (
-    !target.isAdopted &&
-    post.bounty > 0 &&
-    target.authorId &&
-    target.authorId !== session.user.id
-  ) {
+  // 從未解決→解決的這一次才發放：金幣（懸賞）＋經驗值給解答者（不發給自己）
+  if (target.authorId && target.authorId !== session.user.id) {
     const answererPet = await getOrCreatePet(target.authorId);
+    const grown = applyExp(
+      answererPet.level,
+      answererPet.exp,
+      answererPet.maxHp,
+      ADOPT_EXP,
+    );
     await db
       .update(pets)
-      .set({ coins: answererPet.coins + post.bounty, updatedAt: new Date() })
+      .set({
+        coins: answererPet.coins + Math.max(0, post.bounty),
+        exp: grown.exp,
+        level: grown.level,
+        maxHp: grown.maxHp,
+        updatedAt: new Date(),
+      })
       .where(eq(pets.userId, target.authorId));
   }
+
+  revalidatePath(`/posts/${postId}`);
+}
+
+/**
+ * 助教認證正解：role==='ta' 的使用者把某則留言標記為正解。
+ * 沿用既有 isAdopted/solved 欄位作為「已認證/已解決」狀態（schema 無 isTaVerified 欄位），
+ * 並發放懸賞金幣與經驗值給解答者，與發問者採納相同的單次發放閘門。
+ */
+export async function verifyAnswerAsTA(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+  if (session.user.role !== "ta") {
+    throw new Error("只有課程助教可以認證正解");
+  }
+
+  const postId = str(formData, "postId");
+  const commentId = str(formData, "commentId");
+  if (!postId || !commentId) throw new Error("缺少參數");
+
+  const [post] = await db
+    .select({ bounty: posts.bounty, solved: posts.solved })
+    .from(posts)
+    .where(eq(posts.id, postId))
+    .limit(1);
+  if (!post) throw new Error("文章不存在");
+  if (post.solved) {
+    throw new Error("此提問已採納解答");
+  }
+
+  const [target] = await db
+    .select({ authorId: comments.authorId })
+    .from(comments)
+    .where(and(eq(comments.id, commentId), eq(comments.postId, postId)))
+    .limit(1);
+  if (!target) throw new Error("回覆不存在");
+
+  await db
+    .update(comments)
+    .set({ isAdopted: true })
+    .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
+  await db.update(posts).set({ solved: true }).where(eq(posts.id, postId));
+
+  if (target.authorId && target.authorId !== session.user.id) {
+    const answererPet = await getOrCreatePet(target.authorId);
+    const grown = applyExp(
+      answererPet.level,
+      answererPet.exp,
+      answererPet.maxHp,
+      ADOPT_EXP,
+    );
+    await db
+      .update(pets)
+      .set({
+        coins: answererPet.coins + Math.max(0, post.bounty),
+        exp: grown.exp,
+        level: grown.level,
+        maxHp: grown.maxHp,
+        updatedAt: new Date(),
+      })
+      .where(eq(pets.userId, target.authorId));
+  }
+
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function reportComment(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const postId = str(formData, "postId");
+  const commentId = str(formData, "commentId");
+  const reason = str(formData, "reason").slice(0, 100) || "未說明原因";
+  if (!postId || !commentId) throw new Error("缺少參數");
+
+  const [comment] = await db
+    .select({ id: comments.id, content: comments.content })
+    .from(comments)
+    .where(and(eq(comments.id, commentId), eq(comments.postId, postId)))
+    .limit(1);
+  if (!comment) throw new Error("回覆不存在");
+
+  await db.insert(reports).values({
+    targetType: "comment",
+    targetId: comment.id,
+    targetText: comment.content.slice(0, 200),
+    reason,
+    reporter: session.user.name ?? "使用者",
+    status: "pending",
+  });
 
   revalidatePath(`/posts/${postId}`);
 }
