@@ -102,6 +102,7 @@ export const posts = pgTable("post", {
   tags: jsonb("tags").$type<string[]>().default([]).notNull(),
   bounty: integer("bounty").default(0).notNull(),
   solved: boolean("solved").default(false).notNull(),
+  hidden: boolean("hidden").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -120,6 +121,7 @@ export const comments = pgTable("comment", {
   authorName: text("author_name").notNull(),
   content: text("content").notNull(),
   isAdopted: boolean("is_adopted").default(false).notNull(),
+  hidden: boolean("hidden").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -177,3 +179,48 @@ export const inventory = pgTable(
 export type Pet = typeof pets.$inferSelect;
 export type ShopItem = typeof shopItems.$inferSelect;
 export type InventoryRow = typeof inventory.$inferSelect;
+
+// ---- 自習室 ----
+
+export const studyRooms = pgTable("study_room", {
+  id: varchar("id", { length: 48 }).primaryKey(),
+  name: text("name").notNull(),
+  subject: text("subject"),
+  description: text("description"),
+  capacity: integer("capacity").notNull().default(8),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const studyRoomMembers = pgTable(
+  "study_room_member",
+  {
+    roomId: varchar("room_id", { length: 48 })
+      .notNull()
+      .references(() => studyRooms.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.roomId, t.userId] })],
+);
+
+// ---- 檢舉案件（管理後台） ----
+
+export const reports = pgTable("report", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  targetType: varchar("target_type", { length: 16 }).notNull(), // post | comment
+  targetId: text("target_id").notNull(),
+  targetText: text("target_text"),
+  reason: text("reason"),
+  reporter: text("reporter"),
+  // pending（待處理）| blocked（已封鎖）| rejected（已駁回）
+  status: varchar("status", { length: 16 }).notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+});
+
+export type StudyRoom = typeof studyRooms.$inferSelect;
+export type Report = typeof reports.$inferSelect;

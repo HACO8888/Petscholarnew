@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { posts, comments, boards, pets } from "@/db/schema";
+import { posts, comments, boards, pets, reports } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
 
 function str(formData: FormData, key: string): string {
@@ -90,6 +90,33 @@ export async function addComment(formData: FormData) {
     authorId: session.user.id,
     authorName: session.user.name ?? "使用者",
     content,
+  });
+
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function reportPost(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const postId = str(formData, "postId");
+  const reason = str(formData, "reason").slice(0, 100) || "未說明原因";
+  if (!postId) throw new Error("缺少文章");
+
+  const [post] = await db
+    .select({ id: posts.id, title: posts.title })
+    .from(posts)
+    .where(eq(posts.id, postId))
+    .limit(1);
+  if (!post) throw new Error("文章不存在");
+
+  await db.insert(reports).values({
+    targetType: "post",
+    targetId: post.id,
+    targetText: post.title,
+    reason,
+    reporter: session.user.name ?? "使用者",
+    status: "pending",
   });
 
   revalidatePath(`/posts/${postId}`);

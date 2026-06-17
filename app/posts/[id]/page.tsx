@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, boards, comments } from "@/db/schema";
@@ -9,7 +9,7 @@ import { buildCommentTree, countNodes } from "@/lib/comment-tree";
 import { formatDateTime } from "@/lib/format";
 import CommentThread from "@/components/CommentThread";
 import CommentTreeSvg from "@/components/CommentTreeSvg";
-import { addComment } from "@/app/posts/actions";
+import { addComment, reportPost } from "@/app/posts/actions";
 
 export default async function PostPage({
   params,
@@ -20,7 +20,7 @@ export default async function PostPage({
   const session = await auth();
 
   const [post] = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
-  if (!post) notFound();
+  if (!post || post.hidden) notFound();
 
   const [board] = await db
     .select()
@@ -31,7 +31,7 @@ export default async function PostPage({
   const commentRows = await db
     .select()
     .from(comments)
-    .where(eq(comments.postId, id));
+    .where(and(eq(comments.postId, id), eq(comments.hidden, false)));
 
   const tree = buildCommentTree(commentRows, renderContentHtml, formatDateTime);
   const total = countNodes(tree);
@@ -82,6 +82,28 @@ export default async function PostPage({
               </span>
             ))}
           </div>
+        )}
+
+        {session?.user && (
+          <details className="mt-4 text-label-md text-secondary">
+            <summary className="cursor-pointer hover:text-primary">檢舉此提問</summary>
+            <form action={reportPost} className="mt-2 flex flex-wrap items-center gap-2">
+              <input type="hidden" name="postId" value={post.id} />
+              <input
+                type="text"
+                name="reason"
+                placeholder="檢舉原因"
+                maxLength={100}
+                className="flex-1 rounded-lg border border-outline-variant bg-surface px-2 py-1 text-label-md text-on-surface outline-none focus:border-primary"
+              />
+              <button
+                type="submit"
+                className="rounded-full border border-outline-variant px-3 py-1 text-label-md text-on-surface-variant hover:bg-surface-container"
+              >
+                送出檢舉
+              </button>
+            </form>
+          </details>
         )}
       </article>
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { boards, posts, comments } from "@/db/schema";
 import PostListItem, { type PostListData } from "@/components/PostListItem";
@@ -29,10 +29,10 @@ export default async function BoardPage({
       bounty: posts.bounty,
       solved: posts.solved,
       createdAt: posts.createdAt,
-      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id})`,
+      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`,
     })
     .from(posts)
-    .where(eq(posts.boardId, boardId))
+    .where(and(eq(posts.boardId, boardId), eq(posts.hidden, false)))
     .orderBy(desc(posts.createdAt));
 
   return (

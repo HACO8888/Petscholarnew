@@ -23,7 +23,7 @@ export default async function DiscussionPage({
     ? status
     : "all") as FilterKey;
 
-  const conds: SQL[] = [];
+  const conds: SQL[] = [eq(posts.hidden, false)];
   if (active === "solved") conds.push(eq(posts.solved, true));
   else if (active === "unsolved") conds.push(eq(posts.solved, false));
   else if (active === "bounty") conds.push(gt(posts.bounty, 0));
@@ -39,11 +39,11 @@ export default async function DiscussionPage({
       solved: posts.solved,
       createdAt: posts.createdAt,
       boardName: boards.name,
-      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id})`,
+      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(conds.length ? and(...conds) : undefined)
+    .where(and(...conds))
     .orderBy(desc(posts.createdAt));
 
   return (

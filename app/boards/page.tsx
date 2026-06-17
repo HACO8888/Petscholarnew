@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { boards, posts } from "@/db/schema";
 
@@ -8,6 +8,7 @@ export default async function BoardsPage() {
   const countRows = await db
     .select({ boardId: posts.boardId, c: sql<number>`count(*)::int` })
     .from(posts)
+    .where(eq(posts.hidden, false))
     .groupBy(posts.boardId);
   const counts = new Map(countRows.map((r) => [r.boardId, r.c]));
 
