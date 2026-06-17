@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { boards, posts, comments } from "@/db/schema";
+import { boards, posts } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
 
 export default async function BoardsPage({
@@ -30,7 +30,6 @@ export default async function BoardsPage({
       bounty: posts.bounty,
       solved: posts.solved,
       createdAt: posts.createdAt,
-      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -50,7 +49,7 @@ export default async function BoardsPage({
         </h3>
         <div className="flex flex-wrap gap-2">
           {topTags.map((t) => (
-            <span key={t} className="bg-surface-container-high dark:bg-surface-variant text-on-surface-variant px-3 py-1 rounded-full text-xs font-medium">
+            <span key={t} className="bg-primary-container/40 text-on-primary-container font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer hover:bg-primary-container transition-all">
               # {t}
             </span>
           ))}
@@ -64,8 +63,17 @@ export default async function BoardsPage({
             <Link
               key={b.id}
               href={isActive ? "/boards" : `/boards?dept=${b.id}`}
-              className={`rounded-xl border bg-surface-container-lowest dark:bg-surface-container-high p-md flex flex-col items-center justify-center text-center cursor-pointer transition-all no-underline ${isActive ? "border-primary scale-95 font-bold" : "border-outline-variant/30 hover:border-primary/40 hover:scale-[1.02]"}`}
-              style={isActive && b.color ? { borderColor: b.color, backgroundColor: `${b.color}15` } : undefined}
+              className={`rounded-xl border bg-surface-container-lowest dark:bg-surface-container-high p-md flex flex-col items-center justify-center text-center cursor-pointer transition-all no-underline ${isActive ? "scale-95 font-bold" : "border-outline-variant/30 hover:border-primary/40 hover:scale-[1.02]"}`}
+              style={
+                isActive && b.color
+                  ? {
+                      borderColor: b.color,
+                      backgroundColor: `${b.color}15`,
+                      boxShadow: `0 10px 15px -3px ${b.color}25`,
+                      borderWidth: "2px",
+                    }
+                  : undefined
+              }
             >
               <span className="text-3xl mb-2">{b.icon}</span>
               <h4 className="font-bold text-body-lg text-on-surface mb-1">{b.name}</h4>
@@ -94,37 +102,30 @@ export default async function BoardsPage({
             <Link
               key={p.id}
               href={`/posts/${p.id}`}
-              className="block bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-xl p-md hover:border-primary/40 hover:shadow-sm transition-all no-underline"
+              className="block bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/20 rounded-xl p-md shadow-sm hover:shadow-md transition-all cursor-pointer relative no-underline"
             >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="font-bold text-body-lg text-on-surface">{p.title}</h3>
-                <div className="flex shrink-0 items-center gap-2">
-                  {p.solved ? (
-                    <span className="inline-flex items-center gap-0.5 text-xs font-bold text-primary">
-                      <span className="material-symbols-outlined text-[16px]">check_circle</span> 已解決
-                    </span>
-                  ) : p.bounty > 0 ? (
-                    <span className="inline-flex items-center gap-0.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-full text-xs font-bold">
-                      🪙 懸賞 {p.bounty}
-                    </span>
-                  ) : (
-                    <span className="text-xs font-bold text-secondary">未解決</span>
-                  )}
-                </div>
+              <div className="flex justify-between items-start mb-sm gap-2">
+                <h3 className="font-bold text-body-lg text-primary dark:text-primary-fixed-dim">{p.title}</h3>
+                <span
+                  className="text-xs font-bold text-yellow-600 bg-yellow-500/10 px-2 py-0.5 rounded"
+                  style={p.solved ? { background: "rgba(0,0,0,0.05)", color: "#666" } : undefined}
+                >
+                  🪙 {p.solved ? "已結算" : `懸賞 ${p.bounty}`}
+                </span>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-secondary">
-                <span className="bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded">{p.department ?? p.boardName}</span>
-                <span>提問學生: {p.authorName}</span>
-                <span>• {formatDateTime(p.createdAt)}</span>
-                <span>• 💬 {p.commentCount}</span>
+              <div className="flex items-center gap-2 text-xs text-secondary mb-2">
+                <span className="bg-primary/5 text-primary border border-primary/10 px-1.5 py-0.2 rounded text-[10px]">{p.department ?? p.boardName}</span>
+                <span>提問學生: <strong>{p.authorName}</strong></span>
+                <span>•</span>
+                <span>{formatDateTime(p.createdAt)}</span>
+                <span>•</span>
+                <span className={p.solved ? "text-green-600 font-bold" : "text-yellow-600 font-bold"}>{p.solved ? "已解決" : "未解決"}</span>
               </div>
-              {p.tags.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {p.tags.map((t) => (
-                    <span key={t} className="text-[11px] text-primary">#{t}</span>
-                  ))}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-sm">
+                {p.tags.map((t) => (
+                  <span key={t} className="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] rounded">#{t}</span>
+                ))}
+              </div>
             </Link>
           ))
         )}

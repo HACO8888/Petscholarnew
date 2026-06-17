@@ -119,7 +119,7 @@ export default async function ProfessorPage() {
           </div>
 
           <h4 className="font-bold text-xs text-on-surface border-t border-outline-variant/20 pt-md mb-2 flex items-center gap-0.5">
-            <span className="material-symbols-outlined text-sm">lightbulb</span> 待解答的提問
+            <span className="material-symbols-outlined text-sm">lightbulb</span> 高頻觀念錯誤統計
           </h4>
           <div className="space-y-2 text-xs" id="professor-misconceptions">
             {pending.length === 0 ? (

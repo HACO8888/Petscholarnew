@@ -38,7 +38,7 @@ export default function Header({ user }: { user: HeaderUser | null }) {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <nav className="fixed top-0 w-full z-50 flex items-center justify-between px-margin-desktop h-16 bg-surface dark:bg-inverse-surface border-b border-outline-variant/30 shadow-sm transition-colors">
+    <nav className="fixed top-0 w-full z-50 flex items-center justify-between px-4 md:px-margin-desktop h-16 bg-surface dark:bg-inverse-surface border-b border-outline-variant/30 shadow-sm transition-colors">
       <div className="flex items-center flex-1 justify-between pr-xl">
         <Link
           href="/"
@@ -78,14 +78,14 @@ export default function Header({ user }: { user: HeaderUser | null }) {
         <button
           type="button"
           onClick={() => alert("3 分鐘簡報導覽將於後續提供。")}
-          className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-label-md px-4 py-2 rounded-full flex items-center justify-center gap-1 shadow-sm transition-all whitespace-nowrap shrink-0"
+          className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-label-md px-4 py-2 rounded-full hidden sm:flex items-center justify-center gap-1 shadow-sm transition-all whitespace-nowrap shrink-0"
         >
           <span className="material-symbols-outlined text-[16px]">explore</span>
           <span className="hidden lg:inline">3分鐘簡報導覽</span>
           <span className="lg:hidden">簡報導覽</span>
         </button>
 
-        <div className="flex items-center gap-1.5 bg-surface-container-low dark:bg-surface-container px-3 py-1.5 rounded-full border border-outline-variant/30 text-xs">
+        <div className="hidden md:flex items-center gap-1.5 bg-surface-container-low dark:bg-surface-container px-3 py-1.5 rounded-full border border-outline-variant/30 text-xs">
           <span className="font-bold text-secondary text-[11px]">🎭 身分:</span>
           <select
             value={role}

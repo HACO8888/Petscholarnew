@@ -148,8 +148,8 @@ export default async function AdminPage({
                 href={buildHref(tabBase, { panel: p.id })}
                 className={`admin-panel-tab px-md py-sm rounded-lg border text-xs font-bold transition-all no-underline ${
                   panel === p.id
-                    ? "bg-primary text-on-primary border-primary"
-                    : "bg-surface-container-high text-on-surface-variant border-outline-variant/30 hover:bg-surface-container"
+                    ? "bg-red-600 text-white border-red-600 shadow"
+                    : "bg-surface text-secondary border-outline-variant"
                 }`}
               >
                 {p.label}
@@ -162,6 +162,11 @@ export default async function AdminPage({
         {panel === "overview" && (
           <div className="admin-subpanel space-y-lg">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-md" id="admin-stats-grid">
+              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
+                <p className="text-xs text-secondary mb-1">已解決問題</p>
+                <h3 className="font-bold text-3xl text-green-600">{analyticsTotal - unsolvedCount}</h3>
+                <p className="text-[10px] text-secondary mt-1">已被標記為已解決</p>
+              </div>
               <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
                 <p className="text-xs text-secondary mb-1">全站問題總數</p>
                 <h3 className="font-bold text-3xl text-primary">{totalPosts}</h3>
@@ -176,11 +181,6 @@ export default async function AdminPage({
                 <p className="text-xs text-secondary mb-1">已封鎖問題</p>
                 <h3 className="font-bold text-3xl text-orange-600">{blockedPosts}</h3>
                 <p className="text-[10px] text-secondary mt-1">已被隱藏、不對外顯示</p>
-              </div>
-              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-                <p className="text-xs text-secondary mb-1">已解決問題</p>
-                <h3 className="font-bold text-3xl text-green-600">{analyticsTotal - unsolvedCount}</h3>
-                <p className="text-[10px] text-secondary mt-1">已被標記為已解決</p>
               </div>
             </div>
 
@@ -210,23 +210,32 @@ export default async function AdminPage({
                     <span className="material-symbols-outlined text-[20px]">history</span> 全站提問紀錄
                   </h3>
                   <p className="text-xs text-secondary">
-                    可直接刪除問題；封鎖與屏蔽結果會與檢舉案件即時同步。
+                    可直接刪除問題，或刪除後封鎖提問帳號；封鎖與屏蔽結果會與檢舉案件即時同步。
                   </p>
                 </div>
                 <div className="flex items-center gap-sm">
-                  {QUESTION_FILTERS.map((f) => (
-                    <Link
-                      key={f.id}
-                      href={buildHref(tabBase, { panel: "questions", q: f.id })}
-                      className={`rounded-lg border text-xs py-1.5 px-2 no-underline ${
-                        questionFilter === f.id
-                          ? "bg-primary text-on-primary border-primary"
-                          : "bg-surface border-outline-variant text-on-surface hover:bg-surface-container"
-                      }`}
+                  <form method="get" className="flex items-center gap-sm">
+                    {boardFilter && <input type="hidden" name="board" value={boardFilter} />}
+                    <input type="hidden" name="panel" value="questions" />
+                    <select
+                      id="admin-question-filter"
+                      name="q"
+                      defaultValue={questionFilter}
+                      className="bg-surface border border-outline-variant text-on-surface rounded-lg text-xs py-1.5 px-2 focus:ring-primary focus:border-primary"
                     >
-                      {f.label}
-                    </Link>
-                  ))}
+                      {QUESTION_FILTERS.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      className="bg-surface-container hover:bg-surface-container-high text-on-surface-variant text-xs font-bold py-1.5 px-3 rounded-lg border border-outline-variant/30"
+                    >
+                      篩選
+                    </button>
+                  </form>
                 </div>
               </div>
 
@@ -283,8 +292,8 @@ export default async function AdminPage({
                               {p.solved ? "已解決" : "未解決"}
                             </span>
                             {p.hidden && (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">
-                                問題已封鎖
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">
+                                問題已刪除
                               </span>
                             )}
                           </div>

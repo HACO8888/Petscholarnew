@@ -183,28 +183,6 @@ export default async function LoginPage() {
                   </button>
                 </form>
 
-                {/* 北科校園入口 — not wired (no SSO provider). Disabled for honesty. */}
-                <button
-                  type="button"
-                  disabled
-                  title={UNAVAILABLE_TITLE}
-                  className="flex w-full cursor-not-allowed items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface opacity-50"
-                >
-                  <span className="material-symbols-outlined text-on-surface-variant">school</span>
-                  北科校園入口登入
-                </button>
-
-                {/* Apple — not wired (no provider). Disabled for honesty. */}
-                <button
-                  type="button"
-                  disabled
-                  title={UNAVAILABLE_TITLE}
-                  className="flex w-full cursor-not-allowed items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container py-sm text-label-md text-on-surface opacity-50"
-                >
-                  <span className="text-lg font-bold leading-none text-on-surface-variant"></span>
-                  Apple 帳號登入
-                </button>
-
                 <p className="mt-xs text-[11px] leading-4 text-outline">
                   目前僅支援 Google 登入。首次使用 Google 登入時會自動為您建立帳號。
                 </p>

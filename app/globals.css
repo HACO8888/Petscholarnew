@@ -153,3 +153,61 @@ body {
 .max-w-md { max-width: 28rem; }
 .max-w-lg { max-width: 32rem; }
 .max-w-xl { max-width: 36rem; }
+
+/* ==== 自習室「學習雷達」（移植自 legacy style.css） ==== */
+.radar-scanner-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  background: #f0f2f5;
+  border: 1px solid #c3c7cc;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.dark .radar-scanner-container { background: #090e18; border-color: rgba(255,255,255,0.08); }
+.radar-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(75, 97, 114, 0.3);
+  border-radius: 50%;
+  animation: radar-pulse 3s linear infinite;
+  pointer-events: none;
+}
+.radar-circle.circle-1 { width: 100px; height: 100px; animation-delay: 0s; }
+.radar-circle.circle-2 { width: 200px; height: 200px; animation-delay: 1s; }
+.radar-circle.circle-3 { width: 300px; height: 300px; animation-delay: 2s; }
+@keyframes radar-pulse {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+}
+.radar-sweep {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150px;
+  height: 150px;
+  background: conic-gradient(from 0deg, rgba(75, 97, 114, 0.15) 0%, transparent 50%);
+  transform-origin: top left;
+  animation: radar-sweep-anim 4s linear infinite;
+  pointer-events: none;
+}
+@keyframes radar-sweep-anim {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.radar-pin {
+  position: absolute;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s;
+  animation: pop-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.radar-pin:hover { transform: translate(-50%, -50%) scale(1.2); }
+@keyframes pop-up {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}

@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, boards, comments } from "@/db/schema";
 import { RichContent, renderContentHtml } from "@/lib/rich-content";
-import { buildCommentTree, countNodes } from "@/lib/comment-tree";
+import { buildCommentTree } from "@/lib/comment-tree";
 import { formatDateTime } from "@/lib/format";
 import CommentThread from "@/components/CommentThread";
 import CommentTreeSvg from "@/components/CommentTreeSvg";
@@ -34,7 +34,6 @@ export default async function PostPage({
     .where(and(eq(comments.postId, id), eq(comments.hidden, false)));
 
   const tree = buildCommentTree(commentRows, renderContentHtml, formatDateTime);
-  const total = countNodes(tree);
 
   return (
     <section>
@@ -105,7 +104,7 @@ export default async function PostPage({
 
         <RichContent
           html={renderContentHtml(post.content)}
-          className="text-on-surface-variant text-body-lg leading-relaxed mb-lg whitespace-pre-wrap"
+          className="text-on-surface-variant text-body-lg leading-relaxed mb-lg"
         />
 
         {/* Tags list */}
@@ -135,7 +134,7 @@ export default async function PostPage({
       {/* Answers tree header */}
       <div className="flex items-center justify-between mb-md border-b border-outline-variant/30 pb-2">
         <h3 className="font-bold text-headline-md text-on-surface flex items-center gap-1">
-          <span className="material-symbols-outlined text-primary">forum</span> 學霸解答與留言回覆 ({total})
+          <span className="material-symbols-outlined text-primary">forum</span> 學霸解答與留言回覆
         </h3>
         {!post.solved && session?.user && (
           <a

@@ -5,45 +5,24 @@ import { db } from "@/db";
 import { posts, comments, users, studyRoomMembers } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
 
-type TabKey = "helpers" | "studytime" | "dept";
+type TabKey = "weekly" | "dept";
 
 type RankRow = {
   userId: string;
   name: string | null;
   image: string | null;
   /** 主要計分值 */
-  score: number;
-  /** 顯示在名稱下方的細目（可為 null） */
-  detail: string | null;
+  points: number;
+  /** 顯示在名稱旁的系所/細目（可為 null） */
+  dept: string | null;
 };
 
-const TABS: { key: TabKey; tab: string; title: string; subtitle: string }[] = [
-  {
-    key: "helpers",
-    tab: "學術互助榜",
-    title: "學術互助排行",
-    subtitle: "依被採納解答數計分",
-  },
-  {
-    key: "studytime",
-    tab: "自習參與榜",
-    title: "自習參與排行",
-    subtitle: "依加入的自習室數量計分",
-  },
-  {
-    key: "dept",
-    tab: "學科貢獻榜",
-    title: "學科貢獻排行",
-    subtitle: "依發佈的提問與貼文數計分",
-  },
+const TABS: { key: TabKey; tab: string }[] = [
+  { key: "weekly", tab: "全校英雄榜" },
+  { key: "dept", tab: "系所排行" },
 ];
 
-const TAB_KEYS: TabKey[] = ["helpers", "studytime", "dept"];
-
-function unitFor(key: TabKey): string {
-  if (key === "studytime") return "間";
-  return "分";
-}
+const TAB_KEYS: TabKey[] = ["weekly", "dept"];
 
 /** 成就徽章（對齊 legacy badges-showcase 四項），解鎖狀態由真實資料判定 */
 type Badge = {
@@ -96,8 +75,8 @@ const WELFARE_ITEMS: {
   },
 ];
 
-/** 互助榜：依 authorId 聚合留言，被採納解答 ×20 + 一般回覆 ×5 */
-async function loadHelpers(): Promise<RankRow[]> {
+/** 全校英雄榜（weekly）：依 authorId 聚合留言，被採納解答 ×20 + 一般回覆 ×5，全校共同排名 */
+async function loadWeekly(): Promise<RankRow[]> {
   const rows = await db
     .select({
       userId: comments.authorId,
@@ -121,36 +100,12 @@ async function loadHelpers(): Promise<RankRow[]> {
     userId: r.userId as string,
     name: r.name ?? r.fallbackName,
     image: r.image,
-    score: r.adopted * 20 + (r.answers - r.adopted) * 5,
-    detail: `採納 ${r.adopted} · 回覆 ${r.answers}`,
+    points: r.adopted * 20 + (r.answers - r.adopted) * 5,
+    dept: null,
   }));
 }
 
-/** 自習參與榜：依使用者加入的自習室數量聚合 */
-async function loadStudytime(): Promise<RankRow[]> {
-  const rows = await db
-    .select({
-      userId: studyRoomMembers.userId,
-      name: sql<string | null>`max(${users.name})`,
-      image: sql<string | null>`max(${users.image})`,
-      rooms: sql<number>`count(*)::int`,
-    })
-    .from(studyRoomMembers)
-    .leftJoin(users, eq(users.id, studyRoomMembers.userId))
-    .groupBy(studyRoomMembers.userId)
-    .orderBy(desc(sql`count(*)`))
-    .limit(20);
-
-  return rows.map((r) => ({
-    userId: r.userId,
-    name: r.name,
-    image: r.image,
-    score: r.rooms,
-    detail: `加入 ${r.rooms} 間自習室`,
-  }));
-}
-
-/** 學科貢獻榜：依 authorId 聚合貼文數（被採納解答另加權） */
+/** 系所排行（dept）：依 authorId 聚合貼文數，作為系所貢獻排名 */
 async function loadDept(): Promise<RankRow[]> {
   const rows = await db
     .select({
@@ -171,8 +126,8 @@ async function loadDept(): Promise<RankRow[]> {
     userId: r.userId as string,
     name: r.name ?? r.fallbackName,
     image: r.image,
-    score: r.postCount * 10,
-    detail: `發佈 ${r.postCount} 篇`,
+    points: r.postCount * 10,
+    dept: null,
   }));
 }
 
@@ -187,18 +142,10 @@ export default async function LeaderboardPage({
   const { tab } = await searchParams;
   const activeKey: TabKey = TAB_KEYS.includes(tab as TabKey)
     ? (tab as TabKey)
-    : "helpers";
-  const activeTab = TABS.find((t) => t.key === activeKey)!;
-  const unit = unitFor(activeKey);
+    : "weekly";
 
-  let ranked: RankRow[];
-  if (activeKey === "studytime") {
-    ranked = await loadStudytime();
-  } else if (activeKey === "dept") {
-    ranked = await loadDept();
-  } else {
-    ranked = await loadHelpers();
-  }
+  const ranked: RankRow[] =
+    activeKey === "dept" ? await loadDept() : await loadWeekly();
 
   // 當前使用者成就（依真實資料計算，對齊 legacy 六項；門檻以真實 DB 來源定義）
   let achievements:
@@ -329,7 +276,7 @@ export default async function LeaderboardPage({
     : [];
 
   return (
-    <section className="w-full max-w-7xl">
+    <section className="tab-section active" id="sect-welfare">
       <div className="mb-lg border-b border-outline-variant/30 pb-3">
         <h1 className="font-semibold text-headline-lg text-on-background">
           排行榜與成就福利社
@@ -443,11 +390,11 @@ export default async function LeaderboardPage({
                 <Link
                   key={t.key}
                   href={
-                    t.key === "helpers"
+                    t.key === "weekly"
                       ? "/leaderboard"
                       : `/leaderboard?tab=${t.key}`
                   }
-                  className={`flex-1 py-2 font-bold text-body-md text-center ${
+                  className={`flex-1 py-2 font-bold text-body-md ${
                     isActive
                       ? "text-primary border-b-2 border-primary"
                       : "text-secondary border-b-2 border-transparent hover:text-primary"
@@ -463,7 +410,7 @@ export default async function LeaderboardPage({
             <div className="grid grid-cols-12 text-xs font-bold text-secondary pb-1 border-b border-outline-variant/20">
               <span className="col-span-2">排名</span>
               <span className="col-span-7">系所/姓名</span>
-              <span className="col-span-3 text-right">{activeTab.subtitle}</span>
+              <span className="col-span-3 text-right">本週積分</span>
             </div>
             <div className="space-y-2.5">
               {ranked.length === 0 ? (
@@ -474,9 +421,9 @@ export default async function LeaderboardPage({
                   const selfBg = isSelf
                     ? "bg-primary-container/20 border border-primary/20 rounded-lg"
                     : "";
-                  const nameDisplay = `${u.name ?? "匿名使用者"}${
-                    isSelf ? " (我)" : ""
-                  }`;
+                  const nameDisplay = isSelf
+                    ? `${u.name ?? "匿名使用者"} (我)`
+                    : (u.name ?? "匿名使用者");
                   return (
                     <div
                       key={u.userId}
@@ -509,14 +456,14 @@ export default async function LeaderboardPage({
                           <span>👤</span>
                         )}
                         <span>{nameDisplay}</span>
-                        {u.detail && (
+                        {u.dept && (
                           <span className="text-[9px] text-secondary ml-1 font-normal">
-                            ({u.detail})
+                            ({u.dept})
                           </span>
                         )}
                       </div>
                       <div className="col-span-3 text-right font-bold text-primary dark:text-primary-fixed-dim">
-                        {u.score.toLocaleString()} {unit}
+                        {u.points}
                       </div>
                     </div>
                   );

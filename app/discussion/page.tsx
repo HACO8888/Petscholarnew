@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { posts, boards, comments } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
@@ -8,7 +8,6 @@ const FILTERS = [
   { key: "all", label: "全部" },
   { key: "unsolved", label: "未解答" },
   { key: "solved", label: "已解決" },
-  { key: "bounty", label: "懸賞中" },
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
@@ -46,7 +45,6 @@ export default async function DiscussionPage({
   const conds: SQL[] = [eq(posts.hidden, false)];
   if (active === "solved") conds.push(eq(posts.solved, true));
   else if (active === "unsolved") conds.push(eq(posts.solved, false));
-  else if (active === "bounty") conds.push(gt(posts.bounty, 0));
 
   // 共用的留言數子查詢：同時用於顯示與排序，確保排序依據與畫面數字一致。
   const commentCount = sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`;
@@ -62,6 +60,7 @@ export default async function DiscussionPage({
     .select({
       id: posts.id,
       title: posts.title,
+      content: posts.content,
       authorName: posts.authorName,
       department: posts.department,
       tags: posts.tags,
@@ -184,6 +183,9 @@ export default async function DiscussionPage({
                   <h3 className="font-bold text-body-lg text-primary dark:text-primary-fixed-dim group-hover:text-surface-tint mb-1">
                     {post.title}
                   </h3>
+                  <p className="text-on-surface-variant text-xs line-clamp-2 mb-2">
+                    {post.content}
+                  </p>
                   <div className="flex gap-1.5">
                     <span className="px-2 py-0.5 bg-primary/5 text-primary border border-primary/10 text-[10px] rounded font-bold">
                       {post.boardName}

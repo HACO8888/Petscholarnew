@@ -160,7 +160,7 @@ export default async function StudyRoomsPage() {
             </div>
           </div>
 
-          <div className="w-full bg-primary text-on-primary font-bold text-body-md py-2.5 rounded-lg mt-md shadow-sm flex items-center justify-center gap-1">
+          <div className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md py-2.5 rounded-lg mt-md shadow-sm transition-all flex items-center justify-center gap-1">
             <span className="material-symbols-outlined">refresh</span> 重新掃描附近讀書夥伴
           </div>
         </div>
@@ -296,8 +296,8 @@ export default async function StudyRoomsPage() {
                         )}
                       </div>
                       <div className="text-[11px] text-secondary space-x-md">
-                        <span>📅 {room.name}</span>
-                        {room.description && <span>📍 {room.description}</span>}
+                        <span>📅 時間: {room.name}</span>
+                        <span>📍 地點: {room.description || "—"}</span>
                       </div>
                       <p className="text-[10px] text-secondary">
                         👥 當前人員: {participants || "尚無人加入"} ({room.members}/
