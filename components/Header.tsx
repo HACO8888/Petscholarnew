@@ -1,10 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { NAV_ITEMS, ROLE_OPTIONS, type NavItem, type Role } from "./nav-config";
 import ThemeToggle from "./ThemeToggle";
+import { logout } from "@/app/actions/auth";
+
+export interface HeaderUser {
+  name?: string | null;
+  image?: string | null;
+  role: Role;
+}
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -17,24 +25,23 @@ function accentClass(item: NavItem, active: boolean) {
   return "text-secondary border-transparent hover:text-primary";
 }
 
-export default function Header() {
+export default function Header({ user }: { user: HeaderUser | null }) {
   const pathname = usePathname();
-  // Phase 1：身分切換為本機 demo 狀態，控制角色限定 tab 顯示；Phase 2 改由登入身分決定。
-  const [role, setRole] = useState<Role>("student");
+  // 身分切換為 demo 預覽，預設帶入登入者真實角色；控制角色限定 tab 顯示。
+  // 真正的權限仍由 /professor、/admin 頁面 server 端依登入身分強制把關。
+  const [role, setRole] = useState<Role>(user?.role ?? "student");
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => !item.roles || item.roles.includes(role),
   );
 
   function handleGuidedTour() {
-    // Phase 1 骨架：完整 3 分鐘簡報導覽流程將於後續階段移植。
     alert("3 分鐘簡報導覽將於後續階段提供。");
   }
 
   return (
     <nav className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-margin-desktop shadow-sm transition-colors dark:bg-inverse-surface">
       <div className="flex flex-1 items-center justify-between pr-xl">
-        {/* Brand */}
         <Link
           href="/"
           className="cursor-pointer text-headline-md font-bold tracking-tight text-primary no-underline dark:text-primary-fixed"
@@ -42,7 +49,6 @@ export default function Header() {
           PetScholar
         </Link>
 
-        {/* Desktop tabs */}
         <div className="ml-auto mr-xl hidden h-16 items-center gap-[3em] xl:flex">
           {visibleItems.map((item) => {
             const active = isActive(pathname, item.href);
@@ -59,11 +65,9 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="flex items-center gap-md">
         <ThemeToggle />
 
-        {/* 3 分鐘簡報導覽（保留 demo 元件） */}
         <button
           type="button"
           onClick={handleGuidedTour}
@@ -74,7 +78,6 @@ export default function Header() {
           <span className="lg:hidden">簡報導覽</span>
         </button>
 
-        {/* 身分切換（保留 demo 元件） */}
         <div className="flex items-center gap-1.5 rounded-full border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs dark:bg-surface-container">
           <span className="text-[11px] font-bold text-secondary">🎭 身分:</span>
           <select
@@ -91,14 +94,46 @@ export default function Header() {
           </select>
         </div>
 
-        {/* 登入 */}
-        <Link
-          href="/login"
-          className="flex items-center gap-1 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-label-md font-medium text-on-primary no-underline transition-all hover:bg-surface-tint"
-        >
-          <span className="material-symbols-outlined text-[18px]">login</span>
-          <span>登入</span>
-        </Link>
+        {user ? (
+          <div className="flex items-center gap-2">
+            <Link href="/profile" className="flex items-center gap-2 no-underline" title="個人檔案">
+              {user.image ? (
+                <Image
+                  src={user.image}
+                  alt={user.name ?? "使用者"}
+                  width={32}
+                  height={32}
+                  className="rounded-full"
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-label-md font-bold text-on-primary">
+                  {(user.name ?? "U").charAt(0)}
+                </span>
+              )}
+              <span className="hidden max-w-[8rem] truncate text-body-md font-medium text-on-background lg:inline">
+                {user.name}
+              </span>
+            </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="flex items-center gap-1 whitespace-nowrap rounded-full border border-outline-variant px-3 py-1.5 text-label-md font-medium text-on-surface-variant transition-colors hover:bg-surface-container"
+                title="登出"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+                <span className="hidden lg:inline">登出</span>
+              </button>
+            </form>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="flex items-center gap-1 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-label-md font-medium text-on-primary no-underline transition-all hover:bg-surface-tint"
+          >
+            <span className="material-symbols-outlined text-[18px]">login</span>
+            <span>登入</span>
+          </Link>
+        )}
       </div>
     </nav>
   );
