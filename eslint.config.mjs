@@ -19,6 +19,10 @@ const eslintConfig = defineConfig([
     rules: {
       // 忠實移植原版面會用到外部圖片的 <img>，不強制改用 next/image
       "@next/next/no-img-element": "off",
+      // App Router 在 layout <head> 以 <link> 載入字型/Material Symbols 是刻意做法
+      // （display=block 正是讓圖示字型不顯示成文字的修正），關閉這兩條誤報
+      "@next/next/no-page-custom-font": "off",
+      "@next/next/google-font-display": "off",
     },
   },
 ]);

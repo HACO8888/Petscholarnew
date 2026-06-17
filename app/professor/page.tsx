@@ -59,51 +59,86 @@ export default async function ProfessorPage() {
   ];
 
   return (
-    <section>
-      <h1 className="mb-lg text-headline-lg font-semibold text-on-background">課程管理</h1>
+    <section className="tab-section active" id="sect-professor">
+      <div className="mb-lg rounded-lg border-b border-outline-variant/30 bg-gradient-to-r from-purple-500/10 to-transparent p-md pb-3">
+        <h1 className="text-headline-lg font-semibold text-purple-700 dark:text-purple-400">🎓 課程教授管理主頁</h1>
+        <p className="text-body-md text-secondary">追蹤學生在解題遇到的常見盲點與難度，掌握各學院提問與解決狀況。</p>
+      </div>
 
-      <div className="grid grid-cols-2 gap-md sm:grid-cols-5">
+      <div className="mb-lg grid grid-cols-2 gap-md sm:grid-cols-5">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 dark:bg-surface-container">
+          <div
+            key={s.label}
+            className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-sm dark:bg-surface-container-high"
+          >
             <p className="text-headline-md font-bold text-primary">{s.value}</p>
             <p className="text-label-md text-secondary">{s.label}</p>
           </div>
         ))}
       </div>
 
-      <h2 className="mt-8 mb-3 text-body-lg font-semibold text-on-background">各學院提問數</h2>
-      <div className="space-y-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 dark:bg-surface-container">
-        {byBoard.map((b) => (
-          <div key={b.name} className="flex items-center gap-2">
-            <span>{b.icon}</span>
-            <span className="w-40 text-body-md text-on-background">{b.name}</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-container-high">
-              <div
-                className="h-full bg-primary"
-                style={{ width: `${total > 0 ? (b.c / total) * 100 : 0}%` }}
-              />
-            </div>
-            <span className="w-10 text-right text-label-md text-secondary">{b.c}</span>
-          </div>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
+        {/* 各學院提問分佈 */}
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
+          <h3 className="mb-2 flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
+            <span className="material-symbols-outlined">local_offer</span> 各學院提問分佈
+          </h3>
+          <p className="text-xs text-secondary">依討論版統計目前的提問數量，掌握各學院的發問熱度。</p>
 
-      <h2 className="mt-8 mb-3 text-body-lg font-semibold text-on-background">待解答的提問</h2>
-      <div className="space-y-2">
-        {pending.length === 0 ? (
-          <p className="text-body-md text-secondary">目前沒有待解答的提問 🎉</p>
-        ) : (
-          pending.map((p) => (
-            <Link
-              key={p.id}
-              href={`/posts/${p.id}`}
-              className="flex items-center justify-between rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-3 no-underline transition-colors hover:border-primary/40 dark:bg-surface-container"
-            >
-              <span className="text-body-md text-on-background">{p.title}</span>
-              <span className="text-label-md text-secondary">{p.boardName} · {formatDateTime(p.createdAt)}</span>
-            </Link>
-          ))
-        )}
+          <div className="mt-lg space-y-sm">
+            {byBoard.map((b) => (
+              <div key={b.name}>
+                <div className="mb-1 flex justify-between text-xs font-semibold">
+                  <span className="flex items-center gap-1">
+                    <span>{b.icon}</span>
+                    <span>{b.name}</span>
+                  </span>
+                  <span className="font-bold text-primary">
+                    {b.c} 篇 ({total > 0 ? Math.round((b.c / total) * 100) : 0}%)
+                  </span>
+                </div>
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-container-low">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${total > 0 ? (b.c / total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 待解答的提問 */}
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-lg shadow-sm dark:bg-surface-container-high">
+          <h3 className="mb-md flex items-center gap-1 text-body-lg font-bold text-purple-700 dark:text-purple-400">
+            <span className="material-symbols-outlined">lightbulb</span> 待解答的提問
+          </h3>
+
+          <div className="space-y-2 text-xs">
+            {pending.length === 0 ? (
+              <p className="text-body-md text-secondary">目前沒有待解答的提問 🎉</p>
+            ) : (
+              pending.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/posts/${p.id}`}
+                  className="group relative block rounded border border-outline-variant/20 bg-surface-container p-sm no-underline transition-colors hover:border-primary/40"
+                >
+                  <div className="mb-1 flex items-center gap-1 font-bold text-primary">
+                    <span className="rounded bg-primary-container px-1.5 py-[1px] text-[10px] text-on-primary-container">
+                      #{p.boardName}
+                    </span>
+                    {p.authorName ? (
+                      <span className="text-[11px] font-normal text-secondary">{p.authorName}</span>
+                    ) : null}
+                  </div>
+                  <p className="text-[13px] leading-relaxed text-on-surface">{p.title}</p>
+                  <p className="mt-1 text-[11px] text-secondary">{formatDateTime(p.createdAt)}</p>
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );

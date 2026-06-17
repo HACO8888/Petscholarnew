@@ -6,11 +6,45 @@ import { shopItems, inventory } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
 import { buyItem } from "@/app/pet/actions";
 
-const GRADE_STYLE: Record<string, string> = {
-  基礎: "bg-surface-container-high text-on-surface-variant",
-  普通: "bg-secondary-container text-on-secondary-container",
-  稀有: "bg-primary-container text-on-primary-container",
-  史詩: "bg-tertiary-container text-on-tertiary-container",
+type GradeStyle = {
+  card: string;
+  imageBox: string;
+  imageOverlay: string;
+  title: string;
+  button: string;
+};
+
+const DEFAULT_GRADE_STYLE: GradeStyle = {
+  card: "bg-surface-bright rounded-xl p-md border border-outline-variant shadow-sm hover:shadow-md transition-shadow flex flex-col relative overflow-hidden",
+  imageBox: "h-32 bg-surface-container-low rounded-lg mb-md flex items-center justify-center relative overflow-hidden group",
+  imageOverlay: "absolute inset-0 bg-gradient-to-br from-secondary-container to-surface-container opacity-50",
+  title: "font-body-lg text-body-lg font-bold text-on-surface mb-xs",
+  button: "px-md py-xs border border-secondary text-secondary rounded-lg font-label-md text-label-md hover:bg-surface-variant transition-colors disabled:opacity-50",
+};
+
+const GRADE_STYLE: Record<string, GradeStyle> = {
+  基礎: DEFAULT_GRADE_STYLE,
+  普通: {
+    card: "bg-surface-bright rounded-xl p-md border border-outline-variant shadow-sm hover:shadow-md transition-shadow flex flex-col relative overflow-hidden",
+    imageBox: "h-32 bg-primary-container/20 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group",
+    imageOverlay: "",
+    title: "font-body-lg text-body-lg font-bold text-on-surface mb-xs",
+    button: "px-md py-xs bg-primary/10 text-primary border border-primary/20 rounded-lg font-label-md text-label-md hover:bg-primary/20 transition-colors disabled:opacity-50",
+  },
+  稀有: {
+    card: "bg-surface-bright rounded-xl p-md border-2 border-primary-container shadow-sm hover:shadow-md transition-shadow flex flex-col relative overflow-hidden",
+    imageBox: "h-32 bg-primary-container/40 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group",
+    imageOverlay: "",
+    title: "font-body-lg text-body-lg font-bold text-on-surface mb-xs",
+    button: "px-md py-xs bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-surface-tint transition-colors disabled:opacity-50",
+  },
+  史詩: {
+    card: "bg-surface-bright rounded-xl p-md border border-tertiary-container shadow-sm hover:shadow-md transition-shadow flex flex-col relative overflow-hidden bg-gradient-to-b from-surface-bright to-tertiary-fixed/10",
+    imageBox: "h-32 bg-tertiary-container/30 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group",
+    imageOverlay: "",
+    title: "font-body-lg text-body-lg font-bold text-on-tertiary-container mb-xs",
+    button: "px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50",
+  },
 };
 
 export default async function ShopPage() {
@@ -30,68 +64,83 @@ export default async function ShopPage() {
   }
 
   return (
-    <section>
-      <div className="mb-lg flex items-center justify-between">
+    <div className="space-y-xl">
+      {/* Page Header */}
+      <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-headline-lg font-semibold text-on-background">寵物商城</h1>
-          <p className="mt-1 text-body-md text-secondary">購買食物餵食寵物，或購買配件裝飾。</p>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">寵物商城</h1>
+          <p className="font-body-md text-body-md text-secondary">為您的學習夥伴補充能量與裝備</p>
         </div>
         {coins !== null ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-4 py-2 text-body-md font-semibold text-on-background">
-            <span className="material-symbols-outlined text-[18px] text-tertiary">paid</span>
-            {coins} 金幣
-          </span>
+          <div className="hidden sm:flex items-center gap-sm bg-surface-container px-md py-sm rounded-full shadow-sm">
+            <span className="material-symbols-outlined text-tertiary">account_balance_wallet</span>
+            <span className="font-label-md text-label-md text-on-surface">餘額: {coins} 枚金幣</span>
+          </div>
         ) : (
-          <Link href="/login" className="text-label-md text-primary hover:underline">登入以購買</Link>
+          <Link
+            href="/login"
+            className="hidden sm:flex items-center gap-sm bg-surface-container px-md py-sm rounded-full shadow-sm font-label-md text-label-md text-primary hover:text-surface-tint transition-colors"
+          >
+            <span className="material-symbols-outlined text-tertiary">account_balance_wallet</span>
+            登入以購買
+          </Link>
         )}
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => {
-          const ownedQty = owned.get(item.id) ?? 0;
-          const affordable = coins === null || coins >= item.price;
-          return (
-            <div
-              key={item.id}
-              className="flex flex-col rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-5 dark:bg-surface-container"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-4xl">{item.icon}</span>
-                <div>
-                  <p className="text-body-md font-semibold text-on-background">{item.name}</p>
-                  {item.grade && (
-                    <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-label-md ${GRADE_STYLE[item.grade] ?? "bg-surface-container-high text-on-surface-variant"}`}>
-                      {item.grade}
-                    </span>
-                  )}
+      {/* Pet Food Bento Grid */}
+      <section>
+        <div className="flex items-center gap-sm mb-md">
+          <span className="material-symbols-outlined text-primary">restaurant</span>
+          <h2 className="font-headline-md text-headline-md text-on-surface">補給品</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+          {items.map((item) => {
+            const ownedQty = owned.get(item.id) ?? 0;
+            const affordable = coins === null || coins >= item.price;
+            const style = (item.grade && GRADE_STYLE[item.grade]) || DEFAULT_GRADE_STYLE;
+            const isFeatured = item.grade === "稀有";
+            return (
+              <div key={item.id} className={style.card}>
+                {isFeatured && (
+                  <div className="absolute top-0 right-0 bg-primary text-on-primary px-sm py-xs rounded-bl-lg font-label-md text-label-md z-20">
+                    熱銷
+                  </div>
+                )}
+                <div className={style.imageBox}>
+                  {style.imageOverlay && <div className={style.imageOverlay}></div>}
+                  <span className="text-6xl relative z-10 group-hover:scale-110 transition-transform">
+                    {item.icon}
+                  </span>
+                </div>
+                <h3 className={style.title}>
+                  {item.name}
+                  {item.grade ? ` (${item.grade})` : ""}
+                </h3>
+                <p className="font-body-md text-body-md text-secondary mb-md flex-1">
+                  {item.description}
+                </p>
+                <div className="flex items-center justify-between mt-auto">
+                  <span className="font-label-md text-label-md text-tertiary flex items-center gap-xs">
+                    <span className="material-symbols-outlined text-[16px] icon-fill">monetization_on</span>{" "}
+                    {item.price}
+                  </span>
+                  <div className="flex items-center gap-sm">
+                    {ownedQty > 0 && (
+                      <span className="font-label-md text-label-md text-secondary">已有 {ownedQty}</span>
+                    )}
+                    <form action={buyItem}>
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <button type="submit" disabled={!affordable} className={style.button}>
+                        {affordable ? "購買" : "金幣不足"}
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </div>
-              <p className="mt-2 flex-1 text-label-md text-secondary">{item.description}</p>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-body-md font-bold text-tertiary">
-                  <span className="material-symbols-outlined text-[16px]">paid</span>
-                  {item.price}
-                </span>
-                <div className="flex items-center gap-2">
-                  {ownedQty > 0 && (
-                    <span className="text-label-md text-secondary">已有 {ownedQty}</span>
-                  )}
-                  <form action={buyItem}>
-                    <input type="hidden" name="itemId" value={item.id} />
-                    <button
-                      type="submit"
-                      disabled={!affordable}
-                      className="rounded-full bg-primary px-4 py-1.5 text-label-md font-bold text-on-primary transition-all hover:bg-surface-tint disabled:opacity-50"
-                    >
-                      {affordable ? "購買" : "金幣不足"}
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
+            );
+          })}
+        </div>
+      </section>
+    </div>
   );
 }
