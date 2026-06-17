@@ -52,7 +52,6 @@ export default async function ProfilePage() {
       </div>
 
       <div className="mb-lg flex items-center gap-4 rounded-xl border border-outline-variant/30 bg-surface-container-low p-6 dark:bg-surface-container">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={me.image ?? ""}
           alt={me.name ?? "使用者"}

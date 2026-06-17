@@ -15,6 +15,12 @@ const eslintConfig = defineConfig([
     // 舊靜態站存檔，僅供移植參考，不納入 lint
     "legacy/**",
   ]),
+  {
+    rules: {
+      // 忠實移植原版面會用到外部圖片的 <img>，不強制改用 next/image
+      "@next/next/no-img-element": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
