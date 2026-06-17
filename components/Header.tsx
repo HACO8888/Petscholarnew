@@ -12,6 +12,9 @@ export interface HeaderUser {
   name?: string | null;
   image?: string | null;
   role: Role;
+  coins: number;
+  hp: number;
+  maxHp: number;
 }
 
 function isActive(pathname: string, href: string) {
@@ -96,6 +99,19 @@ export default function Header({ user }: { user: HeaderUser | null }) {
 
         {user ? (
           <div className="flex items-center gap-2">
+            {/* 全站單一資料來源的寵物 HP 與金幣，所有頁面一致 */}
+            <Link
+              href="/pet/feed"
+              className="hidden items-center gap-1 rounded-full bg-surface-container-high px-3 py-1.5 text-label-md font-medium text-on-surface-variant no-underline md:flex"
+              title="寵物狀態"
+            >
+              <span aria-hidden>❤️</span>
+              <span>{Math.floor(user.hp / 100)}/{Math.round(user.maxHp / 100)}</span>
+              <span className="ml-1 inline-flex items-center gap-0.5">
+                <span className="material-symbols-outlined text-[15px] text-tertiary">paid</span>
+                {user.coins}
+              </span>
+            </Link>
             <Link href="/profile" className="flex items-center gap-2 no-underline" title="個人檔案">
               {user.image ? (
                 <Image

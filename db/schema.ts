@@ -126,3 +126,54 @@ export const comments = pgTable("comment", {
 export type Board = typeof boards.$inferSelect;
 export type Post = typeof posts.$inferSelect;
 export type Comment = typeof comments.$inferSelect;
+
+// ---- 寵物 / 商城 / 金幣 ----
+
+export const pets = pgTable("pet", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default("未命名小精靈"),
+  hp: integer("hp").notNull().default(500),
+  maxHp: integer("max_hp").notNull().default(500),
+  exp: integer("exp").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  coins: integer("coins").notNull().default(100),
+  equippedHat: boolean("equipped_hat").notNull().default(false),
+  equippedBackground: boolean("equipped_background").notNull().default(false),
+  equippedRareStyle: boolean("equipped_rare_style").notNull().default(false),
+  lastCheckIn: timestamp("last_check_in"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const shopItems = pgTable("shop_item", {
+  id: varchar("id", { length: 48 }).primaryKey(),
+  name: text("name").notNull(),
+  grade: varchar("grade", { length: 16 }),
+  price: integer("price").notNull(),
+  hpRestore: integer("hp_restore").notNull().default(0),
+  expGain: integer("exp_gain").notNull().default(0),
+  icon: text("icon"),
+  description: text("description"),
+  type: varchar("type", { length: 16 }).notNull().default("food"),
+  accessoryType: varchar("accessory_type", { length: 16 }),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const inventory = pgTable(
+  "inventory",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: varchar("item_id", { length: 48 })
+      .notNull()
+      .references(() => shopItems.id, { onDelete: "cascade" }),
+    quantity: integer("quantity").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.itemId] })],
+);
+
+export type Pet = typeof pets.$inferSelect;
+export type ShopItem = typeof shopItems.$inferSelect;
+export type InventoryRow = typeof inventory.$inferSelect;

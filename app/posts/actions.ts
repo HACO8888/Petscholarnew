@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { posts, comments, boards } from "@/db/schema";
+import { posts, comments, boards, pets } from "@/db/schema";
+import { getOrCreatePet } from "@/lib/pet";
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -104,7 +105,7 @@ export async function adoptAnswer(formData: FormData) {
 
   // 僅發問者可採納
   const [post] = await db
-    .select({ authorId: posts.authorId })
+    .select({ authorId: posts.authorId, bounty: posts.bounty })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
@@ -113,11 +114,32 @@ export async function adoptAnswer(formData: FormData) {
     throw new Error("只有發問者可以採納解答");
   }
 
+  const [target] = await db
+    .select({ authorId: comments.authorId, isAdopted: comments.isAdopted })
+    .from(comments)
+    .where(and(eq(comments.id, commentId), eq(comments.postId, postId)))
+    .limit(1);
+  if (!target) throw new Error("回覆不存在");
+
   await db
     .update(comments)
     .set({ isAdopted: true })
     .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
   await db.update(posts).set({ solved: true }).where(eq(posts.id, postId));
+
+  // 將懸賞金幣發給被採納的解答者（避免重複發放、不發給自己）
+  if (
+    !target.isAdopted &&
+    post.bounty > 0 &&
+    target.authorId &&
+    target.authorId !== session.user.id
+  ) {
+    const answererPet = await getOrCreatePet(target.authorId);
+    await db
+      .update(pets)
+      .set({ coins: answererPet.coins + post.bounty, updatedAt: new Date() })
+      .where(eq(pets.userId, target.authorId));
+  }
 
   revalidatePath(`/posts/${postId}`);
 }

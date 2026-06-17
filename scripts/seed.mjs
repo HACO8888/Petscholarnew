@@ -10,12 +10,28 @@ const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 const src = readFileSync("legacy/data/boardsData.js", "utf8");
 const BOARDS_DATA = Function(src + "; return BOARDS_DATA;")();
 
+// 從 legacy 的 userData.js 取出 SHOP_ITEMS
+const userSrc = readFileSync("legacy/data/userData.js", "utf8");
+const SHOP_ITEMS = Function(userSrc + "; return SHOP_ITEMS;")();
+
 function parseDate(s) {
   const d = s ? new Date(s) : null;
   return d && !Number.isNaN(d.getTime()) ? d : new Date();
 }
 
 await sql`TRUNCATE "comment", "post", "board" RESTART IDENTITY CASCADE`;
+// shop_item 重置（會連帶清空 inventory FK）
+await sql`TRUNCATE "shop_item" RESTART IDENTITY CASCADE`;
+
+let itemOrder = 0;
+let itemCount = 0;
+for (const it of SHOP_ITEMS) {
+  await sql`
+    INSERT INTO "shop_item" (id, name, grade, price, hp_restore, exp_gain, icon, description, type, accessory_type, sort_order)
+    VALUES (${it.id}, ${it.name}, ${it.grade ?? null}, ${it.price ?? 0}, ${it.hpRestore ?? 0}, ${it.expGain ?? 0}, ${it.icon ?? null}, ${it.description ?? null}, ${it.type === "accessory" ? "accessory" : "food"}, ${it.accessoryType ?? null}, ${itemOrder++})
+  `;
+  itemCount++;
+}
 
 let order = 0;
 let boardCount = 0;
@@ -52,4 +68,6 @@ for (const key of Object.keys(BOARDS_DATA)) {
 }
 
 await sql.end();
-console.log(`seeded: ${boardCount} boards, ${postCount} posts, ${commentCount} comments`);
+console.log(
+  `seeded: ${boardCount} boards, ${postCount} posts, ${commentCount} comments, ${itemCount} shop items`,
+);

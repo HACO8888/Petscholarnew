@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header, { type HeaderUser } from "@/components/Header";
 import { auth } from "@/auth";
+import { getOrCreatePet } from "@/lib/pet";
 import type { Role } from "@/db/schema";
 
 export const metadata: Metadata = {
@@ -18,13 +19,18 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await auth();
-  const user: HeaderUser | null = session?.user
-    ? {
-        name: session.user.name,
-        image: session.user.image,
-        role: (session.user.role ?? "student") as Role,
-      }
-    : null;
+  let user: HeaderUser | null = null;
+  if (session?.user?.id) {
+    const pet = await getOrCreatePet(session.user.id);
+    user = {
+      name: session.user.name,
+      image: session.user.image,
+      role: (session.user.role ?? "student") as Role,
+      coins: pet.coins,
+      hp: pet.hp,
+      maxHp: pet.maxHp,
+    };
+  }
 
   return (
     <html lang="zh-TW" suppressHydrationWarning>
