@@ -224,3 +224,19 @@ export const reports = pgTable("report", {
 
 export type StudyRoom = typeof studyRooms.$inferSelect;
 export type Report = typeof reports.$inferSelect;
+
+// ---- 福利社優惠券兌換紀錄 ----
+export const couponRedemptions = pgTable(
+  "coupon_redemption",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    couponId: varchar("coupon_id", { length: 48 }).notNull(),
+    code: text("code").notNull(),
+    redeemedAt: timestamp("redeemed_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.couponId] })],
+);
+
+export type CouponRedemption = typeof couponRedemptions.$inferSelect;

@@ -2,8 +2,16 @@ import Link from "next/link";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { posts, comments, users, studyRoomMembers } from "@/db/schema";
+import {
+  posts,
+  comments,
+  users,
+  studyRoomMembers,
+  couponRedemptions,
+} from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
+import { redeemCoupon } from "./actions";
+import { WELFARE_ITEMS } from "./welfare-data";
 
 type TabKey = "weekly" | "dept";
 
@@ -31,49 +39,6 @@ type Badge = {
   desc: string;
   owned: boolean;
 };
-
-/** 福利社特約折價券（legacy WELFARE_ITEMS，靜態設定），解鎖由真實寵物等級/徽章判定 */
-const WELFARE_ITEMS: {
-  id: string;
-  name: string;
-  desc: string;
-  icon: string;
-  reqType: "level" | "badge";
-  reqValue: number | string;
-}[] = [
-  {
-    id: "welfare-fries",
-    name: "麥當勞大薯升級券",
-    desc: "北科校內麥當勞專屬！中薯免費升級大薯，考試熬夜解饞必備。",
-    icon: "🍟",
-    reqType: "level",
-    reqValue: 4,
-  },
-  {
-    id: "welfare-boba",
-    name: "連鎖手搖飲免費加珍券",
-    desc: "北科正門手搖特約店！購買大杯純茶免費加蜂蜜波霸珍珠一份。",
-    icon: "🧋",
-    reqType: "badge",
-    reqValue: "解題達人",
-  },
-  {
-    id: "welfare-waffle",
-    name: "北科周邊特約鬆餅折10元",
-    desc: "校園後門特約手作鬆餅，憑此券折抵任意口味鬆餅 10 元。",
-    icon: "🧇",
-    reqType: "badge",
-    reqValue: "好學新手",
-  },
-  {
-    id: "welfare-study-tea",
-    name: "K書中心特大杯烏龍綠茶兌換券",
-    desc: "達特定成就，免費獲得大杯冰烏龍綠茶一杯，邊讀邊喝超清涼！",
-    icon: "🍵",
-    reqType: "level",
-    reqValue: 5,
-  },
-];
 
 /** 全校英雄榜（weekly）：依 authorId 聚合留言，被採納解答 ×20 + 一般回覆 ×5，全校共同排名 */
 async function loadWeekly(): Promise<RankRow[]> {
@@ -275,6 +240,19 @@ export default async function LeaderboardPage({
     ? badges.filter((b) => b.owned).map((b) => b.name)
     : [];
 
+  // 目前使用者已兌換的優惠券（couponId -> code），用於顯示券碼或標記已兌換
+  const redeemedMap = new Map<string, string>();
+  if (userId) {
+    const rows = await db
+      .select({
+        couponId: couponRedemptions.couponId,
+        code: couponRedemptions.code,
+      })
+      .from(couponRedemptions)
+      .where(eq(couponRedemptions.userId, userId));
+    for (const r of rows) redeemedMap.set(r.couponId, r.code);
+  }
+
   return (
     <section className="tab-section active" id="sect-welfare">
       <div className="mb-lg border-b border-outline-variant/30 pb-3">
@@ -337,7 +315,10 @@ export default async function LeaderboardPage({
                 let reqText: string;
                 let isUnlocked: boolean;
                 if (coupon.reqType === "level") {
-                  reqText = `Lv.${coupon.reqValue} 級解鎖`;
+                  reqText =
+                    userId == null
+                      ? `Lv.${coupon.reqValue} 級解鎖`
+                      : `需寵物等級 ${coupon.reqValue}`;
                   isUnlocked = petLevel >= (coupon.reqValue as number);
                 } else {
                   reqText = `需解鎖徽章: ${coupon.reqValue}`;
@@ -345,9 +326,8 @@ export default async function LeaderboardPage({
                     coupon.reqValue as string,
                   );
                 }
-                const btnStyle = isUnlocked
-                  ? "bg-tertiary text-on-tertiary hover:opacity-95"
-                  : "bg-surface-container text-secondary cursor-not-allowed border border-outline-variant/30";
+                const redeemedCode = redeemedMap.get(coupon.id);
+                const isRedeemed = redeemedCode != null;
                 return (
                   <div
                     key={coupon.id}
@@ -367,13 +347,38 @@ export default async function LeaderboardPage({
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      className={`font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all ${btnStyle}`}
-                      disabled={!isUnlocked}
-                    >
-                      免費兌換
-                    </button>
+                    {userId == null ? (
+                      <Link
+                        href="/login"
+                        className="font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all bg-surface-container text-secondary border border-outline-variant/30 hover:opacity-95 whitespace-nowrap"
+                      >
+                        登入兌換
+                      </Link>
+                    ) : isRedeemed ? (
+                      <span className="font-mono font-bold text-xs py-1.5 px-3 rounded-lg bg-tertiary-container text-on-tertiary-container border border-tertiary/30 whitespace-nowrap">
+                        {redeemedCode}
+                      </span>
+                    ) : isUnlocked ? (
+                      <form action={redeemCoupon}>
+                        <input type="hidden" name="couponId" value={coupon.id} />
+                        <button
+                          type="submit"
+                          className="font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all bg-tertiary text-on-tertiary hover:opacity-95 whitespace-nowrap"
+                        >
+                          免費兌換
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all bg-surface-container text-secondary cursor-not-allowed border border-outline-variant/30 whitespace-nowrap"
+                        disabled
+                      >
+                        {coupon.reqType === "level"
+                          ? `需等級 ${coupon.reqValue}`
+                          : "未解鎖"}
+                      </button>
+                    )}
                   </div>
                 );
               })}

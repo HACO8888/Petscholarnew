@@ -305,20 +305,31 @@ export default async function StudyRoomsPage() {
                       </p>
                     </div>
                     {userId ? (
-                      <form action={isMember ? leaveRoom : joinRoom}>
-                        <input type="hidden" name="roomId" value={room.id} />
-                        <button
-                          type="submit"
-                          disabled={full}
-                          className={
-                            isMember
-                              ? "bg-surface-container border border-outline-variant/30 text-secondary font-bold text-xs px-4 py-2 rounded-lg"
-                              : "bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm disabled:opacity-50"
-                          }
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/study-rooms/${room.id}`}
+                          className="bg-surface-container border border-outline-variant/30 text-on-surface hover:bg-surface-container-highest font-bold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-1 no-underline"
                         >
-                          {isMember ? "離開共讀" : full ? "滿員" : "加入共讀"}
-                        </button>
-                      </form>
+                          <span className="material-symbols-outlined text-sm">
+                            login
+                          </span>{" "}
+                          進入自習室
+                        </Link>
+                        <form action={isMember ? leaveRoom : joinRoom}>
+                          <input type="hidden" name="roomId" value={room.id} />
+                          <button
+                            type="submit"
+                            disabled={full}
+                            className={
+                              isMember
+                                ? "bg-surface-container border border-outline-variant/30 text-secondary font-bold text-xs px-4 py-2 rounded-lg"
+                                : "bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm disabled:opacity-50"
+                            }
+                          >
+                            {isMember ? "離開共讀" : full ? "滿員" : "加入共讀"}
+                          </button>
+                        </form>
+                      </div>
                     ) : (
                       <Link
                         href="/login"

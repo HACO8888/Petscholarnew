@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { claimCheckin, feedPet } from "@/app/pet/actions";
+import { claimCheckin, feedPet, simulateTimePass, healPet } from "@/app/pet/actions";
 
 export interface SidebarData {
   loggedIn: boolean;
@@ -103,9 +103,41 @@ export default function Sidebar({ data }: { data: SidebarData }) {
             )}
           </div>
 
+          {data.loggedIn ? (
+            <>
+              {/* Simulate hour passing — 對齊 legacy index.html sidebar */}
+              <form action={simulateTimePass}>
+                <button
+                  type="submit"
+                  className="w-full mt-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1"
+                >
+                  <span>⏳</span> 模擬時間流逝 1 小時
+                </button>
+              </form>
+
+              {/* Heal pet entry */}
+              <form action={healPet}>
+                <button
+                  type="submit"
+                  disabled={data.coins < 20 || data.hp >= data.maxHp}
+                  className="w-full mt-1.5 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <span>💊</span> 治療寵物 (-20 金幣)
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="w-full mt-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 no-underline"
+            >
+              <span>⏳</span> 模擬時間流逝 1 小時
+            </Link>
+          )}
+
           <Link
             href="/pet/feed"
-            className="w-full mt-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 no-underline"
+            className="w-full mt-1.5 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 no-underline"
           >
             <span>🍖</span> 前往餵食寵物
           </Link>

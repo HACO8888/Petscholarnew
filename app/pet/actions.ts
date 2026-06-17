@@ -110,6 +110,39 @@ export async function claimCheckin() {
   revalidatePetPages();
 }
 
+/** 時間流逝：HP 隨時間下降（最低 0），餓了就要餵
+ *  注意："use server" 檔案只能 export async function，故常數不可 export。 */
+const TIME_PASS_HP_LOSS = 50;
+
+export async function simulateTimePass() {
+  const userId = await requireUserId();
+  const pet = await getOrCreatePet(userId);
+  const newHp = Math.max(0, pet.hp - TIME_PASS_HP_LOSS);
+
+  await db
+    .update(pets)
+    .set({ hp: newHp, updatedAt: new Date() })
+    .where(eq(pets.userId, userId));
+
+  revalidatePetPages();
+}
+
+/** 治療寵物：花費金幣把 HP 補滿至 maxHp（金幣不足則 throw） */
+const HEAL_COST = 20;
+
+export async function healPet() {
+  const userId = await requireUserId();
+  const pet = await getOrCreatePet(userId);
+  if (pet.coins < HEAL_COST) throw new Error("金幣不足");
+
+  await db
+    .update(pets)
+    .set({ hp: pet.maxHp, coins: pet.coins - HEAL_COST, updatedAt: new Date() })
+    .where(eq(pets.userId, userId));
+
+  revalidatePetPages();
+}
+
 export async function toggleEquip(formData: FormData) {
   const userId = await requireUserId();
   const accessoryType = String(formData.get("accessoryType") ?? "");
