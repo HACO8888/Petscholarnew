@@ -10,6 +10,7 @@
     code { background:#f1f1f1; padding:2px 6px; border-radius:6px; }
     a, button { display:inline-block; margin-top:18px; background:#4b6172; color:white; padding:10px 16px; border-radius:10px; text-decoration:none; border:0; cursor:pointer; }
   </style>
+
 </head>
 <body>
   <div class="card">
@@ -18,24 +19,5 @@
     <p>若這是北科校園入口或標準 OAuth <code>code</code> flow，正式環境還需要後端把授權碼交換成 token 並驗證身分。</p>
     <a href="../stitch_studypet_village%202/_1/code.html">返回登入頁</a>
   </div>
-<script>
-(function(){
-  const params = new URLSearchParams(location.search || location.hash.replace(/^#/, '?'));
-  const code = params.get('code');
-  const state = params.get('state');
-  const error = params.get('error');
-  const status = document.getElementById('status');
-  if (error) {
-    status.textContent = '登入失敗：' + error;
-    return;
-  }
-  if (code) {
-    sessionStorage.setItem('petscholar_last_auth_code', code);
-    status.innerHTML = '已收到授權碼。正式串接時，請由後端使用此 <code>code</code> 向身分提供者交換 token。';
-    return;
-  }
-  status.textContent = '沒有收到可辨識的登入資料。';
-})();
-</script>
 </body>
 </html>

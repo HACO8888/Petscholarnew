@@ -140,6 +140,33 @@ aside.fixed > nav::-webkit-scrollbar-thumb {
 }
 </style>
 
+
+<style id="pet-two-line-status-style">
+.pet-two-line-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 0 12px;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
+}
+.pet-two-line-status .pet-status-line {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+.pet-two-line-status .pet-status-value {
+  color: #374151;
+  font-weight: 600;
+}
+#sidebar-pet-hp {
+  display: none !important;
+}
+</style>
 </head>
 <body class="bg-background text-on-background min-h-screen overflow-x-hidden font-body-md antialiased">
 <!-- TopNavBar -->
@@ -184,17 +211,15 @@ aside.fixed > nav::-webkit-scrollbar-thumb {
 <!-- SideNavBar (Right Docked) -->
 <aside class="hidden md:flex bg-surface-container dark:bg-surface-container-high docked right-0 h-full w-64 bg-surface-container dark:bg-surface-container-high shadow-md fixed right-0 top-16 h-[calc(100vh-64px)] w-64 flex flex-col p-md border-l border-outline-variant dark:border-outline">
 <!-- Header: Pet Status -->
-<div class="flex flex-col items-center p-md mb-md bg-surface-container-lowest rounded-xl shadow-sm">
-<div class="w-20 h-20 rounded-full bg-primary-container flex items-center justify-center mb-sm overflow-hidden border-2 border-primary-fixed-dim">
-<img alt="Buddy Pet" class="w-full h-full object-cover" data-alt="A cute, stylized 3D rendered avatar of a helpful robotic pet dog. It features clean white ceramic textures with slate blue accents. The lighting is studio-quality, emphasizing soft ambient occlusion and a friendly, supportive educational companion vibe." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXxyn8gdBAoK-TOfVfKehOkmpxSpTz0ZTJiXzMxr-nMf_1FIgmJTjMHp5TpnfflO6mGM7lea6sEyepdoSLJuNdrxQ2EEpb5HLQFuyAfymTbZCH5gdO9kn2ZqRZQf8R2gfUTpoOVYlaBP-u86NsBvs47lBG7b6blnPQaeTzLj3JKtVfi6SHH7Th6RQRCnYoTdMDnKcc3YakSTwb7PzgbTys3s1cJoCVXVlifeGFVCvg6DU1TCvAD9-TzOSQ4sN5mQQ7Dq--OYwa18tI"/>
+<div class="flex flex-col items-center mb-xl p-md bg-surface rounded-xl shadow-sm border border-outline-variant text-center pet-sidebar-card">
+  <img alt="Buddy Pet" class="w-24 h-24 rounded-full object-cover mb-sm border-2 border-primary-container bg-primary-container/30 shadow-sm" data-alt="Cute digital pet avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAN8Ss7h1Iy0JjSgjMeWcZQOHg7uquL7lB-y1dybTfPuIDcbSOwenwm4BOzKf2Ynj9XAAa6ke7TfaUPVevCKPrLVGB6kvCJrDcrCZOEf51D9zPdqrdnca4qu8Mpgga9ck79nlIm1vdkj69RKW3-xUeAWn7IfxddtHQvRd4Q18yjYjsXOSlJ8wPg0oRCqrE23-m-1NCSeRRFODv2ipaLA-XoQWuoJAoM7GQV4CZpaBTobSJXfR0yRQSdkK8r3WtnoZzNmLhneO-VjWkv"/>
+  <h3 class="font-headline-md text-[30px] leading-tight text-primary mb-xs font-bold">124546</h3>
+  <div id="pet-hearts-display" class="hearts-glow flex items-center justify-center gap-1 text-[24px] leading-none mb-md">❤️❤️❤️❤️❤️</div>
+<button class="bg-primary text-on-primary font-label-md text-label-md px-4 py-2 rounded-lg hover:bg-on-primary-container transition-colors w-full flex items-center justify-center gap-1 mb-sm">
+    <span class="material-symbols-outlined text-[18px]">healing</span><span>治療寵物</span>
+  </button>
+  <button id="btn-simulate-time" class="w-full bg-surface-container border border-outline-variant/30 text-secondary font-semibold text-[12px] px-3 py-2 rounded-lg cursor-pointer" type="button">模擬時間流逝 1 小時 ⏳</button>
 </div>
-<h3 class="font-headline-md text-headline-md text-primary mb-xs text-center">帳戶狀態</h3>
-<p class="font-label-md text-label-md text-on-surface-variant mb-md text-center"></p><div class="flex items-center justify-center gap-xs mb-1"><span class="material-symbols-outlined text-error icon-fill text-sm">favorite</span><span class="material-symbols-outlined text-error icon-fill text-sm">favorite</span><span class="material-symbols-outlined text-error icon-fill text-sm">favorite</span><span class="material-symbols-outlined text-error icon-fill text-sm">favorite</span><span class="material-symbols-outlined text-error icon-fill text-sm">favorite</span></div><span class="text-on-surface-variant">金幣：120</span><p></p>
-<button class="w-full py-2 bg-primary text-on-primary font-label-md text-label-md rounded-lg shadow-sm hover:bg-surface-tint transition-colors">
-                治療寵物
-            </button>
-</div>
-<!-- Main Navigation -->
 <nav class="flex-1 flex flex-col gap-xs overflow-y-auto font-label-md text-label-md text-primary dark:text-primary-fixed-dim">
 <a class="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-variant rounded-lg hover:bg-surface-container-highest dark:hover:bg-surface-variant scale-95 active:scale-90 transition-transform" href="../_2/code.html">
 <span class="material-symbols-outlined">dashboard</span>
@@ -437,7 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!hpLabel) {
                     hpLabel = document.createElement("div");
                     hpLabel.id = "sidebar-pet-hp";
-                    hpLabel.className = "text-on-surface-variant text-[11px] font-medium mb-1 text-center";
+                    hpLabel.className = "hidden";
                     const heartDiv = aside.querySelector(".flex.items-center.justify-center.gap-xs, .flex.items-center.justify-center.gap-1");
                     if (heartDiv) {
                         heartDiv.parentNode.insertBefore(hpLabel, heartDiv.nextSibling);
@@ -1353,6 +1378,428 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(applyNavCleanup, 80);
   setTimeout(applyNavCleanup, 300);
 });
+</script>
+
+<script id="petscholar-pet-state-sync">
+(function () {
+  if (window.__petScholarPetStateSyncV2) return;
+  window.__petScholarPetStateSyncV2 = true;
+
+  var syncing = false;
+  var scheduled = false;
+  var rawSetItem = localStorage.setItem.bind(localStorage);
+
+  function clamp(num, min, max) {
+    num = Number(num);
+    if (!Number.isFinite(num)) num = min;
+    return Math.max(min, Math.min(max, num));
+  }
+
+  function normalizePet(pet) {
+    var changed = false;
+    if (!pet || typeof pet !== 'object') { pet = {}; changed = true; }
+
+    if (!Number.isFinite(Number(pet.maxHp))) { pet.maxHp = 500; changed = true; }
+    pet.maxHp = Number(pet.maxHp) || 500;
+
+    if (!Number.isFinite(Number(pet.coins))) { pet.coins = Number(pet.coins || 100); changed = true; }
+    pet.coins = Math.max(0, Math.floor(Number(pet.coins) || 0));
+
+    if (!Number.isFinite(Number(pet.hp))) { pet.hp = pet.maxHp; changed = true; }
+    var nextHp = clamp(pet.hp, 0, pet.maxHp);
+    if (Number(pet.hp) !== nextHp) { pet.hp = nextHp; changed = true; }
+
+    var nextHearts = Math.max(0, Math.min(5, Math.ceil((pet.hp || 0) / 100)));
+    if (Number(pet.hearts) !== nextHearts) { pet.hearts = nextHearts; changed = true; }
+
+    if (!Number.isFinite(Number(pet.baseHp))) { pet.baseHp = pet.hp; changed = true; }
+    if (!pet.lastActivityTime) { pet.lastActivityTime = Date.now(); changed = true; }
+    return { pet: pet, changed: changed };
+  }
+
+  function readPet() {
+    var pet = {};
+    try { pet = JSON.parse(localStorage.getItem('studypet_pet') || '{}'); } catch (e) { pet = {}; }
+    var normalized = normalizePet(pet);
+    if (normalized.changed) {
+      try { rawSetItem('studypet_pet', JSON.stringify(normalized.pet)); } catch (e) {}
+    }
+    return normalized.pet;
+  }
+
+  function heartText(hearts) {
+    var html = '';
+    for (var i = 1; i <= 5; i++) html += i <= hearts ? '❤️' : '🖤';
+    return html;
+  }
+
+  function syncMaterialHearts(hearts) {
+    var heartSpans = Array.from(document.querySelectorAll('.material-symbols-outlined'))
+      .filter(function (el) { return (el.textContent || '').trim() === 'favorite'; });
+
+    var groups = new Map();
+    heartSpans.forEach(function (span) {
+      var parent = span.parentElement;
+      if (!parent) return;
+      if (!groups.has(parent)) groups.set(parent, []);
+      groups.get(parent).push(span);
+    });
+
+    groups.forEach(function (spans, parent) {
+      if (!spans.length) return;
+      // Only normalize groups that look like pet HP displays, not unrelated like/favorite buttons.
+      var groupText = (parent.textContent || '') + ' ' + ((parent.parentElement && parent.parentElement.textContent) || '');
+      var isLikelyPetHp = spans.length >= 3 || /生命值|金幣|HP|heart|愛心/i.test(groupText) || parent.closest('aside') || parent.closest('#pet-widget-card');
+      if (!isLikelyPetHp) return;
+
+      if (spans.length >= 3) {
+        while (spans.length < 5) {
+          var clone = spans[0].cloneNode(true);
+          clone.textContent = 'favorite';
+          parent.appendChild(clone);
+          spans.push(clone);
+        }
+        while (spans.length > 5) {
+          var last = spans.pop();
+          if (last && last.parentNode) last.parentNode.removeChild(last);
+        }
+      }
+
+      spans.forEach(function (span, idx) {
+        var fill = idx < hearts ? 1 : 0;
+        span.style.fontVariationSettings = "'FILL' " + fill + ", 'wght' 400, 'GRAD' 0, 'opsz' 24";
+        span.classList.toggle('icon-fill', !!fill);
+        if (!fill) span.style.opacity = '0.35';
+        else span.style.opacity = '';
+      });
+    });
+  }
+
+  function syncTextNodes(pet) {
+    var coins = pet.coins;
+    var hearts = pet.hearts;
+    var hp = pet.hp;
+    var maxHp = pet.maxHp || 500;
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        var parent = node.parentElement;
+        if (!parent || ['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'OPTION'].includes(parent.tagName)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var node;
+    while ((node = walker.nextNode())) {
+      var text = node.nodeValue;
+      var trimmed = text.trim();
+
+      if (/金幣\s*[:：]\s*\d+/.test(text)) {
+        node.nodeValue = text.replace(/(金幣\s*[:：]\s*)\d+/, '$1' + coins);
+      } else if (/餘額\s*[:：]\s*\d+\s*枚?金幣/.test(text)) {
+        node.nodeValue = text.replace(/(餘額\s*[:：]\s*)\d+(\s*枚?金幣)/, '$1' + coins + '$2');
+      } else if (/Coins\s*[:：]\s*\d+/i.test(text)) {
+        node.nodeValue = text.replace(/(Coins\s*[:：]\s*)\d+/i, '$1' + coins);
+      } else if (/生命值\s*[:：]\s*\d+\s*\/\s*\d+/.test(text)) {
+        node.nodeValue = text.replace(/(生命值\s*[:：]\s*)\d+\s*\/\s*\d+/, '$1' + hp + ' / ' + maxHp);
+      } else if (/HP\s*[:：]\s*\d+\s*\/\s*\d+/i.test(text)) {
+        node.nodeValue = text.replace(/(HP\s*[:：]\s*)\d+\s*\/\s*\d+/i, '$1' + hp + '/' + maxHp);
+      } else if (/^[❤️🖤\s]{2,}$/.test(trimmed) && (trimmed.match(/[❤️🖤]/g) || []).length >= 3) {
+        node.nodeValue = text.replace(/[❤️🖤\s]+/, heartText(hearts));
+      }
+    }
+  }
+
+  function syncCoinCards(coins) {
+    document.querySelectorAll('.bg-surface.rounded-lg.p-md, .bg-surface-container-lowest, .bg-surface-container-high, .rounded-lg, .rounded-xl').forEach(function (card) {
+      var text = card.textContent || '';
+      if (!/總金幣|目前金幣|Coins|金幣餘額|我的金幣/.test(text)) return;
+      var candidates = Array.from(card.querySelectorAll('.text-on-surface, .text-primary, .font-bold, span, p, div'))
+        .filter(function (el) { return /^\d+$/.test((el.textContent || '').trim()); });
+      if (candidates[0]) candidates[0].textContent = coins;
+    });
+  }
+
+  function syncPetDisplays() {
+    if (syncing || !document.body) return;
+    syncing = true;
+    try {
+      var pet = readPet();
+      var coins = pet.coins;
+      var hearts = pet.hearts;
+      var hp = pet.hp;
+      var maxHp = pet.maxHp || 500;
+
+      document.querySelectorAll('.global-coin-display, [data-coin-balance], #pet-coins, #ask-user-coins').forEach(function (el) {
+        el.textContent = coins;
+      });
+
+      document.querySelectorAll('.global-heart-display, [data-heart-count]').forEach(function (el) {
+        el.textContent = hearts;
+      });
+
+      document.querySelectorAll('#pet-hearts-display, .hearts-glow').forEach(function (el) {
+        el.textContent = heartText(hearts);
+      });
+
+      document.querySelectorAll('#pet-hp-text, [data-pet-hp]').forEach(function (el) {
+        el.textContent = hp + '/' + maxHp;
+      });
+
+      document.querySelectorAll('#pet-hp-bar, [data-pet-hp-bar]').forEach(function (el) {
+        el.style.width = Math.max(0, Math.min(100, (hp / maxHp) * 100)) + '%';
+      });
+
+      var aside = document.querySelector('aside');
+      if (aside) {
+        var hpLabel = aside.querySelector('#sidebar-pet-hp');
+        if (!hpLabel) {
+          var heartDiv = aside.querySelector('.flex.items-center.justify-center.gap-xs, .flex.items-center.justify-center.gap-1, .flex.text-error');
+          if (heartDiv && heartDiv.parentNode) {
+            hpLabel = document.createElement('div');
+            hpLabel.id = 'sidebar-pet-hp';
+            hpLabel.className = 'hidden';
+            heartDiv.parentNode.insertBefore(hpLabel, heartDiv.nextSibling);
+          }
+        }
+        if (hpLabel) hpLabel.textContent = '生命值：' + hp + ' / ' + maxHp;
+      }
+
+      syncMaterialHearts(hearts);
+      syncTextNodes(pet);
+      syncCoinCards(coins);
+    } catch (e) {
+      console.warn('PetScholar pet state sync failed:', e);
+    } finally {
+      syncing = false;
+    }
+  }
+
+  function scheduleSync() {
+    if (scheduled) return;
+    scheduled = true;
+    setTimeout(function () {
+      scheduled = false;
+      syncPetDisplays();
+    }, 0);
+  }
+
+  var previousSetItem = localStorage.setItem;
+  localStorage.setItem = function (key, value) {
+    var result = previousSetItem.apply(this, arguments);
+    if (key === 'studypet_pet') {
+      setTimeout(syncPetDisplays, 0);
+      setTimeout(syncPetDisplays, 80);
+    }
+    return result;
+  };
+
+  window.syncPetScholarPetStats = syncPetDisplays;
+  window.syncPetScholarCoins = syncPetDisplays;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', syncPetDisplays);
+  } else {
+    syncPetDisplays();
+  }
+  window.addEventListener('pageshow', syncPetDisplays);
+  window.addEventListener('focus', syncPetDisplays);
+  window.addEventListener('storage', function (e) { if (e.key === 'studypet_pet') syncPetDisplays(); });
+  setInterval(syncPetDisplays, 2500);
+
+  try {
+    var observer = new MutationObserver(function () { if (!syncing) scheduleSync(); });
+    if (document.body) observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    else document.addEventListener('DOMContentLoaded', function () {
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+  } catch (e) {}
+})();
+</script>
+
+
+<script id="coin-icon-adjacent-sync-fix">
+(function () {
+  if (window.__petScholarCoinIconAdjacentSyncFix) return;
+  window.__petScholarCoinIconAdjacentSyncFix = true;
+
+  function readCoins() {
+    try {
+      var pet = JSON.parse(localStorage.getItem('studypet_pet') || '{}');
+      var coins = Number(pet.coins);
+      if (!Number.isFinite(coins)) return null;
+      return Math.max(0, Math.floor(coins));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isCoinBalanceArea(text) {
+    return /生命值|總金幣|目前金幣|金幣餘額|我的金幣|餘額\s*[:：]|Coins\s*[:：]|金幣\s*[:：]/i.test(text || '');
+  }
+
+  function numericOwnText(el) {
+    if (!el || !el.childNodes) return '';
+    var s = '';
+    el.childNodes.forEach(function (node) {
+      if (node.nodeType === Node.TEXT_NODE) s += node.nodeValue;
+    });
+    return s.trim();
+  }
+
+  function syncCoinIconAdjacentNumber() {
+    var coins = readCoins();
+    if (coins === null || !document.body) return;
+
+    var coinIcons = Array.from(document.querySelectorAll('.material-symbols-outlined, .material-icons, .material-symbols-rounded'))
+      .filter(function (el) {
+        var t = (el.textContent || '').trim();
+        return t === 'monetization_on' || t === 'paid' || t === 'payments' || t === 'savings' || t === 'account_balance_wallet';
+      });
+
+    coinIcons.forEach(function (icon) {
+      var container = icon.parentElement;
+      for (var depth = 0; depth < 6 && container && container !== document.body; depth++, container = container.parentElement) {
+        var text = container.textContent || '';
+        if (!isCoinBalanceArea(text)) continue;
+
+        // Avoid product/item price cards. Only balance bars/cards should contain a status label such as 生命值/餘額/總金幣.
+        var candidates = Array.from(container.querySelectorAll('span, strong, b, p, div'))
+          .filter(function (el) {
+            if (el === icon || el.contains(icon)) return false;
+            if (el.closest('button, a')) return false;
+            var own = numericOwnText(el);
+            return /^\d+$/.test(own);
+          });
+
+        if (candidates.length) {
+          candidates[candidates.length - 1].textContent = String(coins);
+          break;
+        }
+      }
+    });
+  }
+
+  window.syncPetScholarCoinIconAdjacentNumber = syncCoinIconAdjacentNumber;
+  document.addEventListener('DOMContentLoaded', syncCoinIconAdjacentNumber);
+  window.addEventListener('pageshow', syncCoinIconAdjacentNumber);
+  window.addEventListener('focus', syncCoinIconAdjacentNumber);
+  window.addEventListener('storage', function (e) { if (e.key === 'studypet_pet') syncCoinIconAdjacentNumber(); });
+  setInterval(syncCoinIconAdjacentNumber, 1200);
+
+  var oldSetItem = localStorage.setItem;
+  localStorage.setItem = function (key, value) {
+    var result = oldSetItem.apply(this, arguments);
+    if (key === 'studypet_pet') {
+      setTimeout(syncCoinIconAdjacentNumber, 0);
+      setTimeout(syncCoinIconAdjacentNumber, 80);
+      setTimeout(syncCoinIconAdjacentNumber, 250);
+    }
+    return result;
+  };
+})();
+</script>
+
+
+<script id="pet-two-line-status-script">
+(function () {
+  function readPetState() {
+    try {
+      var pet = JSON.parse(localStorage.getItem('studypet_pet') || '{}');
+      if (!pet || typeof pet !== 'object') pet = {};
+      return {
+        hp: Number.isFinite(Number(pet.hp)) ? Number(pet.hp) : 500,
+        maxHp: Number.isFinite(Number(pet.maxHp)) ? Number(pet.maxHp) : 500,
+        coins: Number.isFinite(Number(pet.coins)) ? Number(pet.coins) : 0
+      };
+    } catch (e) {
+      return { hp: 500, maxHp: 500, coins: 0 };
+    }
+  }
+
+  function findPetStatusCards() {
+    var cards = [];
+    document.querySelectorAll('aside, #pet-widget-card, .pet-widget-card').forEach(function (scope) {
+      var titles = Array.from(scope.querySelectorAll('h2, h3, h4, strong, .font-headline-md'));
+      titles.forEach(function (title) {
+        var txt = (title.textContent || '').trim();
+        if (txt === '帳戶狀態' || txt === '北科科' || txt === '寵物狀態' || txt.includes('帳戶狀態')) {
+          var card = title.closest('.rounded-xl') || title.closest('div');
+          if (card && !cards.includes(card)) cards.push(card);
+        }
+      });
+    });
+    // Fallback: any aside card containing hearts/favorite and coin text.
+    document.querySelectorAll('aside .rounded-xl, aside .bg-surface, aside .bg-surface-container-lowest').forEach(function (card) {
+      var text = card.textContent || '';
+      if ((text.includes('金幣') || text.includes('生命值')) && card.querySelector('.material-symbols-outlined, [data-heart]')) {
+        if (!cards.includes(card)) cards.push(card);
+      }
+    });
+    return cards;
+  }
+
+  function hideOldInlineStatus(card) {
+    var walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+        var parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (parent.closest('.pet-two-line-status')) return NodeFilter.FILTER_REJECT;
+        if (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    var node;
+    while ((node = walker.nextNode())) nodes.push(node);
+    nodes.forEach(function (node) {
+      if (/生命值\s*[:：]?|金幣\s*[:：]?|\|\s*金幣|｜\s*金幣/.test(node.nodeValue)) {
+        node.nodeValue = '';
+      }
+    });
+    card.querySelectorAll('span, p').forEach(function (el) {
+      if (el.closest('.pet-two-line-status')) return;
+      var text = (el.textContent || '').trim();
+      var hasFavoriteIcon = /favorite|❤️|♡|♥/.test(text) || !!el.querySelector('.material-symbols-outlined');
+      if ((text === '|' || text === '｜' || /^\|$/.test(text)) && !hasFavoriteIcon) {
+        el.style.display = 'none';
+      }
+      if (/^(金幣|生命值)\s*[:：]/.test(text) && !hasFavoriteIcon) {
+        el.style.display = 'none';
+      }
+    });
+  }
+
+  function renderPetTwoLineStatus() {
+    var pet = readPetState();
+    findPetStatusCards().forEach(function (card) {
+      hideOldInlineStatus(card);
+      var block = card.querySelector('.pet-two-line-status');
+      if (!block) {
+        block = document.createElement('div');
+        block.className = 'pet-two-line-status';
+        var btn = card.querySelector('button, a[href*="_6"], a[href*="_7"]');
+        if (btn && btn.parentElement === card) card.insertBefore(block, btn);
+        else card.appendChild(block);
+      }
+      var duplicateHp = card.querySelector('#sidebar-pet-hp');
+      if (duplicateHp) duplicateHp.remove();
+      block.innerHTML =
+        '<div class="pet-status-line">生命值：<span class="pet-status-value pet-hp-inline">' + pet.hp + '</span> / <span class="pet-status-value pet-maxhp-inline">' + pet.maxHp + '</span></div>' +
+        '<div class="pet-status-line">金幣：<span class="pet-status-value global-coin-display pet-coin-inline">' + pet.coins + '</span></div>';
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    renderPetTwoLineStatus();
+    setTimeout(renderPetTwoLineStatus, 120);
+    setTimeout(renderPetTwoLineStatus, 600);
+  });
+  window.addEventListener('storage', renderPetTwoLineStatus);
+  window.addEventListener('pageshow', renderPetTwoLineStatus);
+  window.PetScholarRenderTwoLineStatus = renderPetTwoLineStatus;
+})();
 </script>
 </body>
 </html>

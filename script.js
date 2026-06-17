@@ -148,7 +148,37 @@ function saveState() {
 
 
 // 同步所有頁面中出現的金幣餘額顯示
+
+// 同步主頁與外部 Stitch 分頁的愛心 / 金幣顯示
+function updatePetStatDisplays() {
+  const pet = AppState.pet || {};
+  const maxHp = Number(pet.maxHp || 500);
+  const hp = Math.max(0, Math.min(maxHp, Number(pet.hp || 0)));
+  const hearts = Math.max(0, Math.min(5, Math.ceil(hp / 100)));
+  const coins = Math.max(0, Math.floor(Number(pet.coins || 0)));
+  pet.maxHp = maxHp;
+  pet.hp = hp;
+  pet.hearts = hearts;
+  pet.coins = coins;
+
+  document.querySelectorAll('#pet-coins, #ask-user-coins, .global-coin-display, [data-coin-balance]').forEach(el => {
+    el.textContent = coins;
+  });
+  document.querySelectorAll('#pet-hp-text, [data-pet-hp]').forEach(el => {
+    el.textContent = `${hp}/${maxHp}`;
+  });
+  document.querySelectorAll('#pet-hp-bar, [data-pet-hp-bar]').forEach(el => {
+    el.style.width = `${(hp / maxHp) * 100}%`;
+  });
+  const heartsText = Array.from({ length: 5 }, (_, i) => i < hearts ? '❤️' : '🖤').join('');
+  document.querySelectorAll('#pet-hearts-display, .hearts-glow, .global-heart-display, [data-heart-count]').forEach(el => {
+    el.textContent = el.matches && el.matches('.global-heart-display, [data-heart-count]') ? hearts : heartsText;
+  });
+  if (window.syncPetScholarPetStats) window.syncPetScholarPetStats();
+}
+
 function updateCoinDisplays() {
+  if (typeof updatePetStatDisplays === "function") updatePetStatDisplays();
   const coins = Number(AppState.pet && AppState.pet.coins) || 0;
 
   document.querySelectorAll(".global-coin-display, [data-coin-balance]").forEach(el => {
@@ -454,6 +484,7 @@ function renderUserAndPet() {
 
   // 更新金幣
   document.getElementById("pet-coins").innerText = AppState.pet.coins;
+  if (typeof updatePetStatDisplays === "function") updatePetStatDisplays();
   
   // 套用豪華房間背景
   const petCard = document.getElementById("pet-widget-card");
