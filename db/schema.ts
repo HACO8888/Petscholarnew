@@ -7,6 +7,7 @@ import {
   varchar,
   boolean,
   jsonb,
+  index,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -106,7 +107,12 @@ export const posts = pgTable("post", {
   solved: boolean("solved").default(false).notNull(),
   hidden: boolean("hidden").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [
+  index("post_board_idx").on(t.boardId),
+  index("post_author_idx").on(t.authorId),
+  index("post_author_name_idx").on(t.authorName),
+  index("post_created_idx").on(t.createdAt),
+]);
 
 export const comments = pgTable("comment", {
   id: text("id")
@@ -125,7 +131,12 @@ export const comments = pgTable("comment", {
   isAdopted: boolean("is_adopted").default(false).notNull(),
   hidden: boolean("hidden").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [
+  index("comment_post_idx").on(t.postId),
+  index("comment_parent_idx").on(t.parentId),
+  index("comment_author_idx").on(t.authorId),
+  index("comment_author_name_idx").on(t.authorName),
+]);
 
 export type Board = typeof boards.$inferSelect;
 export type Post = typeof posts.$inferSelect;
@@ -190,6 +201,10 @@ export const studyRooms = pgTable("study_room", {
   subject: text("subject"),
   description: text("description"),
   capacity: integer("capacity").notNull().default(8),
+  // 建立者（用於擁有權：限制建立數、允許建立者刪除）；舊種子房為 null
+  createdBy: text("created_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
@@ -204,7 +219,10 @@ export const studyRoomMembers = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
-  (t) => [primaryKey({ columns: [t.roomId, t.userId] })],
+  (t) => [
+    primaryKey({ columns: [t.roomId, t.userId] }),
+    index("srm_user_idx").on(t.userId),
+  ],
 );
 
 // ---- 檢舉案件（管理後台） ----
@@ -222,7 +240,11 @@ export const reports = pgTable("report", {
   status: varchar("status", { length: 16 }).notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   resolvedAt: timestamp("resolved_at"),
-});
+}, (t) => [
+  index("report_status_idx").on(t.status),
+  index("report_target_idx").on(t.targetType, t.targetId),
+  index("report_created_idx").on(t.createdAt),
+]);
 
 export type StudyRoom = typeof studyRooms.$inferSelect;
 export type Report = typeof reports.$inferSelect;
