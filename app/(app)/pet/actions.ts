@@ -2,11 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { pets, shopItems, inventory } from "@/db/schema";
-import { getOrCreatePet, applyExp, isSameDay, CHECKIN_REWARD } from "@/lib/pet";
+import { getOrCreatePet, applyExp, CHECKIN_REWARD } from "@/lib/pet";
 
 function revalidatePetPages() {
   revalidatePath("/pet/feed");
@@ -32,21 +32,35 @@ export async function buyItem(formData: FormData) {
     .limit(1);
   if (!item) throw new Error("商品不存在");
 
-  const pet = await getOrCreatePet(userId);
-  if (pet.coins < item.price) throw new Error("金幣不足");
+  await getOrCreatePet(userId); // 確保錢包存在
 
-  await db
-    .update(pets)
-    .set({ coins: pet.coins - item.price, updatedAt: new Date() })
-    .where(eq(pets.userId, userId));
+  await db.transaction(async (tx) => {
+    // 配件為一次性物品：已擁有則禁止重複購買（server 端把關，不信任 UI 隱藏鈕）
+    if (item.accessoryType) {
+      const [owned] = await tx
+        .select({ qty: inventory.quantity })
+        .from(inventory)
+        .where(and(eq(inventory.userId, userId), eq(inventory.itemId, itemId)))
+        .limit(1);
+      if (owned && owned.qty > 0) throw new Error("已擁有此配件");
+    }
 
-  await db
-    .insert(inventory)
-    .values({ userId, itemId, quantity: 1 })
-    .onConflictDoUpdate({
-      target: [inventory.userId, inventory.itemId],
-      set: { quantity: sql`${inventory.quantity} + 1` },
-    });
+    // 原子條件式扣款：唯有餘額足夠的列才會被更新，杜絕並發雙重消費 / 負餘額
+    const debited = await tx
+      .update(pets)
+      .set({ coins: sql`${pets.coins} - ${item.price}`, updatedAt: new Date() })
+      .where(and(eq(pets.userId, userId), gte(pets.coins, item.price)))
+      .returning({ coins: pets.coins });
+    if (debited.length === 0) throw new Error("金幣不足");
+
+    await tx
+      .insert(inventory)
+      .values({ userId, itemId, quantity: 1 })
+      .onConflictDoUpdate({
+        target: [inventory.userId, inventory.itemId],
+        set: { quantity: sql`${inventory.quantity} + 1` },
+      });
+  });
 
   revalidatePetPages();
 }
@@ -63,50 +77,71 @@ export async function feedPet(formData: FormData) {
     .limit(1);
   if (!item || item.type !== "food") throw new Error("此物品無法餵食");
 
-  // 原子扣除一份庫存
-  const consumed = await db
-    .update(inventory)
-    .set({ quantity: sql`${inventory.quantity} - 1` })
-    .where(
-      and(
-        eq(inventory.userId, userId),
-        eq(inventory.itemId, itemId),
-        gt(inventory.quantity, 0),
-      ),
-    )
-    .returning({ quantity: inventory.quantity });
-  if (consumed.length === 0) throw new Error("庫存不足");
+  await getOrCreatePet(userId); // 確保寵物存在
 
-  const pet = await getOrCreatePet(userId);
-  const newHp = Math.min(pet.maxHp, pet.hp + item.hpRestore);
-  const leveled = applyExp(pet.level, pet.exp, pet.maxHp, item.expGain);
-  const cappedHp = Math.min(newHp, leveled.maxHp);
+  await db.transaction(async (tx) => {
+    // 原子扣除一份庫存
+    const consumed = await tx
+      .update(inventory)
+      .set({ quantity: sql`${inventory.quantity} - 1` })
+      .where(
+        and(
+          eq(inventory.userId, userId),
+          eq(inventory.itemId, itemId),
+          gt(inventory.quantity, 0),
+        ),
+      )
+      .returning({ quantity: inventory.quantity });
+    if (consumed.length === 0) throw new Error("庫存不足");
 
-  await db
-    .update(pets)
-    .set({
-      hp: cappedHp,
-      exp: leveled.exp,
-      level: leveled.level,
-      maxHp: leveled.maxHp,
-      updatedAt: new Date(),
-    })
-    .where(eq(pets.userId, userId));
+    // 鎖定寵物列，避免並發餵食造成成長 lost-update
+    const [pet] = await tx
+      .select()
+      .from(pets)
+      .where(eq(pets.userId, userId))
+      .for("update");
+    if (!pet) throw new Error("寵物不存在");
+
+    const leveled = applyExp(pet.level, pet.exp, pet.maxHp, item.expGain);
+    const newHp = Math.min(leveled.maxHp, pet.hp + item.hpRestore);
+
+    await tx
+      .update(pets)
+      .set({
+        hp: newHp,
+        exp: leveled.exp,
+        level: leveled.level,
+        maxHp: leveled.maxHp,
+        updatedAt: new Date(),
+      })
+      .where(eq(pets.userId, userId));
+  });
 
   revalidatePetPages();
 }
 
 export async function claimCheckin() {
   const userId = await requireUserId();
-  const pet = await getOrCreatePet(userId);
+  await getOrCreatePet(userId);
   const now = new Date();
-  if (isSameDay(pet.lastCheckIn, now)) {
-    return; // 今天已簽到
-  }
-  await db
+  // 以台灣時區（Asia/Taipei = 固定 UTC+8）計算「今天」起點，避免 server UTC 造成的翻日誤差
+  const taipei = new Date(now.getTime() + 8 * 3600 * 1000);
+  const startOfTodayTaipei = new Date(
+    Date.UTC(taipei.getUTCFullYear(), taipei.getUTCMonth(), taipei.getUTCDate()) -
+      8 * 3600 * 1000,
+  );
+  // 原子條件式：唯有今天尚未簽到（lastCheckIn 為空或早於今日起點）的列才會被更新並發獎
+  const res = await db
     .update(pets)
-    .set({ coins: pet.coins + CHECKIN_REWARD, lastCheckIn: now, updatedAt: now })
-    .where(eq(pets.userId, userId));
+    .set({ coins: sql`${pets.coins} + ${CHECKIN_REWARD}`, lastCheckIn: now, updatedAt: now })
+    .where(
+      and(
+        eq(pets.userId, userId),
+        or(isNull(pets.lastCheckIn), lt(pets.lastCheckIn, startOfTodayTaipei)),
+      ),
+    )
+    .returning({ userId: pets.userId });
+  if (res.length === 0) return; // 今天已簽到
   revalidatePetPages();
 }
 
@@ -132,13 +167,14 @@ const HEAL_COST = 20;
 
 export async function healPet() {
   const userId = await requireUserId();
-  const pet = await getOrCreatePet(userId);
-  if (pet.coins < HEAL_COST) throw new Error("金幣不足");
-
-  await db
+  await getOrCreatePet(userId); // 確保寵物存在
+  // 原子條件式：補滿 HP 並扣費，唯有金幣足夠的列才更新 → 杜絕並發雙重治療 / 負餘額
+  const res = await db
     .update(pets)
-    .set({ hp: pet.maxHp, coins: pet.coins - HEAL_COST, updatedAt: new Date() })
-    .where(eq(pets.userId, userId));
+    .set({ hp: sql`${pets.maxHp}`, coins: sql`${pets.coins} - ${HEAL_COST}`, updatedAt: new Date() })
+    .where(and(eq(pets.userId, userId), gte(pets.coins, HEAL_COST)))
+    .returning({ userId: pets.userId });
+  if (res.length === 0) throw new Error("金幣不足");
 
   revalidatePetPages();
 }

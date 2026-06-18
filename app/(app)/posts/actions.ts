@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, comments, boards, pets, reports } from "@/db/schema";
@@ -17,10 +17,11 @@ function str(formData: FormData, key: string): string {
 export async function createPost(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const userId = session.user.id;
 
   const boardId = str(formData, "boardId");
   const title = str(formData, "title").slice(0, 200);
-  const content = str(formData, "content");
+  const content = str(formData, "content").slice(0, 20000);
   const department = str(formData, "department") || null;
   const tags = str(formData, "tags")
     .split(/[,，]/)
@@ -43,18 +44,38 @@ export async function createPost(formData: FormData) {
     .limit(1);
   if (!board) throw new Error("看板不存在");
 
+  await getOrCreatePet(userId); // 確保發問者錢包存在
+
   const id = crypto.randomUUID();
-  await db.insert(posts).values({
-    id,
-    boardId,
-    authorId: session.user.id,
-    authorName: session.user.name ?? "使用者",
-    title,
-    content,
-    department,
-    tags,
-    bounty,
+  await db.transaction(async (tx) => {
+    // 懸賞採「託管」制：發文時先原子扣除發問者金幣（餘額不足則中止），
+    // 採納時再把這筆託管轉給解答者 → 金幣守恆，杜絕無中生有的增發。
+    if (bounty > 0) {
+      const debited = await tx
+        .update(pets)
+        .set({ coins: sql`${pets.coins} - ${bounty}`, updatedAt: new Date() })
+        .where(and(eq(pets.userId, userId), gte(pets.coins, bounty)))
+        .returning({ userId: pets.userId });
+      if (debited.length === 0) throw new Error("金幣不足以設定此懸賞");
+    }
+    await tx.insert(posts).values({
+      id,
+      boardId,
+      authorId: userId,
+      authorName: session.user.name ?? "使用者",
+      title,
+      content,
+      department,
+      tags,
+      bounty,
+    });
   });
+
+  // 重新驗證所有會顯示此貼文的清單頁，避免新貼文在清單上過期
+  revalidatePath("/");
+  revalidatePath("/boards");
+  revalidatePath(`/boards/${boardId}`);
+  revalidatePath("/discussion");
 
   redirect(`/posts/${id}`);
 }
@@ -65,7 +86,7 @@ export async function addComment(formData: FormData) {
 
   const postId = str(formData, "postId");
   const parentId = str(formData, "parentId") || null;
-  const content = str(formData, "content");
+  const content = str(formData, "content").slice(0, 20000);
 
   if (!postId || !content) throw new Error("回覆內容不可為空");
 
@@ -127,6 +148,7 @@ export async function reportPost(formData: FormData) {
 export async function adoptAnswer(formData: FormData) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const userId = session.user.id;
 
   const postId = str(formData, "postId");
   const commentId = str(formData, "commentId");
@@ -134,21 +156,13 @@ export async function adoptAnswer(formData: FormData) {
 
   // 僅發問者可採納
   const [post] = await db
-    .select({
-      authorId: posts.authorId,
-      bounty: posts.bounty,
-      solved: posts.solved,
-    })
+    .select({ authorId: posts.authorId })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
   if (!post) throw new Error("文章不存在");
-  if (post.authorId !== session.user.id) {
+  if (post.authorId !== userId) {
     throw new Error("只有發問者可以採納解答");
-  }
-  // 以 post.solved 作為唯一發放閘門：已解決即中止，避免換留言重複發放懸賞
-  if (post.solved) {
-    throw new Error("此提問已採納解答");
   }
 
   const [target] = await db
@@ -158,34 +172,57 @@ export async function adoptAnswer(formData: FormData) {
     .limit(1);
   if (!target) throw new Error("回覆不存在");
 
-  await db
-    .update(comments)
-    .set({ isAdopted: true })
-    .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
-  await db.update(posts).set({ solved: true }).where(eq(posts.id, postId));
+  // 解答者錢包先確保存在（交易外，避免巢狀建立）
+  const rewardTo =
+    target.authorId && target.authorId !== userId ? target.authorId : null;
+  if (rewardTo) await getOrCreatePet(rewardTo);
 
-  // 從未解決→解決的這一次才發放：金幣（懸賞）＋經驗值給解答者（不發給自己）
-  if (target.authorId && target.authorId !== session.user.id) {
-    const answererPet = await getOrCreatePet(target.authorId);
-    const grown = applyExp(
-      answererPet.level,
-      answererPet.exp,
-      answererPet.maxHp,
-      ADOPT_EXP,
-    );
-    await db
-      .update(pets)
-      .set({
-        coins: answererPet.coins + Math.max(0, post.bounty),
-        exp: grown.exp,
-        level: grown.level,
-        maxHp: grown.maxHp,
-        updatedAt: new Date(),
-      })
-      .where(eq(pets.userId, target.authorId));
-  }
+  await db.transaction(async (tx) => {
+    // 以條件式 UPDATE 作為原子領取閘門：唯有把 solved false→true 的那一個請求才會繼續發放，
+    // 杜絕並發 / 雙擊造成的重複發放。bounty 取自被領取的那一列（已於發文時託管扣款）。
+    const claimed = await tx
+      .update(posts)
+      .set({ solved: true })
+      .where(and(eq(posts.id, postId), eq(posts.solved, false)))
+      .returning({ bounty: posts.bounty });
+    if (claimed.length === 0) throw new Error("此提問已採納解答");
+
+    await tx
+      .update(comments)
+      .set({ isAdopted: true })
+      .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
+
+    if (rewardTo) {
+      // 鎖定解答者寵物列，避免成長與金幣 lost-update
+      const [answerer] = await tx
+        .select()
+        .from(pets)
+        .where(eq(pets.userId, rewardTo))
+        .for("update");
+      if (answerer) {
+        const grown = applyExp(
+          answerer.level,
+          answerer.exp,
+          answerer.maxHp,
+          ADOPT_EXP,
+        );
+        await tx
+          .update(pets)
+          .set({
+            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty)}`,
+            exp: grown.exp,
+            level: grown.level,
+            maxHp: grown.maxHp,
+            updatedAt: new Date(),
+          })
+          .where(eq(pets.userId, rewardTo));
+      }
+    }
+  });
 
   revalidatePath(`/posts/${postId}`);
+  revalidatePath("/discussion");
+  revalidatePath("/boards");
 }
 
 /**
@@ -199,20 +236,18 @@ export async function verifyAnswerAsTA(formData: FormData) {
   if (session.user.role !== "ta") {
     throw new Error("只有課程助教可以認證正解");
   }
+  const userId = session.user.id;
 
   const postId = str(formData, "postId");
   const commentId = str(formData, "commentId");
   if (!postId || !commentId) throw new Error("缺少參數");
 
   const [post] = await db
-    .select({ bounty: posts.bounty, solved: posts.solved })
+    .select({ id: posts.id })
     .from(posts)
     .where(eq(posts.id, postId))
     .limit(1);
   if (!post) throw new Error("文章不存在");
-  if (post.solved) {
-    throw new Error("此提問已採納解答");
-  }
 
   const [target] = await db
     .select({ authorId: comments.authorId })
@@ -221,33 +256,54 @@ export async function verifyAnswerAsTA(formData: FormData) {
     .limit(1);
   if (!target) throw new Error("回覆不存在");
 
-  await db
-    .update(comments)
-    .set({ isAdopted: true })
-    .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
-  await db.update(posts).set({ solved: true }).where(eq(posts.id, postId));
+  const rewardTo =
+    target.authorId && target.authorId !== userId ? target.authorId : null;
+  if (rewardTo) await getOrCreatePet(rewardTo);
 
-  if (target.authorId && target.authorId !== session.user.id) {
-    const answererPet = await getOrCreatePet(target.authorId);
-    const grown = applyExp(
-      answererPet.level,
-      answererPet.exp,
-      answererPet.maxHp,
-      ADOPT_EXP,
-    );
-    await db
-      .update(pets)
-      .set({
-        coins: answererPet.coins + Math.max(0, post.bounty),
-        exp: grown.exp,
-        level: grown.level,
-        maxHp: grown.maxHp,
-        updatedAt: new Date(),
-      })
-      .where(eq(pets.userId, target.authorId));
-  }
+  await db.transaction(async (tx) => {
+    // 與 adoptAnswer 相同的原子領取閘門：bounty 已於發文時託管扣款，此處僅轉帳，發放一次
+    const claimed = await tx
+      .update(posts)
+      .set({ solved: true })
+      .where(and(eq(posts.id, postId), eq(posts.solved, false)))
+      .returning({ bounty: posts.bounty });
+    if (claimed.length === 0) throw new Error("此提問已採納解答");
+
+    await tx
+      .update(comments)
+      .set({ isAdopted: true })
+      .where(and(eq(comments.id, commentId), eq(comments.postId, postId)));
+
+    if (rewardTo) {
+      const [answerer] = await tx
+        .select()
+        .from(pets)
+        .where(eq(pets.userId, rewardTo))
+        .for("update");
+      if (answerer) {
+        const grown = applyExp(
+          answerer.level,
+          answerer.exp,
+          answerer.maxHp,
+          ADOPT_EXP,
+        );
+        await tx
+          .update(pets)
+          .set({
+            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty)}`,
+            exp: grown.exp,
+            level: grown.level,
+            maxHp: grown.maxHp,
+            updatedAt: new Date(),
+          })
+          .where(eq(pets.userId, rewardTo));
+      }
+    }
+  });
 
   revalidatePath(`/posts/${postId}`);
+  revalidatePath("/discussion");
+  revalidatePath("/boards");
 }
 
 export async function reportComment(formData: FormData) {
