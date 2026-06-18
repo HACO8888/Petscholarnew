@@ -149,7 +149,8 @@ export default async function LeaderboardPage({
         : await loadWeekly();
 
   const podium = ranked.slice(0, 3);
-  const listRows = ranked.slice(3, 7);
+  // 顯示前三名以外的全部名次（查詢已 limit 20），先前只切 3..7 會把第 8 名以後靜默丟棄
+  const listRows = ranked.slice(3);
 
   // 當前使用者成就（依真實資料計算，對齊 legacy 六項；門檻以真實 DB 來源定義）
   let achievements:
@@ -307,7 +308,7 @@ export default async function LeaderboardPage({
       {/* Header Section */}
       <header className="flex flex-col gap-sm">
         <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
-          本週榮譽榜
+          累計榮譽榜
         </h1>
         <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
           表彰在解答與探索領域展現卓越成就的學習者。展現你的實力，解鎖專屬成就勳章。

@@ -3,6 +3,7 @@ import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { posts, boards, comments } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
+import { toPlainPreview } from "@/lib/rich-content";
 
 const FILTERS = [
   { key: "all", label: "全部" },
@@ -275,7 +276,7 @@ export default async function DiscussionPage({
                     {post.title}
                   </h2>
                   <p className="text-on-surface-variant font-body-md text-body-md line-clamp-2 mb-md break-words">
-                    {post.content}
+                    {toPlainPreview(post.content)}
                   </p>
                   <div className="flex flex-wrap gap-xs">
                     <span className="px-sm py-[2px] bg-secondary-container text-on-secondary-container rounded-sm font-label-md text-label-md text-[11px]">
