@@ -229,10 +229,19 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 150px;
-  height: 150px;
-  background: conic-gradient(from 0deg, rgba(75, 97, 114, 0.15) 0%, transparent 50%);
-  transform-origin: top left;
+  width: 300px;
+  height: 300px;
+  margin-top: -150px;
+  margin-left: -150px;
+  border-radius: 50%;
+  /* 旋轉的圓形雷達光束（被容器與自身圓形裁切，不會再是方塊） */
+  background: conic-gradient(
+    from 0deg,
+    rgba(75, 97, 114, 0.3),
+    rgba(75, 97, 114, 0.06) 35deg,
+    transparent 70deg,
+    transparent 360deg
+  );
   animation: radar-sweep-anim 4s linear infinite;
   pointer-events: none;
 }
