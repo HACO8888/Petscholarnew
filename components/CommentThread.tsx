@@ -117,7 +117,7 @@ function CommentItem({
       </div>
 
       <div
-        className="text-body-md leading-6 text-on-surface-variant"
+        className="rich-content text-body-md leading-6 text-on-surface-variant"
         dangerouslySetInnerHTML={{ __html: node.contentHtml }}
       />
 
