@@ -51,7 +51,7 @@ export default async function ShopPage() {
     for (const r of inv) owned.set(r.itemId, r.quantity);
   }
 
-  const foods = items.filter((item) => item.type !== "accessory");
+  const foods = items.filter((item) => item.type === "food");
   const accessories = items.filter((item) => item.type === "accessory");
   const ownedAccs = accessories.filter((item) => (owned.get(item.id) ?? 0) > 0);
 

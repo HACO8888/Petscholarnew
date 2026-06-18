@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { reports, posts, comments } from "@/db/schema";
@@ -28,39 +28,62 @@ export async function blockReport(formData: FormData) {
   const id = String(formData.get("reportId") ?? "");
   if (!id) throw new Error("缺少案件");
 
-  const [rep] = await db.select().from(reports).where(eq(reports.id, id)).limit(1);
-  if (!rep) throw new Error("案件不存在");
-  if (rep.status !== "pending") return;
+  // 隱藏內容與標記案件在同一交易內完成，避免部分失敗造成「已隱藏但案件仍 pending」之類的不一致。
+  const result = await db.transaction(async (tx) => {
+    const [rep] = await tx
+      .select()
+      .from(reports)
+      .where(eq(reports.id, id))
+      .limit(1);
+    if (!rep) throw new Error("案件不存在");
+    if (rep.status !== "pending") return null;
 
-  if (rep.targetType === "post") {
-    // 隱藏被檢舉貼文；檢查實際是否有內容被隱藏，避免日誌與處置不符。
-    const updated = await db
-      .update(posts)
-      .set({ hidden: true })
-      .where(eq(posts.id, rep.targetId))
-      .returning({ id: posts.id, boardId: posts.boardId });
-    if (updated.length === 0) {
-      throw new Error("被檢舉的提問已不存在，無法封鎖");
+    let boardId: string | undefined;
+    let postId: string | undefined;
+
+    if (rep.targetType === "post") {
+      const updated = await tx
+        .update(posts)
+        .set({ hidden: true })
+        .where(eq(posts.id, rep.targetId))
+        .returning({ boardId: posts.boardId });
+      if (updated.length === 0) {
+        throw new Error("被檢舉的提問已不存在，無法封鎖");
+      }
+      boardId = updated[0].boardId;
+    } else {
+      const updated = await tx
+        .update(comments)
+        .set({ hidden: true })
+        .where(eq(comments.id, rep.targetId))
+        .returning({ postId: comments.postId });
+      if (updated.length === 0) {
+        throw new Error("被檢舉的留言已不存在，無法封鎖");
+      }
+      postId = updated[0].postId;
     }
-    revalidatePostSurfaces(rep.targetId, updated[0].boardId);
-  } else {
-    // 隱藏被檢舉留言；需取得其所在貼文以重新驗證該詳情頁。
-    const updated = await db
-      .update(comments)
-      .set({ hidden: true })
-      .where(eq(comments.id, rep.targetId))
-      .returning({ id: comments.id, postId: comments.postId });
-    if (updated.length === 0) {
-      throw new Error("被檢舉的留言已不存在，無法封鎖");
-    }
-    revalidatePostSurfaces(updated[0].postId);
+
+    // 同一目標的所有待處理檢舉一併標記為已封鎖，避免重複案件懸空在待處理清單。
+    await tx
+      .update(reports)
+      .set({ status: "blocked", resolvedAt: new Date() })
+      .where(
+        and(
+          eq(reports.targetType, rep.targetType),
+          eq(reports.targetId, rep.targetId),
+          eq(reports.status, "pending"),
+        ),
+      );
+
+    return { targetType: rep.targetType, targetId: rep.targetId, boardId, postId };
+  });
+
+  if (!result) return; // 已被其他人處理
+  if (result.targetType === "post") {
+    revalidatePostSurfaces(result.targetId, result.boardId);
+  } else if (result.postId) {
+    revalidatePostSurfaces(result.postId);
   }
-
-  await db
-    .update(reports)
-    .set({ status: "blocked", resolvedAt: new Date() })
-    .where(eq(reports.id, id));
-
   revalidatePath("/admin");
 }
 
