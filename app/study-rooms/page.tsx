@@ -21,7 +21,7 @@ export default async function StudyRoomsPage() {
     .from(studyRooms)
     .orderBy(asc(studyRooms.sortOrder));
 
-  // 各房成員（真實使用者名稱），用於「當前人員」列表
+  // 各房成員（真實使用者），用於堆疊頭像
   const memberRows = await db
     .select({
       roomId: studyRoomMembers.roomId,
@@ -52,299 +52,338 @@ export default async function StudyRoomsPage() {
     joined = new Set(mine.map((m) => m.roomId));
   }
 
-  // 雷達為裝飾性掃描動畫，靜態呈現附近讀書據點（非真人資料）
-  const radarPins = [
-    { id: "pin-lib", name: "K書中心", x: 32, y: 28, icon: "📖" },
-    { id: "pin-ee", name: "電機系自習室", x: 72, y: 44, icon: "⚡" },
-    { id: "pin-red", name: "紅樓咖啡館", x: 55, y: 72, icon: "🏫" },
-  ];
-
   return (
-    <section id="sect-radar">
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-.radar-circle {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  border: 1px solid rgba(75, 97, 114, 0.3);
-  border-radius: 50%;
-  animation: radar-pulse 3s linear infinite;
-  pointer-events: none;
-}
-.radar-circle.circle-1 { width: 100px; height: 100px; animation-delay: 0s; }
-.radar-circle.circle-2 { width: 200px; height: 200px; animation-delay: 1s; }
-.radar-circle.circle-3 { width: 300px; height: 300px; animation-delay: 2s; }
-@keyframes radar-pulse {
-  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
-  100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
-}
-.radar-sweep {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 150px;
-  height: 150px;
-  background: conic-gradient(from 0deg, rgba(75, 97, 114, 0.15) 0%, transparent 50%);
-  transform-origin: top left;
-  animation: radar-sweep-anim 4s linear infinite;
-  pointer-events: none;
-}
-@keyframes radar-sweep-anim {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-.radar-scanner-container {
-  position: relative;
-  width: 100%;
-  height: 320px;
-  background: #f0f2f5;
-  border: 1px solid #c3c7cc;
-  border-radius: 16px;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-.dark .radar-scanner-container {
-  background: #090e18;
-  border-color: rgba(255, 255, 255, 0.08);
-}
-.radar-pin {
-  position: absolute;
-  cursor: pointer;
-  transform: translate(-50%, -50%);
-  transition: transform 0.2s;
-}
-.radar-pin:hover {
-  transform: translate(-50%, -50%) scale(1.2);
-}
-`,
-        }}
-      />
-      <div className="mb-lg">
-        <h1 className="font-semibold text-headline-lg text-on-background">自習室</h1>
-        <p className="text-secondary text-body-md">加入自習小組，與同儕一起進步、為寵物賺取經驗！</p>
-      </div>
+    <div className="space-y-xl">
+      {/* Page Header */}
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">
+            自習室
+          </h1>
+          <p className="font-body-md text-body-md text-secondary">
+            加入自習室與其他同學一起專注學習
+          </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-sm bg-surface-container px-md py-sm rounded-full shadow-sm">
+          <span className="material-symbols-outlined text-tertiary">
+            account_balance_wallet
+          </span>
+          <span className="font-label-md text-label-md text-on-surface">
+            餘額: 120 枚金幣
+          </span>
+        </div>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-lg items-start">
-        {/* Scanner Card */}
-        <div className="lg:col-span-5 bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-          <h3 className="font-bold text-body-lg text-on-surface mb-md flex items-center gap-1">
-            <span className="material-symbols-outlined text-primary">radar</span> 一起讀書雷達
-          </h3>
-
-          <div className="radar-scanner-container relative">
-            <div className="radar-circle circle-1" />
-            <div className="radar-circle circle-2" />
-            <div className="radar-circle circle-3" />
-            <div className="radar-sweep" />
-            <div className="radar-pins-container" id="radar-pins">
-              {radarPins.map((p) => (
-                <div
-                  key={p.id}
-                  className="radar-pin text-xl"
-                  style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                  title={p.name}
-                >
-                  {p.icon}
-                </div>
-              ))}
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center font-bold text-xs text-primary dark:text-primary-fixed bg-surface-container/10 pointer-events-none text-center">
-              🏫
-              <br />
-              北科大
-            </div>
+      {/* Study Radar Section */}
+      <section className="bg-surface-container-low rounded-xl p-lg border border-outline-variant/50">
+        <div className="flex items-center justify-between mb-md">
+          <div className="flex items-center gap-sm">
+            <span className="material-symbols-outlined text-primary">radar</span>
+            <h2 className="font-headline-md text-headline-md text-on-surface">
+              學習雷達
+            </h2>
+            <span className="bg-primary-container text-on-primary-container px-2 py-0.5 rounded-full font-label-md text-[10px]">
+              附近在線 24 人
+            </span>
           </div>
-
-          <div className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md py-2.5 rounded-lg mt-md shadow-sm transition-all flex items-center justify-center gap-1">
-            <span className="material-symbols-outlined">refresh</span> 重新掃描附近讀書夥伴
+          <button className="text-primary hover:underline font-label-md text-label-md">
+            查看全部
+          </button>
+        </div>
+        <div className="flex gap-md overflow-x-auto hide-scrollbar pb-sm">
+          {/* Radar Item 1 */}
+          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
+            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
+              { }
+              <img
+                alt="Student 1"
+                className="w-full h-full rounded-full object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgxMHO6xe4zUswzQvFNoe85-NrjfXlpT91Lv4XcLSKWLz1ZjW1dc_DEFcCJbEQXRUF9VnnicIWemKTBkdByfMNTSXF6Q8dbO-AVEGp_xIRHfPwmoY-R6Xe8wvbOOgNgVRxC-NmZ1t2fQhTbQUvz4yjwB5m-i_ojzmmRPUuxcW4DKxaPf4fZpApVYSvt-QlE4_wUopPObW84JlD6UC_D2u-gVWU1C2cCuqCMnUIAngqeEYXyPMu6hlGXa2hT-otlxUlQVaFWD_vpHVr"
+              />
+              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#4ade80] rounded-full border-2 border-surface" />
+            </div>
+            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
+              Alice
+            </span>
+          </div>
+          {/* Radar Item 2 */}
+          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
+            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
+              { }
+              <img
+                alt="Student 2"
+                className="w-full h-full rounded-full object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuwwTybjO4ML4U7OYzYl8S6-4K8tOtMz08IZZqKXtyI3fios2UykUf0enLDDoY4TR0vKKQAKNKrrvbX9f6WJx_wZL6_C8wl7ZkHPQfzacRfp2LAh4x7B-I_GK0TeKgs9CUCbZWwJi9MCoG1QuKLxmR_rXe2tiVjMJVBY18eHJsvGsVWoVqywAg99ojg-JnZiLlr0H2mngsiusXyCrNxPSYbIfZAf5Ug_yq4gTSxhFHtdCnQMDswrG8e_t97c0WG1W1XAbw29Hm2FeN"
+              />
+              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#4ade80] rounded-full border-2 border-surface" />
+            </div>
+            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
+              Bob M.
+            </span>
+          </div>
+          {/* Radar Item 3 */}
+          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group opacity-60 hover:opacity-100 transition-opacity">
+            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-secondary transition-colors">
+              <div className="w-full h-full rounded-full bg-secondary-container flex items-center justify-center text-secondary">
+                <span className="material-symbols-outlined">person</span>
+              </div>
+              <div className="absolute bottom-1 right-1 w-3 h-3 bg-secondary rounded-full border-2 border-surface" />
+            </div>
+            <span className="font-label-md text-label-md text-secondary mt-xs truncate w-full text-center">
+              Charlie
+            </span>
+          </div>
+          {/* Radar Item 4 */}
+          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
+            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
+              { }
+              <img
+                alt="Student 4"
+                className="w-full h-full rounded-full object-cover"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbrOvwbntl_YpDeGO76BqUGUVtrU2GHssDtmHVh8fBLmcvj0pvF5FSBH9E-LPNmP2OpTPIDFaTDed-bZLm0AQcwpquASQdq1LwKwKjADHSBaYa29Ck68vEmkbO1CM1ymm354mv4i4wuCkmr4PS3lrxG2TX1u9C0YnqQEyeBs91xRjqL9042NvkQvSeqnj84WLWheVMMIwaMVLSf4uiIGcljz7XxbFz5zxE4FbnGxty-deaPNDbIOTbxTgLz6kdVKvS9fZlvKLT3OgV"
+              />
+              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#facc15] rounded-full border-2 border-surface" />
+            </div>
+            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
+              David
+            </span>
           </div>
         </div>
+      </section>
 
-        {/* Active Study Rooms list */}
-        <div className="lg:col-span-7 bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
-          <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-3">
-            <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
-              <span className="material-symbols-outlined text-primary">meeting_room</span> 活躍中的讀書小組
-            </h3>
-            {userId ? (
-              <details className="relative">
-                <summary className="list-none cursor-pointer bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-0.5 transition-all shadow-sm">
-                  <span className="material-symbols-outlined text-xs">add</span> 發起邀約
-                </summary>
-                <form
-                  action={createRoom}
-                  className="absolute right-0 z-10 mt-sm w-80 bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/40 shadow-xl p-md space-y-md"
-                >
-                  <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
-                    <span>📡</span> 發起邀約
-                  </h3>
-                  <div>
-                    <label
-                      htmlFor="room-name"
-                      className="block text-xs font-bold text-secondary mb-1"
-                    >
-                      自習室名稱
-                    </label>
-                    <input
-                      id="room-name"
-                      name="name"
-                      type="text"
-                      required
-                      maxLength={80}
-                      placeholder="例：微積分期末衝刺營"
-                      className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="room-subject"
-                      className="block text-xs font-bold text-secondary mb-1"
-                    >
-                      科目 / 主題（選填）
-                    </label>
-                    <input
-                      id="room-subject"
-                      name="subject"
-                      type="text"
-                      maxLength={40}
-                      placeholder="例：微積分"
-                      className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="room-description"
-                      className="block text-xs font-bold text-secondary mb-1"
-                    >
-                      說明（選填）
-                    </label>
-                    <input
-                      id="room-description"
-                      name="description"
-                      type="text"
-                      maxLength={120}
-                      placeholder="例：專注模式，請勿開麥。"
-                      className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="room-capacity"
-                      className="block text-xs font-bold text-secondary mb-1"
-                    >
-                      人數上限
-                    </label>
-                    <input
-                      id="room-capacity"
-                      name="capacity"
-                      type="number"
-                      min={2}
-                      max={12}
-                      defaultValue={8}
-                      className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-0.5 transition-all shadow-sm"
-                  >
-                    建立並加入
-                  </button>
-                </form>
-              </details>
-            ) : (
-              <Link
-                href="/login"
-                className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-0.5 transition-all shadow-sm"
-              >
-                <span className="material-symbols-outlined text-xs">add</span> 登入以發起
-              </Link>
-            )}
+      {/* Active Study Rooms */}
+      <section>
+        <div className="flex items-center justify-between mb-md">
+          <div className="flex items-center gap-sm">
+            <span className="material-symbols-outlined text-primary">
+              meeting_room
+            </span>
+            <h2 className="font-headline-md text-headline-md text-on-surface">
+              活躍自習室
+            </h2>
           </div>
-
-          <div className="space-y-md" id="study-rooms-list">
-            {rooms.length === 0 ? (
-              <p className="text-[11px] text-secondary">目前沒有活躍中的讀書小組。</p>
-            ) : (
-              rooms.map((room) => {
-                const isMember = joined.has(room.id);
-                const full = room.members >= room.capacity && !isMember;
-                const roomMembers = membersByRoom.get(room.id) ?? [];
-                const participants = roomMembers
-                  .map((m) => m.name ?? "成員")
-                  .join("、");
-                return (
-                  <div
-                    key={room.id}
-                    className="bg-surface-container-low dark:bg-surface p-md rounded-xl border border-outline-variant/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-md"
-                    id={`room-card-${room.id}`}
+          {userId ? (
+            <details className="relative">
+              <summary className="list-none cursor-pointer px-md py-xs bg-surface-container text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors shadow-sm flex items-center gap-xs">
+                <span className="material-symbols-outlined text-[16px]">add</span>{" "}
+                建立房間
+              </summary>
+              <form
+                action={createRoom}
+                className="absolute right-0 z-10 mt-sm w-80 bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/40 shadow-xl p-md space-y-md"
+              >
+                <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
+                  <span>📡</span> 發起課業共讀邀約
+                </h3>
+                <div>
+                  <label
+                    htmlFor="room-name"
+                    className="block text-xs font-bold text-secondary mb-1"
                   >
-                    <div className="flex-grow space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-body-lg text-on-surface">
-                          {room.subject || room.name}
-                        </h4>
-                        {room.members >= room.capacity && (
-                          <span className="bg-red-100 text-red-700 px-1.5 py-0.2 rounded text-[9px] font-bold">
-                            滿員
+                    自習室名稱
+                  </label>
+                  <input
+                    id="room-name"
+                    name="name"
+                    type="text"
+                    required
+                    maxLength={80}
+                    placeholder="例：微積分期末衝刺營"
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="room-subject"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    科目 / 主題（選填）
+                  </label>
+                  <input
+                    id="room-subject"
+                    name="subject"
+                    type="text"
+                    maxLength={40}
+                    placeholder="例：微積分"
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="room-description"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    說明（選填）
+                  </label>
+                  <input
+                    id="room-description"
+                    name="description"
+                    type="text"
+                    maxLength={120}
+                    placeholder="例：專注模式，請勿開麥。"
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="room-capacity"
+                    className="block text-xs font-bold text-secondary mb-1"
+                  >
+                    人數上限
+                  </label>
+                  <input
+                    id="room-capacity"
+                    name="capacity"
+                    type="number"
+                    min={2}
+                    max={12}
+                    defaultValue={8}
+                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-0.5 transition-all shadow-sm"
+                >
+                  建立並加入
+                </button>
+              </form>
+            </details>
+          ) : (
+            <Link
+              href="/login"
+              className="px-md py-xs bg-surface-container text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors shadow-sm flex items-center gap-xs no-underline"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>{" "}
+              登入以建立
+            </Link>
+          )}
+        </div>
+
+        {rooms.length === 0 ? (
+          <p className="font-body-md text-body-md text-secondary">
+            目前沒有活躍自習室。
+          </p>
+        ) : (
+          <div
+            id="study-rooms-grid"
+            className="grid grid-cols-1 md:grid-cols-2 gap-md"
+          >
+            {rooms.map((room, idx) => {
+              const isMember = joined.has(room.id);
+              const full = room.members >= room.capacity && !isMember;
+              const isFull = room.members >= room.capacity;
+              const roomMembers = membersByRoom.get(room.id) ?? [];
+              const shownMembers = roomMembers.slice(0, 2);
+              const extra = room.members - shownMembers.length;
+              const isHot = idx === 0;
+              return (
+                <div
+                  key={room.id}
+                  id={`room-card-${room.id}`}
+                  className="bg-surface-bright rounded-xl p-md border border-outline-variant shadow-sm hover:shadow-md transition-shadow group flex items-start gap-md"
+                >
+                  <div className="w-16 h-16 rounded-lg bg-primary-container flex-shrink-0 flex items-center justify-center text-on-primary-container">
+                    <span className="material-symbols-outlined text-[32px]">
+                      menu_book
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start mb-xs">
+                      <h3 className="font-body-lg text-body-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                        {room.subject || room.name}
+                      </h3>
+                      {isFull ? (
+                        <span className="bg-error-container text-on-error-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
+                          滿員
+                        </span>
+                      ) : isHot ? (
+                        <span className="bg-tertiary-container text-on-tertiary-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
+                          HOT
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="font-body-md text-body-md text-secondary mb-sm line-clamp-1">
+                      {room.description || room.name}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex -space-x-2">
+                        {shownMembers.map((m, i) =>
+                          m.image ? (
+                             
+                            <img
+                              key={i}
+                              alt={m.name ?? "Participant"}
+                              className="w-6 h-6 rounded-full border border-surface object-cover"
+                              src={m.image}
+                            />
+                          ) : (
+                            <div
+                              key={i}
+                              className="w-6 h-6 rounded-full border border-surface bg-secondary-container flex items-center justify-center text-on-secondary-container"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">
+                                person
+                              </span>
+                            </div>
+                          ),
+                        )}
+                        {extra > 0 && (
+                          <div className="w-6 h-6 rounded-full border border-surface bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-secondary">
+                            +{extra}
+                          </div>
+                        )}
+                        {room.members === 0 && (
+                          <span className="text-[10px] text-secondary">
+                            尚無人加入 (0/{room.capacity})
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-secondary space-x-md">
-                        <span>📅 時間: {room.name}</span>
-                        <span>📍 地點: {room.description || "—"}</span>
-                      </div>
-                      <p className="text-[10px] text-secondary">
-                        👥 當前人員: {participants || "尚無人加入"} ({room.members}/
-                        {room.capacity}人)
-                      </p>
-                    </div>
-                    {userId ? (
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/study-rooms/${room.id}`}
-                          className="bg-surface-container border border-outline-variant/30 text-on-surface hover:bg-surface-container-highest font-bold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-1 no-underline"
-                        >
-                          <span className="material-symbols-outlined text-sm">
-                            login
-                          </span>{" "}
-                          進入自習室
-                        </Link>
-                        <form action={isMember ? leaveRoom : joinRoom}>
-                          <input type="hidden" name="roomId" value={room.id} />
-                          <button
-                            type="submit"
-                            disabled={full}
-                            className={
-                              isMember
-                                ? "bg-surface-container border border-outline-variant/30 text-secondary font-bold text-xs px-4 py-2 rounded-lg"
-                                : "bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm disabled:opacity-50"
-                            }
+                      {userId ? (
+                        <div className="flex items-center gap-sm">
+                          <form action={isMember ? leaveRoom : joinRoom}>
+                            <input
+                              type="hidden"
+                              name="roomId"
+                              value={room.id}
+                            />
+                            <button
+                              type="submit"
+                              disabled={full}
+                              className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs disabled:opacity-50"
+                            >
+                              {isMember ? "離開" : full ? "滿員" : "加入"}
+                            </button>
+                          </form>
+                          <Link
+                            href={`/study-rooms/${room.id}`}
+                            className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs no-underline"
                           >
-                            {isMember ? "離開共讀" : full ? "滿員" : "加入共讀"}
-                          </button>
-                        </form>
-                      </div>
-                    ) : (
-                      <Link
-                        href="/login"
-                        className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg transition-all shadow-sm"
-                      >
-                        登入以加入
-                      </Link>
-                    )}
+                            進入{" "}
+                            <span className="material-symbols-outlined text-[16px]">
+                              arrow_forward
+                            </span>
+                          </Link>
+                        </div>
+                      ) : (
+                        <Link
+                          href="/login"
+                          className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs no-underline"
+                        >
+                          登入以加入{" "}
+                          <span className="material-symbols-outlined text-[16px]">
+                            arrow_forward
+                          </span>
+                        </Link>
+                      )}
+                    </div>
                   </div>
-                );
-              })
-            )}
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </div>
-    </section>
+        )}
+      </section>
+    </div>
   );
 }

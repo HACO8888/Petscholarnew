@@ -1,176 +1,99 @@
 import Link from "next/link";
-import { claimCheckin, feedPet, simulateTimePass, healPet } from "@/app/pet/actions";
+import { simulateTimePass, healPet } from "@/app/pet/actions";
+import { logout } from "@/app/actions/auth";
+import SidebarNav from "./SidebarNav";
+import type { Role } from "./nav-config";
 
 export interface SidebarData {
   loggedIn: boolean;
-  userName: string;
-  userDept: string;
+  role: Role;
   petName: string;
-  level: number;
+  petStyle: string | null;
   hp: number;
   maxHp: number;
-  exp: number;
   coins: number;
-  checkedIn: boolean;
-  quickFeed: { itemId: string; name: string; icon: string | null; quantity: number }[];
 }
+
+const STYLE_EMOJI: Record<string, string> = {
+  classic: "🤖",
+  cat: "🐱",
+  dog: "🐶",
+  rabbit: "🐰",
+  dragon: "🐉",
+};
 
 export default function Sidebar({ data }: { data: SidebarData }) {
   const maxHearts = Math.max(1, Math.round(data.maxHp / 100));
   const full = Math.max(0, Math.floor(data.hp / 100));
   const hearts = "❤️".repeat(Math.min(full, maxHearts)) + "🖤".repeat(Math.max(0, maxHearts - full));
-  const maxExp = data.level * 100;
-  const hpPct = data.maxHp > 0 ? Math.round((data.hp / data.maxHp) * 100) : 0;
-  const expPct = maxExp > 0 ? Math.round((data.exp / maxExp) * 100) : 0;
+  const emoji = STYLE_EMOJI[data.petStyle ?? "classic"] ?? STYLE_EMOJI.classic;
 
   return (
-    <aside className="w-full xl:w-64 flex flex-col gap-lg shrink-0">
-      {/* User Profile widget */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-sm">
-          <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-surface-container-low border border-outline-variant/20 shadow-inner">
-            <span className="text-2xl">👤</span>
-          </div>
-          <div>
-            <h4 className="font-bold text-body-md text-on-surface">{data.userName}</h4>
-            <p className="text-[10px] text-secondary truncate max-w-[120px]">{data.userDept}</p>
-          </div>
+    <aside className="hidden md:flex bg-surface-container dark:bg-surface-container-high font-label-md text-label-md shadow-md fixed right-0 top-16 h-[calc(100vh-64px)] w-64 flex-col p-md border-l border-outline-variant dark:border-outline">
+      {/* Pet Status */}
+      <div className="flex flex-col items-center mb-xl p-md bg-surface rounded-xl shadow-sm border border-outline-variant text-center">
+        <div className="w-24 h-24 rounded-full mb-sm border-2 border-primary-container bg-primary-container/30 shadow-sm flex items-center justify-center text-5xl">
+          {emoji}
         </div>
-        <Link href="/profile" className="p-2 text-secondary hover:text-primary transition-colors" title="編輯個人設定">
-          <span className="material-symbols-outlined text-[20px]">settings</span>
-        </Link>
-      </div>
+        <h3 className="text-xl leading-tight text-primary mb-xs font-bold">{data.petName}</h3>
+        <div className="hearts-glow flex items-center justify-center gap-1 text-[22px] leading-none mb-2">{hearts}</div>
+        <p className="text-[11px] text-secondary mb-0.5">生命值：{data.hp} / {data.maxHp}</p>
+        <p className="text-[11px] text-secondary mb-md">金幣：{data.coins}</p>
 
-      {/* Electronic Pet mascot widget */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col items-center relative overflow-hidden">
-        <div className="relative mt-4 mb-2">
-          <div className="anim-float w-[120px] h-[120px] flex items-center justify-center text-[88px] leading-none">🤖</div>
-        </div>
-
-        <div className="flex justify-between items-center w-full mb-3 px-1">
-          <span className="font-bold text-body-md text-on-surface">{data.petName}</span>
-          <span className="text-xs font-bold text-primary dark:text-primary-fixed-dim">Lv.{data.level}</span>
-        </div>
-
-        <div className="w-full space-y-2 text-xs">
-          <div className="flex justify-between items-center">
-            <span className="text-secondary text-[11px]">❤️ 生命值 (Hearts)</span>
-            <span className="hearts-glow tracking-widest">{hearts}</span>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-[10px] text-secondary mb-0.5">
-              <span>🔋 活力值 (HP)</span>
-              <span>{data.hp}/{data.maxHp}</span>
-            </div>
-            <div className="w-full bg-surface-container-low dark:bg-surface h-2 rounded-full overflow-hidden border border-outline-variant/10">
-              <div className="hp-bar h-full rounded-full" style={{ width: `${hpPct}%` }} />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-[10px] text-secondary mb-0.5">
-              <span>⚡ 經驗值 (EXP)</span>
-              <span>{data.exp}/{maxExp}</span>
-            </div>
-            <div className="w-full bg-surface-container-low dark:bg-surface h-2 rounded-full overflow-hidden border border-outline-variant/10">
-              <div className="exp-bar h-full rounded-full" style={{ width: `${expPct}%` }} />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2.5 mt-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xl anim-spin-slow">🪙</span>
-              <div className="flex flex-col">
-                <span className="font-bold text-body-lg text-yellow-600 dark:text-yellow-400">{data.coins}</span>
-                <span className="text-[9px] text-secondary">金幣餘額</span>
-              </div>
-            </div>
-            {data.loggedIn ? (
-              <form action={claimCheckin}>
-                <button
-                  type="submit"
-                  disabled={data.checkedIn}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold text-[10.5px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all disabled:opacity-50"
-                >
-                  {data.checkedIn ? "已簽到" : "每日簽到 (+20)"}
-                </button>
-              </form>
-            ) : (
-              <Link href="/login" className="bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold text-[10.5px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all no-underline">
-                每日簽到
-              </Link>
-            )}
-          </div>
-
-          {data.loggedIn ? (
-            <>
-              {/* Simulate hour passing — 對齊 legacy index.html sidebar */}
-              <form action={simulateTimePass}>
-                <button
-                  type="submit"
-                  className="w-full mt-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1"
-                >
-                  <span>⏳</span> 模擬時間流逝 1 小時
-                </button>
-              </form>
-
-              {/* Heal pet entry */}
-              <form action={healPet}>
-                <button
-                  type="submit"
-                  disabled={data.coins < 20 || data.hp >= data.maxHp}
-                  className="w-full mt-1.5 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
-                >
-                  <span>💊</span> 治療寵物 (-20 金幣)
-                </button>
-              </form>
-            </>
-          ) : (
-            <Link
-              href="/login"
-              className="w-full mt-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 no-underline"
-            >
-              <span>⏳</span> 模擬時間流逝 1 小時
-            </Link>
-          )}
-
+        {data.loggedIn ? (
+          <>
+            <form action={healPet} className="w-full">
+              <button
+                type="submit"
+                disabled={data.coins < 20 || data.hp >= data.maxHp}
+                className="bg-primary text-on-primary font-label-md text-label-md px-4 py-2 rounded-lg hover:bg-on-primary-container transition-colors w-full flex items-center justify-center gap-1 mb-sm disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">healing</span>
+                <span>治療寵物</span>
+              </button>
+            </form>
+            <form action={simulateTimePass} className="w-full">
+              <button
+                type="submit"
+                className="w-full bg-surface-container border border-outline-variant/30 text-secondary font-semibold text-[12px] px-3 py-2 rounded-lg cursor-pointer hover:bg-surface-container-highest transition-colors"
+              >
+                模擬時間流逝 1 小時 ⏳
+              </button>
+            </form>
+          </>
+        ) : (
           <Link
-            href="/pet/feed"
-            className="w-full mt-1.5 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 no-underline"
+            href="/login"
+            className="bg-primary text-on-primary font-label-md text-label-md px-4 py-2 rounded-lg hover:bg-on-primary-container transition-colors w-full flex items-center justify-center gap-1 no-underline"
           >
-            <span>🍖</span> 前往餵食寵物
+            <span className="material-symbols-outlined text-[18px]">login</span>
+            <span>登入養成寵物</span>
           </Link>
-        </div>
+        )}
       </div>
 
-      {/* Quick Feed widget */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm">
-        <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-0.5 border-b border-outline-variant/20 pb-1.5">
-          <span>🍖</span> 快捷餵食
-        </h3>
-        <div className="space-y-1.5">
-          {data.quickFeed.length === 0 ? (
-            <div className="text-center py-3">
-              <p className="text-[11px] text-secondary mb-1">背包目前沒有食物喔！</p>
-              <Link href="/shop" className="text-[11px] font-bold text-primary hover:underline">前往商城購買 →</Link>
-            </div>
-          ) : (
-            data.quickFeed.map((f) => (
-              <form key={f.itemId} action={feedPet} className="flex items-center justify-between gap-1 rounded-lg bg-surface-container-low dark:bg-surface-container p-1.5">
-                <input type="hidden" name="itemId" value={f.itemId} />
-                <span className="flex items-center gap-1 text-[11px] text-on-surface truncate">
-                  <span className="text-base">{f.icon}</span>
-                  <span className="truncate">{f.name}</span>
-                  <span className="text-secondary">x{f.quantity}</span>
-                </span>
-                <button type="submit" className="shrink-0 bg-primary text-on-primary text-[10px] font-bold px-2 py-1 rounded-md hover:bg-surface-tint transition-all">
-                  餵食
-                </button>
-              </form>
-            ))
-          )}
-        </div>
+      {/* Icon nav */}
+      <SidebarNav role={data.role} />
+
+      {/* Footer */}
+      <div className="mt-auto flex flex-col gap-sm pt-md border-t border-outline-variant">
+        <Link href="/boards" className="text-on-surface-variant hover:bg-surface-variant rounded-lg flex items-center gap-md px-md py-sm hover:bg-surface-container-highest transition-colors no-underline">
+          <span className="material-symbols-outlined">help</span>
+          <span>說明</span>
+        </Link>
+        {data.loggedIn ? (
+          <form action={logout}>
+            <button type="submit" className="w-full text-on-surface-variant hover:bg-surface-variant rounded-lg flex items-center gap-md px-md py-sm hover:bg-surface-container-highest transition-colors">
+              <span className="material-symbols-outlined">logout</span>
+              <span>登出</span>
+            </button>
+          </form>
+        ) : (
+          <Link href="/login" className="text-on-surface-variant hover:bg-surface-variant rounded-lg flex items-center gap-md px-md py-sm hover:bg-surface-container-highest transition-colors no-underline">
+            <span className="material-symbols-outlined">login</span>
+            <span>登入</span>
+          </Link>
+        )}
       </div>
     </aside>
   );

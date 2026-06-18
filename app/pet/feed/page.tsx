@@ -3,9 +3,8 @@ import { redirect } from "next/navigation";
 import { and, eq, gt } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users, shopItems, inventory } from "@/db/schema";
-import { getOrCreatePet, statusFromHp } from "@/lib/pet";
-import PetMascot from "@/components/PetMascot";
+import { shopItems, inventory } from "@/db/schema";
+import { getOrCreatePet } from "@/lib/pet";
 import { feedPet } from "@/app/pet/actions";
 
 export default async function PetFeedPage() {
@@ -14,11 +13,6 @@ export default async function PetFeedPage() {
   const userId = session.user.id;
 
   const pet = await getOrCreatePet(userId);
-  const [me] = await db
-    .select({ petStyle: users.petStyle })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
 
   const foodRows = await db
     .select({
@@ -38,72 +32,83 @@ export default async function PetFeedPage() {
       ),
     );
 
-  const status = statusFromHp(pet.hp, pet.maxHp);
+  const heartCount = Math.max(0, Math.min(5, Math.ceil((pet.hp / pet.maxHp) * 5)));
 
   return (
-    <section>
-      <div className="mb-lg">
-        <h1 className="font-semibold text-headline-lg text-on-background">寵物餵食</h1>
-        <p className="text-secondary text-body-md">
-          在這裡與您的電子雞夥伴「北科科」近距離互動，使用背包中的食物餵食牠以恢復 HP！
-        </p>
-      </div>
-
-      {/* Center Stage mascot display */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-2xl p-lg shadow-sm flex flex-col items-center justify-center min-h-[420px] relative mb-lg">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-          <div className="w-[280px] h-[280px] md:w-[420px] md:h-[420px] rounded-full bg-primary-fixed blur-3xl" />
-        </div>
-
-        <div className="relative group cursor-pointer mb-md">
-          {/* SVG Mascot scaled up for center stage */}
-          <div className="w-48 h-48 md:w-64 md:h-64 flex justify-center items-center">
-            <PetMascot
-              petStyle={me?.petStyle ?? "classic"}
-              face={status.face}
-              equippedHat={pet.equippedHat}
-              equippedBackground={pet.equippedBackground}
-              equippedRareStyle={pet.equippedRareStyle}
-            />
+    <main className="flex-1 px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col min-h-[calc(100vh-64px)] relative">
+      {/* HP + Coins capsule */}
+      <div className="flex items-center gap-lg mb-md bg-surface-container-low/80 backdrop-blur-sm p-sm px-md rounded-full border border-surface-container-high w-fit shadow-sm animate-fade-in-up">
+        <div className="flex items-center gap-sm">
+          <span className="font-label-md text-on-surface-variant">生命值</span>
+          <div className="flex text-error">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <span
+                key={i}
+                className="material-symbols-outlined text-[18px]"
+                style={{ fontVariationSettings: `'FILL' ${i < heartCount ? 1 : 0}` }}
+              >
+                favorite
+              </span>
+            ))}
           </div>
         </div>
+        <div className="w-px h-4 bg-outline-variant"></div>
+        <div className="flex items-center gap-sm">
+          <div className="w-6 h-6 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center">
+            <span
+              className="material-symbols-outlined text-[16px]"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              monetization_on
+            </span>
+          </div>
+          <span className="font-body-lg text-on-surface font-bold">{pet.coins}</span>
+        </div>
+      </div>
 
-        <h2 className="font-bold text-headline-md text-on-surface text-center mb-1">
-          {pet.name}
-        </h2>
-        <p className="text-secondary text-body-md text-center max-w-md">
-          {pet.hp <= 35 ? (
-            <>
-              😴{" "}
-              <span className="text-red-500 font-bold">
-                {pet.name}現在非常疲憊 (HP: {pet.hp})！
-              </span>
-              需要餵食一些歐趴便當來補滿活力！
-            </>
-          ) : (
-            <>
-              😊 活力值良好 (HP: {pet.hp})。餵食點心可以讓我的經驗值 (EXP) 持續增長喔！
-            </>
-          )}
+      {/* Central Hero: Virtual Pet */}
+      <div className="flex-1 flex flex-col items-center justify-center relative min-h-[40vh] md:min-h-[50vh] mb-xl animate-fade-in-up -translate-x-1/2 left-1/2">
+        {/* Ambient Background Glow */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+          <div className="w-[300px] h-[300px] md:w-[500px] md:h-[500px] rounded-full bg-primary-fixed blur-3xl"></div>
+        </div>
+        {/* Pet Container */}
+        <div className="relative group cursor-pointer mb-md">
+          { }
+          <img
+            alt="Study Buddy"
+            className="w-64 h-64 md:w-80 md:h-80 object-contain drop-shadow-2xl transition-transform duration-300 ease-out z-10 relative"
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsgDFI3t3murIaM6LOyFuTo2_5VHcIaiGOOxU0-PLU4CeH-5Dq6AfqSxv1wurTlkINBEkjz3ROkehz_BP9JDQDYKhMgtQsSuV4qf22TgBjMkdUvAVZJCJDNLwIiQD-mteBWz19UYrAwFyozhkJubz2OMR1JQLLDHYwlZGhijDzKdr7Bkp0bfKe-140PEddCVCLL2armwnpExwowHhCES0Y_6aUm4g8L3ntD8ylaPmAu16aH-Bqwi_5ySO0IV8lu-s60PLWTOrvKION"
+          />
+          {/* Base Shadow */}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 h-8 bg-black/10 blur-xl rounded-full z-0"></div>
+        </div>
+        <h1 className="font-headline-lg text-headline-lg text-on-surface mt-sm z-10 text-center">
+          {pet.hp <= Math.round(pet.maxHp * 0.35)
+            ? "學習夥伴肚子餓了！"
+            : `${pet.name}活力滿滿！`}
+        </h1>
+        <p className="font-body-lg text-body-lg text-on-surface-variant z-10 mt-xs text-center">
+          從背包中選擇食物進行餵食。 (HP: {pet.hp}/{pet.maxHp})
         </p>
       </div>
 
-      {/* Food slider panel */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-2xl p-md shadow-sm">
-        <div className="flex justify-between items-center mb-sm">
-          <h3 className="font-bold text-body-lg text-on-surface">背包裡的美味食物</h3>
+      {/* Interaction Area: Food Inventory */}
+      <div className="w-full mt-auto bg-surface-container-lowest/70 dark:bg-surface-container-high/70 backdrop-blur-md rounded-[24px] p-lg shadow-sm border border-surface-container-high relative z-20">
+        <div className="flex justify-between items-end mb-md">
+          <h2 className="font-headline-md text-headline-md text-on-surface">食物背包</h2>
           <Link
+            className="font-label-md text-label-md text-primary hover:text-primary-fixed transition-colors flex items-center gap-1"
             href="/shop"
-            className="text-primary hover:underline text-xs flex items-center gap-0.5"
           >
-            前往商城選購{" "}
-            <span className="material-symbols-outlined text-xs">arrow_forward</span>
+            前往商城{" "}
+            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
           </Link>
         </div>
-
-        <div className="flex overflow-x-auto gap-md pb-2 pt-2 hide-scrollbar snap-x px-1">
+        {/* Horizontal Scrollable Tray */}
+        <div className="flex overflow-x-auto gap-md pb-xs hide-scrollbar snap-x snap-mandatory px-xs">
           {foodRows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-lg text-center w-full gap-sm p-4 col-span-full">
+            <div className="flex flex-col items-center justify-center py-lg text-center w-full gap-sm p-4">
               <span
                 className="material-symbols-outlined text-4xl text-outline"
                 style={{ fontSize: "48px", color: "#73777c" }}
@@ -125,24 +130,24 @@ export default async function PetFeedPage() {
             foodRows.map((f) => (
               <div
                 key={f.itemId}
-                className="flex-shrink-0 w-32 md:w-36 bg-surface-container-low dark:bg-surface rounded-xl p-3 flex flex-col items-center justify-between border border-outline-variant/30 hover:shadow-md transition-all snap-center group"
+                className="flex-shrink-0 w-32 md:w-40 bg-surface rounded-xl p-sm flex flex-col items-center justify-between shadow-sm border border-surface-container-low hover:shadow-md transition-shadow snap-center group"
               >
-                <div className="w-16 h-16 rounded-lg bg-surface-container-lowest dark:bg-surface-container-high flex items-center justify-center p-2 mb-2 overflow-hidden shadow-inner">
-                  <span className="text-3xl group-hover:scale-110 transition-transform duration-300">
+                <div className="w-20 h-20 md:w-24 md:h-24 rounded-lg bg-surface-container-lowest flex items-center justify-center p-2 mb-sm overflow-hidden">
+                  <span className="text-4xl md:text-5xl group-hover:scale-110 transition-transform duration-300">
                     {f.icon}
                   </span>
                 </div>
-                <span className="text-xs font-bold text-on-surface text-center mb-1">
+                <span className="font-label-md text-label-md text-on-surface text-center mb-sm line-clamp-1">
                   {f.name} (x{f.quantity})
                 </span>
-                <span className="text-[9px] text-secondary text-center mb-2.5">
+                <span className="text-[10px] text-secondary text-center mb-sm">
                   +{f.hpRestore} HP
                 </span>
                 <form action={feedPet} className="w-full">
                   <input type="hidden" name="itemId" value={f.itemId} />
                   <button
                     type="submit"
-                    className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs py-1.5 rounded-lg shadow-sm transition-all"
+                    className="w-full bg-primary text-on-primary font-label-md text-label-md py-2 rounded-lg hover:bg-surface-tint active:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                   >
                     餵食
                   </button>
@@ -152,6 +157,6 @@ export default async function PetFeedPage() {
           )}
         </div>
       </div>
-    </section>
+    </main>
   );
 }

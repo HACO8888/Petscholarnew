@@ -1,134 +1,91 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { boards, posts } from "@/db/schema";
-import { formatDateTime } from "@/lib/format";
 
-export default async function BoardsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ dept?: string }>;
-}) {
-  const { dept } = await searchParams;
+const GEARS =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuAd5EQYMNeZhaeVPJBxDQRENq3HoMhiGPAfsDK1FjPl8lmvz4h2kzohex1bMVVYD_-lIn7xyrE_ACr29q9FiE57rgJG2KB-pk_9Qv2F4VuWJbqRfoBZSspxb5BNwCIMCgwLkcWzH7argqHsW530KdTSCSjLjdUcNuqyThc0bHauVZItmgNAt3bnRiGnMk4G1g2yVUZ3uxWafxLTZbP6LBJHostz-0I_sUOoe-ATVg_DwPvnvUonX-VOVf8PhAq3sPJwucSVwN3mvipV";
+const CIRCUIT =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuA2xqI8COSSzq2VlLyD6InkqVnERKhWWXJMPk4CkjiFruy9ydcXorm0aKHtDsYxGA_njl7a34cJ4Ffnz5neHyUHB47q6BPIp9S7nmc9HWLZy6zHNujZ8qh3ztVk7KK-22xZsaFV2bzryFo14J3qaOB99i5sz4mPVbI8LskdMwNzDI9c9hjA5PajjMSydIVtWO3zbHdCi5LnQMjpu-Xh5aHAmwrowojKGXljrowTXAWrxan4K6LjFdVNFl-eWsxBeLmNbNR6Jezl422E";
+const DASHBOARD =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuBF2_fBGZkpqP7400anD8oHxUPzxgjQVulIrhUj2pfvsKoWhTODBpkjJoaWpxubucjC_WK4R0eYbKggEMhYKsXzzpSO_iwXlxB6_c2EvoJ4l2kAV_ATHe4Jie_ErREcvkUMUot4jQnfhCKQ9Hn5FHsDtfIbHi7le-UEah1wDVB5kXDa7FZEypDVDNE-OW2Xcktf2TBWk0GE5sF6MzNnVYlCoVR_eEpEchimE3FOpng9J-YjNueIXFY1UN2SRg0z-KRFAYuvs-_sIgpJ";
+const COVER: Record<string, string> = {
+  cmee: GEARS,
+  coe: GEARS,
+  ceecs: CIRCUIT,
+  cod: CIRCUIT,
+  com: DASHBOARD,
+  chss: DASHBOARD,
+};
+
+export default async function BoardsPage() {
   const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
-  const activeBoard = dept ? boardRows.find((b) => b.id === dept) : undefined;
 
   const tagRows = await db.select({ tags: posts.tags }).from(posts).where(eq(posts.hidden, false));
   const tagCount = new Map<string, number>();
   for (const r of tagRows) for (const t of r.tags) tagCount.set(t, (tagCount.get(t) ?? 0) + 1);
-  const topTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t]) => t);
-
-  const postRows = await db
-    .select({
-      id: posts.id,
-      title: posts.title,
-      authorName: posts.authorName,
-      department: posts.department,
-      boardId: posts.boardId,
-      boardName: boards.name,
-      tags: posts.tags,
-      bounty: posts.bounty,
-      solved: posts.solved,
-      createdAt: posts.createdAt,
-    })
-    .from(posts)
-    .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(activeBoard ? and(eq(posts.boardId, activeBoard.id), eq(posts.hidden, false)) : eq(posts.hidden, false))
-    .orderBy(desc(posts.createdAt));
+  const topTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
 
   return (
     <section>
-      <div className="mb-lg">
-        <h1 className="font-semibold text-headline-lg text-on-background">看板</h1>
-        <p className="text-secondary text-body-md">探索各學院與科系的專業課業討論。</p>
+      <div className="mb-xl">
+        <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">學院看板</h1>
+        <p className="font-body-lg text-body-lg text-on-surface-variant">探索各學院的專業知識、討論與學習資源。</p>
       </div>
 
-      <div className="mb-lg bg-surface-container-low dark:bg-surface-container p-md rounded-xl border border-outline-variant/20">
-        <h3 className="font-bold text-body-md text-secondary mb-2 flex items-center gap-1">
-          <span className="material-symbols-outlined text-sm">trending_up</span> 熱門標籤
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {topTags.map((t) => (
-            <span key={t} className="bg-primary-container/40 text-on-primary-container font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer hover:bg-primary-container transition-all">
+      {/* 熱門標籤 */}
+      <div className="mb-xl">
+        <h2 className="font-headline-md text-headline-md text-on-surface mb-md">熱門標籤</h2>
+        <div className="flex flex-wrap gap-sm">
+          {topTags.map((t, i) => (
+            <span
+              key={t}
+              className={`font-label-md text-label-md px-4 py-2 rounded-full shadow-sm cursor-pointer transition-colors ${
+                i === 0
+                  ? "bg-tertiary-container text-on-tertiary-container hover:bg-tertiary-fixed"
+                  : "bg-surface-container-high text-on-surface border border-outline-variant hover:bg-surface-variant"
+              }`}
+            >
               # {t}
             </span>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-md mb-lg">
-        {boardRows.map((b) => {
-          const isActive = activeBoard?.id === b.id;
-          return (
-            <Link
-              key={b.id}
-              href={isActive ? "/boards" : `/boards?dept=${b.id}`}
-              className={`rounded-xl border bg-surface-container-lowest dark:bg-surface-container-high p-md flex flex-col items-center justify-center text-center cursor-pointer transition-all no-underline ${isActive ? "scale-95 font-bold" : "border-outline-variant/30 hover:border-primary/40 hover:scale-[1.02]"}`}
-              style={
-                isActive && b.color
-                  ? {
-                      borderColor: b.color,
-                      backgroundColor: `${b.color}15`,
-                      boxShadow: `0 10px 15px -3px ${b.color}25`,
-                      borderWidth: "2px",
-                    }
-                  : undefined
-              }
-            >
-              <span className="text-3xl mb-2">{b.icon}</span>
-              <h4 className="font-bold text-body-lg text-on-surface mb-1">{b.name}</h4>
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-between mb-md border-b border-outline-variant/30 pb-3">
-        <div className="flex items-center gap-2">
-          <h2 className="font-bold text-headline-md text-on-surface">{activeBoard ? `${activeBoard.name}提問` : "所有熱門提問"}</h2>
-          <span className="bg-surface-container-high dark:bg-surface-variant text-on-surface-variant px-2.5 py-0.5 rounded-full text-xs font-semibold">{postRows.length} 篇貼文</span>
-        </div>
-        <Link href="/posts/new" className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-4 py-2 rounded-lg flex items-center gap-1 shadow-sm transition-all no-underline">
-          <span className="material-symbols-outlined text-[18px]">add_circle</span> 發佈新提問
-        </Link>
-      </div>
-
-      <div className="space-y-md">
-        {postRows.length === 0 ? (
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-xl text-center text-secondary py-10 text-xs">
-            目前尚無課業提問。歡迎發表新問題！
-          </div>
-        ) : (
-          postRows.map((p) => (
-            <Link
-              key={p.id}
-              href={`/posts/${p.id}`}
-              className="block bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/20 rounded-xl p-md shadow-sm hover:shadow-md transition-all cursor-pointer relative no-underline"
-            >
-              <div className="flex justify-between items-start mb-sm gap-2">
-                <h3 className="font-bold text-body-lg text-primary dark:text-primary-fixed-dim">{p.title}</h3>
-                <span
-                  className="text-xs font-bold text-yellow-600 bg-yellow-500/10 px-2 py-0.5 rounded"
-                  style={p.solved ? { background: "rgba(0,0,0,0.05)", color: "#666" } : undefined}
-                >
-                  🪙 {p.solved ? "已結算" : `懸賞 ${p.bounty}`}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-secondary mb-2">
-                <span className="bg-primary/5 text-primary border border-primary/10 px-1.5 py-0.2 rounded text-[10px]">{p.department ?? p.boardName}</span>
-                <span>提問學生: <strong>{p.authorName}</strong></span>
-                <span>•</span>
-                <span>{formatDateTime(p.createdAt)}</span>
-                <span>•</span>
-                <span className={p.solved ? "text-green-600 font-bold" : "text-yellow-600 font-bold"}>{p.solved ? "已解決" : "未解決"}</span>
-              </div>
-              <div className="flex flex-wrap gap-sm">
-                {p.tags.map((t) => (
-                  <span key={t} className="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] rounded">#{t}</span>
+      {/* 學院 Bento 卡（封面圖） */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg">
+        {boardRows.map((b) => (
+          <Link
+            key={b.id}
+            href={`/boards/${b.id}`}
+            className="bg-surface rounded-xl shadow-sm border border-surface-container-highest overflow-hidden hover:shadow-md transition-shadow group cursor-pointer relative no-underline dark:bg-surface-container-low"
+          >
+            <div className="h-32 relative" style={{ backgroundColor: b.color ?? "#4b6172" }}>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+              {COVER[b.id] && (
+                 
+                <img
+                  alt={b.name}
+                  className="w-full h-full object-cover mix-blend-overlay opacity-60"
+                  src={COVER[b.id]}
+                />
+              )}
+              <h3 className="absolute bottom-md left-md font-headline-md text-headline-md text-white font-bold">{b.name}</h3>
+            </div>
+            <div className="p-md">
+              <div className="flex flex-wrap gap-xs mb-md">
+                {b.departments.map((d) => (
+                  <span
+                    key={d}
+                    className="bg-surface-container text-on-surface-variant font-label-md px-2 py-1 rounded-md text-[11px] border border-outline-variant"
+                  >
+                    {d}
+                  </span>
                 ))}
               </div>
-            </Link>
-          ))
-        )}
+            </div>
+          </Link>
+        ))}
       </div>
     </section>
   );

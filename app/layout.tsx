@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { and, eq, gt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import Header, { type HeaderUser } from "@/components/Header";
 import Sidebar, { type SidebarData } from "@/components/Sidebar";
 import { auth } from "@/auth";
-import { getOrCreatePet, isSameDay } from "@/lib/pet";
+import { getOrCreatePet } from "@/lib/pet";
 import { db } from "@/db";
-import { users, shopItems, inventory } from "@/db/schema";
+import { users } from "@/db/schema";
 import type { Role } from "@/db/schema";
 
 export const metadata: Metadata = {
@@ -18,16 +18,12 @@ const themeInitScript = `(function(){try{var t=localStorage.getItem('petscholar-
 
 const DEFAULT_SIDEBAR: SidebarData = {
   loggedIn: false,
-  userName: "新同學",
-  userDept: "請選擇系所",
+  role: "student",
   petName: "未命名小精靈",
-  level: 1,
+  petStyle: "classic",
   hp: 500,
   maxHp: 500,
-  exp: 0,
   coins: 100,
-  checkedIn: false,
-  quickFeed: [],
 };
 
 export default async function RootLayout({
@@ -41,38 +37,21 @@ export default async function RootLayout({
   if (session?.user?.id) {
     const pet = await getOrCreatePet(session.user.id);
     const [me] = await db
-      .select({ name: users.name, role: users.role })
+      .select({ name: users.name, role: users.role, petStyle: users.petStyle })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
-    const food = await db
-      .select({
-        itemId: inventory.itemId,
-        name: shopItems.name,
-        icon: shopItems.icon,
-        quantity: inventory.quantity,
-      })
-      .from(inventory)
-      .innerJoin(shopItems, eq(inventory.itemId, shopItems.id))
-      .where(and(eq(inventory.userId, session.user.id), eq(shopItems.type, "food"), gt(inventory.quantity, 0)))
-      .limit(4);
+    const role = (session.user.role ?? "student") as Role;
 
-    headerUser = {
-      name: me?.name ?? session.user.name,
-      role: (session.user.role ?? "student") as Role,
-    };
+    headerUser = { name: me?.name ?? session.user.name, role };
     sidebar = {
       loggedIn: true,
-      userName: me?.name ?? session.user.name ?? "同學",
-      userDept: "請選擇系所",
+      role,
       petName: pet.name,
-      level: pet.level,
+      petStyle: me?.petStyle ?? "classic",
       hp: pet.hp,
       maxHp: pet.maxHp,
-      exp: pet.exp,
       coins: pet.coins,
-      checkedIn: isSameDay(pet.lastCheckIn, new Date()),
-      quickFeed: food,
     };
   }
 
@@ -93,10 +72,10 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen bg-background text-on-background antialiased transition-colors duration-300">
         <Header user={headerUser} />
-        <div className="flex flex-col xl:flex-row relative max-w-7xl mx-auto w-full pt-20 pb-16 px-4 md:px-8 gap-lg">
-          <main className="flex-1 min-h-[calc(100vh-144px)] animate-fade-in-up">{children}</main>
-          <Sidebar data={sidebar} />
-        </div>
+        <Sidebar data={sidebar} />
+        <main className="max-w-7xl mx-auto w-full pt-24 pb-16 px-4 md:px-margin-desktop md:pr-[calc(256px+32px)] min-h-[calc(100vh-64px)] animate-fade-in-up">
+          {children}
+        </main>
       </body>
     </html>
   );

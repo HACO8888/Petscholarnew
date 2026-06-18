@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
   posts,
   comments,
-  users,
   studyRoomMembers,
   couponRedemptions,
 } from "@/db/schema";
@@ -13,7 +12,7 @@ import { getOrCreatePet } from "@/lib/pet";
 import { redeemCoupon } from "./actions";
 import { WELFARE_ITEMS } from "./welfare-data";
 
-type TabKey = "weekly" | "dept";
+type TabKey = "explorer" | "studytime" | "dept";
 
 type RankRow = {
   userId: string;
@@ -25,12 +24,13 @@ type RankRow = {
   dept: string | null;
 };
 
-const TABS: { key: TabKey; tab: string }[] = [
-  { key: "weekly", tab: "全校英雄榜" },
-  { key: "dept", tab: "系所排行" },
+const TABS: { key: TabKey; tab: string; title: string; unit: string }[] = [
+  { key: "explorer", tab: "好奇探索者榜", title: "好奇探索者排行", unit: "分" },
+  { key: "studytime", tab: "自習時間榜", title: "自習時間排行", unit: "分" },
+  { key: "dept", tab: "學科貢獻榜", title: "學科貢獻排行", unit: "分" },
 ];
 
-const TAB_KEYS: TabKey[] = ["weekly", "dept"];
+const TAB_KEYS: TabKey[] = ["explorer", "studytime", "dept"];
 
 /** 成就徽章（對齊 legacy badges-showcase 四項），解鎖狀態由真實資料判定 */
 type Badge = {
@@ -40,21 +40,17 @@ type Badge = {
   owned: boolean;
 };
 
-/** 全校英雄榜（weekly）：依 authorId 聚合留言，被採納解答 ×20 + 一般回覆 ×5，全校共同排名 */
+/** 好奇探索者榜 / 自習時間榜（explorer）：依作者名稱聚合留言（含種子資料），被採納 ×20 + 一般回覆 ×5 */
 async function loadWeekly(): Promise<RankRow[]> {
   const rows = await db
     .select({
-      userId: comments.authorId,
-      name: sql<string | null>`max(${users.name})`,
-      image: sql<string | null>`max(${users.image})`,
-      fallbackName: sql<string | null>`max(${comments.authorName})`,
+      name: comments.authorName,
       adopted: sql<number>`sum(case when ${comments.isAdopted} then 1 else 0 end)::int`,
       answers: sql<number>`count(*)::int`,
     })
     .from(comments)
-    .leftJoin(users, eq(users.id, comments.authorId))
-    .where(and(eq(comments.hidden, false), isNotNull(comments.authorId)))
-    .groupBy(comments.authorId)
+    .where(eq(comments.hidden, false))
+    .groupBy(comments.authorName)
     .orderBy(
       desc(sql`sum(case when ${comments.isAdopted} then 1 else 0 end)`),
       desc(sql`count(*)`),
@@ -62,35 +58,31 @@ async function loadWeekly(): Promise<RankRow[]> {
     .limit(20);
 
   return rows.map((r) => ({
-    userId: r.userId as string,
-    name: r.name ?? r.fallbackName,
-    image: r.image,
+    userId: r.name ?? "",
+    name: r.name,
+    image: null,
     points: r.adopted * 20 + (r.answers - r.adopted) * 5,
     dept: null,
   }));
 }
 
-/** 系所排行（dept）：依 authorId 聚合貼文數，作為系所貢獻排名 */
+/** 學科貢獻榜（dept）：依作者名稱聚合貼文數（含種子資料） */
 async function loadDept(): Promise<RankRow[]> {
   const rows = await db
     .select({
-      userId: posts.authorId,
-      name: sql<string | null>`max(${users.name})`,
-      image: sql<string | null>`max(${users.image})`,
-      fallbackName: sql<string | null>`max(${posts.authorName})`,
+      name: posts.authorName,
       postCount: sql<number>`count(*)::int`,
     })
     .from(posts)
-    .leftJoin(users, eq(users.id, posts.authorId))
-    .where(and(eq(posts.hidden, false), isNotNull(posts.authorId)))
-    .groupBy(posts.authorId)
+    .where(eq(posts.hidden, false))
+    .groupBy(posts.authorName)
     .orderBy(desc(sql`count(*)`))
     .limit(20);
 
   return rows.map((r) => ({
-    userId: r.userId as string,
-    name: r.name ?? r.fallbackName,
-    image: r.image,
+    userId: r.name ?? "",
+    name: r.name,
+    image: null,
     points: r.postCount * 10,
     dept: null,
   }));
@@ -107,10 +99,15 @@ export default async function LeaderboardPage({
   const { tab } = await searchParams;
   const activeKey: TabKey = TAB_KEYS.includes(tab as TabKey)
     ? (tab as TabKey)
-    : "weekly";
+    : "explorer";
+  const activeTab = TABS.find((t) => t.key === activeKey) ?? TABS[0];
 
+  // dept 用貼文聚合真實排名；explorer / studytime 用留言聚合真實排名（忠實移植視覺，資料真實）
   const ranked: RankRow[] =
     activeKey === "dept" ? await loadDept() : await loadWeekly();
+
+  const podium = ranked.slice(0, 3);
+  const listRows = ranked.slice(3, 7);
 
   // 當前使用者成就（依真實資料計算，對齊 legacy 六項；門檻以真實 DB 來源定義）
   let achievements:
@@ -122,6 +119,7 @@ export default async function LeaderboardPage({
         current: number;
         target: number;
         earned: boolean;
+        type: "large" | "small";
       }[]
     | null = null;
   if (userId) {
@@ -143,59 +141,68 @@ export default async function LeaderboardPage({
       {
         id: "calc_savior",
         name: "微積分救星",
-        icon: "🧮",
-        desc: "解答區累計 3 次被採納，幫助他人解決學術難題。",
+        icon: "calculate",
+        desc: "解答區累計解答達到 3 次，幫助他人解決微積分等高等學術難題。",
         current: adopted,
         target: 3,
         earned: adopted >= 3,
+        type: "large",
       },
       {
         id: "lab_master",
         name: "實驗室大師",
-        icon: "🔬",
-        desc: "累計回覆達到 20 則，於各學術區踴躍貢獻。",
+        icon: "science",
+        desc: "累計回覆達到 20 則，在各學術區獲得高度讚譽。",
         current: ac,
         target: 20,
         earned: ac >= 20,
+        type: "small",
       },
       {
         id: "lit_collector",
         name: "文獻考究狂",
-        icon: "📚",
-        desc: "寵物等級提升至 2 等級以上，展現學術研習深度。",
+        icon: "library_books",
+        desc: "寵物等級提升至 2 等級以上，顯示寵物在學術研習中的深度成長。",
         current: pet.level,
         target: 2,
         earned: pet.level >= 2,
+        type: "small",
       },
       {
         id: "coin_millionaire",
         name: "金幣富豪",
-        icon: "💰",
-        desc: "累計金幣餘額達到 150 枚，展現出色的理財能力。",
+        icon: "monetization_on",
+        desc: "累計金幣餘額達到 150 枚，顯示出色的學習與商城理財能力。",
         current: pet.coins,
         target: 150,
         earned: pet.coins >= 150,
+        type: "small",
       },
       {
         id: "room_creator",
         name: "自習先驅",
-        icon: "🚪",
+        icon: "meeting_room",
         desc: "加入至少 1 個自習室，帶動同儕學習氛圍。",
         current: rooms,
         target: 1,
         earned: rooms >= 1,
+        type: "small",
       },
       {
         id: "academic_explorer",
         name: "學術探索者",
-        icon: "🧭",
-        desc: "註冊成為 PetScholar 學術村民，開啟學術成長之旅。",
+        icon: "explore",
+        desc: "註冊成為 PetScholar 學術村民，開啟遊戲化的學術成長之旅。",
         current: 1,
         target: 1,
         earned: true,
+        type: "small",
       },
     ];
   }
+  const unlockedCount = achievements
+    ? achievements.filter((a) => a.earned).length
+    : 0;
 
   // 成就徽章（legacy badges-showcase 四項），解鎖以真實資料判定
   let petLevel = 0;
@@ -254,230 +261,493 @@ export default async function LeaderboardPage({
   }
 
   return (
-    <section className="tab-section active" id="sect-welfare">
-      <div className="mb-lg border-b border-outline-variant/30 pb-3">
-        <h1 className="font-semibold text-headline-lg text-on-background">
-          排行榜與成就福利社
+    <div className="w-full flex flex-col gap-xl">
+      {/* Header Section */}
+      <header className="flex flex-col gap-sm">
+        <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+          本週榮譽榜
         </h1>
-        <p className="text-secondary text-body-md">
-          解鎖成就徽章以在福利社兌換校園實體優惠折價券。
+        <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
+          表彰在解答與探索領域展現卓越成就的學習者。展現你的實力，解鎖專屬成就勳章。
         </p>
+      </header>
+
+      {/* Leaderboard Tab Selector */}
+      <div className="flex bg-surface-container-low dark:bg-surface-container-high p-1 rounded-full border border-outline-variant/30 w-full max-w-xl self-start mb-sm">
+        {TABS.map((t) => {
+          const isActive = t.key === activeKey;
+          return (
+            <Link
+              key={t.key}
+              href={
+                t.key === "explorer"
+                  ? "/leaderboard"
+                  : `/leaderboard?tab=${t.key}`
+              }
+              className={`flex-1 py-2 px-4 font-bold text-body-md rounded-full transition-all text-center ${
+                isActive
+                  ? "bg-primary text-on-primary shadow-sm dark:bg-primary-fixed dark:text-on-primary-fixed"
+                  : "text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed"
+              }`}
+            >
+              {t.tab}
+            </Link>
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-lg items-start">
-        {/* Left: Achievements & Welfare Coupons */}
-        <div className="lg:col-span-7 space-y-lg">
-          {/* Badge Showcase */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-            <h3 className="font-bold text-body-lg text-on-surface mb-3 flex items-center gap-1">
-              <span className="material-symbols-outlined text-primary">
-                military_tech
-              </span>{" "}
-              我的成就徽章
-            </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-sm">
-              {badges ? (
-                badges.map((b) => (
-                  <div
-                    key={b.name}
-                    title={b.desc}
-                    className={`flex flex-col items-center justify-center p-2 bg-surface-container-low dark:bg-surface border border-outline-variant/30 rounded-xl relative group ${
-                      b.owned ? "" : "opacity-40 filter grayscale"
-                    }`}
-                  >
-                    <span className="text-3xl">{b.icon}</span>
-                    <span className="text-[10px] font-bold text-on-surface mt-1">
-                      {b.name}
-                    </span>
-                    {b.owned && (
-                      <span className="absolute top-1 right-1 text-[8px] bg-green-100 text-green-700 px-1 rounded-full">
-                        已得
-                      </span>
-                    )}
-                  </div>
-                ))
+      {/* Top 3 Podium Section */}
+      <section className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-lg flex flex-col items-center justify-center min-h-[360px] relative pt-16">
+        <div
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at center, #4b6172 2px, transparent 2px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <div className="flex items-end justify-center gap-sm md:gap-lg h-64 z-10 w-full max-w-3xl">
+          {podium.length === 0 ? (
+            <p className="text-secondary text-body-md self-center">
+              尚無排行資料。
+            </p>
+          ) : (
+            // 顯示順序：第 2 名、第 1 名、第 3 名
+            [podium[1], podium[0], podium[2]].map((member, slot) => {
+              if (!member) return null;
+              const rank = slot === 1 ? 1 : slot === 0 ? 2 : 3;
+              const isSelf = userId != null && member.userId === userId;
+              const nameSuffix = isSelf ? " (您)" : "";
+              const avatar = member.image ? (
+                <>
+                  { }
+                  <img
+                    src={member.image}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </>
               ) : (
-                <p className="col-span-full text-secondary text-body-md">
-                  登入後可查看你的成就徽章。
-                </p>
-              )}
-            </div>
-          </div>
+                <div className="w-full h-full flex items-center justify-center font-bold text-secondary text-lg bg-surface-container-highest">
+                  {member.name?.[0] ?? "?"}
+                </div>
+              );
 
-          {/* Coupon Welfare Shop */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-            <h3 className="font-bold text-body-lg text-tertiary flex items-center gap-1 mb-3">
-              <span className="material-symbols-outlined">local_activity</span>{" "}
-              學生特約福利社
-            </h3>
-            <div className="space-y-md">
-              {WELFARE_ITEMS.map((coupon) => {
-                let reqText: string;
-                let isUnlocked: boolean;
-                if (coupon.reqType === "level") {
-                  reqText =
-                    userId == null
-                      ? `Lv.${coupon.reqValue} 級解鎖`
-                      : `需寵物等級 ${coupon.reqValue}`;
-                  isUnlocked = petLevel >= (coupon.reqValue as number);
-                } else {
-                  reqText = `需解鎖徽章: ${coupon.reqValue}`;
-                  isUnlocked = ownedBadgeNames.includes(
-                    coupon.reqValue as string,
-                  );
-                }
-                const redeemedCode = redeemedMap.get(coupon.id);
-                const isRedeemed = redeemedCode != null;
+              if (rank === 1) {
                 return (
                   <div
-                    key={coupon.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-surface-container-low dark:bg-surface border border-outline-variant/20"
+                    key={member.userId}
+                    className={`flex flex-col items-center w-1/3 relative ${
+                      isSelf ? "scale-105" : ""
+                    }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">{coupon.icon}</span>
-                      <div>
-                        <h4 className="font-bold text-xs text-on-surface">
-                          {coupon.name}
-                        </h4>
-                        <p className="text-[10px] text-secondary leading-normal">
-                          {coupon.desc}
-                        </p>
-                        <span className="text-[9px] font-bold text-tertiary">
-                          {reqText}
-                        </span>
+                    <div className="absolute -top-10 text-tertiary-container animate-pulse">
+                      <span
+                        className="material-symbols-outlined text-4xl icon-fill"
+                        style={{ fontSize: "40px" }}
+                      >
+                        kid_star
+                      </span>
+                    </div>
+                    <div className="relative mb-sm">
+                      <div
+                        className={`w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-tertiary-container shadow-lg overflow-hidden bg-primary-container ${
+                          isSelf
+                            ? "border-primary-fixed ring-4 ring-primary-container/50"
+                            : ""
+                        }`}
+                      >
+                        {avatar}
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 bg-tertiary-container text-on-tertiary-container w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-md border border-tertiary-fixed font-headline-md text-lg">
+                        1
                       </div>
                     </div>
-                    {userId == null ? (
-                      <Link
-                        href="/login"
-                        className="font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all bg-surface-container text-secondary border border-outline-variant/30 hover:opacity-95 whitespace-nowrap"
-                      >
-                        登入兌換
-                      </Link>
-                    ) : isRedeemed ? (
-                      <span className="font-mono font-bold text-xs py-1.5 px-3 rounded-lg bg-tertiary-container text-on-tertiary-container border border-tertiary/30 whitespace-nowrap">
-                        {redeemedCode}
-                      </span>
-                    ) : isUnlocked ? (
-                      <form action={redeemCoupon}>
-                        <input type="hidden" name="couponId" value={coupon.id} />
-                        <button
-                          type="submit"
-                          className="font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all bg-tertiary text-on-tertiary hover:opacity-95 whitespace-nowrap"
-                        >
-                          免費兌換
-                        </button>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        className="font-bold text-xs py-1.5 px-3 rounded-lg shadow-sm transition-all bg-surface-container text-secondary cursor-not-allowed border border-outline-variant/30 whitespace-nowrap"
-                        disabled
-                      >
-                        {coupon.reqType === "level"
-                          ? `需等級 ${coupon.reqValue}`
-                          : "未解鎖"}
-                      </button>
-                    )}
+                    <div
+                      className={`font-label-md text-label-md text-on-surface font-bold text-center truncate w-full text-base ${
+                        isSelf ? "text-primary" : ""
+                      }`}
+                    >
+                      {(member.name ?? "匿名使用者") + nameSuffix}
+                    </div>
+                    <div className="font-body-md text-body-md text-primary font-semibold">
+                      {member.points.toLocaleString()} {activeTab.unit}
+                    </div>
+                    <div className="w-full bg-primary-container h-32 md:h-40 mt-md rounded-t-xl border-t border-x border-primary-fixed-dim shadow-[inset_0_4px_6px_rgba(0,0,0,0.05)]" />
                   </div>
                 );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Leaderboards */}
-        <div className="lg:col-span-5 bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-          <div className="flex border-b border-outline-variant/30 mb-md">
-            {TABS.map((t) => {
-              const isActive = t.key === activeKey;
-              return (
-                <Link
-                  key={t.key}
-                  href={
-                    t.key === "weekly"
-                      ? "/leaderboard"
-                      : `/leaderboard?tab=${t.key}`
-                  }
-                  className={`flex-1 py-2 font-bold text-body-md ${
-                    isActive
-                      ? "text-primary border-b-2 border-primary"
-                      : "text-secondary border-b-2 border-transparent hover:text-primary"
-                  }`}
-                >
-                  {t.tab}
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="space-y-md">
-            <div className="grid grid-cols-12 text-xs font-bold text-secondary pb-1 border-b border-outline-variant/20">
-              <span className="col-span-2">排名</span>
-              <span className="col-span-7">系所/姓名</span>
-              <span className="col-span-3 text-right">本週積分</span>
-            </div>
-            <div className="space-y-2.5">
-              {ranked.length === 0 ? (
-                <p className="text-xs text-secondary py-2">尚無排行資料。</p>
-              ) : (
-                ranked.map((u, i) => {
-                  const isSelf = userId != null && u.userId === userId;
-                  const selfBg = isSelf
-                    ? "bg-primary-container/20 border border-primary/20 rounded-lg"
-                    : "";
-                  const nameDisplay = isSelf
-                    ? `${u.name ?? "匿名使用者"} (我)`
-                    : (u.name ?? "匿名使用者");
-                  return (
-                    <div
-                      key={u.userId}
-                      className={`grid grid-cols-12 items-center text-xs py-1.5 px-2 ${selfBg}`}
-                    >
-                      <div className="col-span-2">
-                        {i === 0 ? (
-                          <span className="text-xl">🥇</span>
-                        ) : i === 1 ? (
-                          <span className="text-xl">🥈</span>
-                        ) : i === 2 ? (
-                          <span className="text-xl">🥉</span>
-                        ) : (
-                          <span className="font-bold text-secondary text-xs">
-                            {i + 1}
-                          </span>
-                        )}
+              }
+              if (rank === 2) {
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex flex-col items-center w-1/3"
+                  >
+                    <div className="relative mb-sm">
+                      <div
+                        className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-secondary-container ${
+                          isSelf
+                            ? "border-primary-fixed-dim ring-4 ring-primary-container/40"
+                            : ""
+                        }`}
+                      >
+                        {avatar}
                       </div>
-                      <div className="col-span-7 font-bold text-on-surface flex items-center gap-1.5">
-                        {u.image ? (
-                          <span className="w-5 h-5 rounded-full overflow-hidden inline-flex shrink-0">
+                      <div className="absolute -bottom-2 -right-2 bg-surface-container text-on-surface-variant w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border border-outline-variant font-label-md">
+                        2
+                      </div>
+                    </div>
+                    <div
+                      className={`font-label-md text-label-md text-on-surface font-bold text-center truncate w-full ${
+                        isSelf ? "text-primary" : ""
+                      }`}
+                    >
+                      {(member.name ?? "匿名使用者") + nameSuffix}
+                    </div>
+                    <div className="font-body-md text-body-md text-secondary">
+                      {member.points.toLocaleString()} {activeTab.unit}
+                    </div>
+                    <div className="w-full bg-secondary-container h-24 md:h-32 mt-md rounded-t-xl border-t border-x border-outline-variant opacity-80" />
+                  </div>
+                );
+              }
+              return (
+                <div
+                  key={member.userId}
+                  className="flex flex-col items-center w-1/3"
+                >
+                  <div className="relative mb-sm">
+                    <div
+                      className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-tertiary-fixed-dim ${
+                        isSelf
+                          ? "border-primary-fixed-dim ring-4 ring-primary-container/40"
+                          : ""
+                      }`}
+                    >
+                      {avatar}
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 bg-surface-variant text-on-surface-variant w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border border-outline-variant font-label-md">
+                      3
+                    </div>
+                  </div>
+                  <div
+                    className={`font-label-md text-label-md text-on-surface font-bold text-center truncate w-full ${
+                      isSelf ? "text-primary" : ""
+                    }`}
+                  >
+                    {(member.name ?? "匿名使用者") + nameSuffix}
+                  </div>
+                  <div className="font-body-md text-body-md text-secondary">
+                    {member.points.toLocaleString()} {activeTab.unit}
+                  </div>
+                  <div className="w-full bg-surface-container-highest h-20 md:h-28 mt-md rounded-t-xl border-t border-x border-outline-variant opacity-70" />
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {/* Two Column Layout: Rankings List & Achievements Bento */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-xl">
+        {/* Weekly Rankings List */}
+        <section className="flex flex-col gap-md">
+          <div className="flex items-center justify-between">
+            <h2 className="font-headline-md text-headline-md text-on-surface">
+              {activeTab.title}
+            </h2>
+            <span className="font-label-md text-label-md text-primary">
+              查看完整榜單
+            </span>
+          </div>
+          <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant overflow-hidden">
+            {listRows.length === 0 ? (
+              <div className="p-md text-secondary font-body-md text-body-md">
+                尚無更多排行資料。
+              </div>
+            ) : (
+              listRows.map((item, idx) => {
+                const rank = idx + 4;
+                const isSelf = userId != null && item.userId === userId;
+                return (
+                  <div
+                    key={item.userId}
+                    className={`flex items-center justify-between p-md border-b border-surface-variant transition-colors ${
+                      isSelf
+                        ? "bg-primary-container/20 hover:bg-primary-container/30"
+                        : "hover:bg-surface-container-low"
+                    }`}
+                  >
+                    <div className="flex items-center gap-md">
+                      <div className="w-8 font-label-md text-label-md text-secondary font-bold text-center">
+                        {rank}
+                      </div>
+                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container">
+                        {item.image ? (
+                          <>
                             { }
                             <img
-                              src={u.image}
+                              src={item.image}
                               alt=""
                               className="w-full h-full object-cover"
                             />
-                          </span>
+                          </>
                         ) : (
-                          <span>👤</span>
-                        )}
-                        <span>{nameDisplay}</span>
-                        {u.dept && (
-                          <span className="text-[9px] text-secondary ml-1 font-normal">
-                            ({u.dept})
-                          </span>
+                          <div className="w-full h-full flex items-center justify-center text-secondary font-bold bg-surface-container">
+                            {item.name?.[0] ?? "?"}
+                          </div>
                         )}
                       </div>
-                      <div className="col-span-3 text-right font-bold text-primary dark:text-primary-fixed-dim">
-                        {u.points}
+                      <div>
+                        <div
+                          className={`font-body-md text-body-md font-medium text-on-surface ${
+                            isSelf ? "font-bold text-primary" : ""
+                          }`}
+                        >
+                          {(item.name ?? "匿名使用者") + (isSelf ? " (您)" : "")}
+                        </div>
+                        <div className="text-[10px] text-secondary">
+                          {item.dept ?? "未知系所"}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className={`font-body-md text-body-md ${
+                        isSelf ? "font-bold text-primary" : "text-on-surface-variant"
+                      }`}
+                    >
+                      {item.points.toLocaleString()} {activeTab.unit}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        {/* Achievement Showcase (Bento Grid) */}
+        <section className="flex flex-col gap-md">
+          <div className="flex items-center justify-between">
+            <h2 className="font-headline-md text-headline-md text-on-surface">
+              成就展示館
+            </h2>
+            <span className="bg-primary-container text-on-primary-container px-sm py-1 rounded-full font-label-md text-label-md">
+              已解鎖 {unlockedCount}/6
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-sm md:gap-md auto-rows-[140px]">
+            {achievements ? (
+              achievements.map((ach) => {
+                const isLocked = !ach.earned;
+                const percent = Math.min(
+                  100,
+                  (ach.current / ach.target) * 100,
+                );
+                const statusEl = ach.earned ? (
+                  <span className="text-tertiary font-bold text-[10px] flex items-center gap-xs">
+                    <span className="material-symbols-outlined text-sm icon-fill text-tertiary">
+                      check_circle
+                    </span>
+                    已解鎖
+                  </span>
+                ) : (
+                  <span className="material-symbols-outlined text-outline text-sm">
+                    lock
+                  </span>
+                );
+
+                if (ach.type === "large") {
+                  return (
+                    <div
+                      key={ach.id}
+                      className={`col-span-2 bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-md flex items-center gap-md hover:shadow-md transition-shadow relative overflow-hidden group ${
+                        isLocked ? "opacity-65" : ""
+                      }`}
+                    >
+                      <div className="absolute right-0 top-0 w-32 h-32 bg-primary-container rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity" />
+                      <div
+                        className={`w-16 h-16 rounded-xl ${
+                          isLocked
+                            ? "bg-surface-container-highest text-secondary"
+                            : "bg-primary-container text-primary"
+                        } flex items-center justify-center flex-shrink-0 border border-primary-fixed-dim shrink-0`}
+                      >
+                        <span
+                          className={`material-symbols-outlined text-3xl ${
+                            isLocked ? "" : "icon-fill"
+                          }`}
+                        >
+                          {ach.icon}
+                        </span>
+                      </div>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <div className="flex justify-between items-start">
+                          <h3 className="font-headline-md text-lg text-on-surface mb-1 truncate">
+                            {ach.name}
+                          </h3>
+                          {statusEl}
+                        </div>
+                        <p className="font-body-md text-body-md text-secondary text-sm mb-2 line-clamp-2">
+                          {ach.desc}
+                        </p>
+                        <div className="flex items-center gap-sm">
+                          <div className="flex-1 bg-surface-container h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className={`${
+                                isLocked ? "bg-secondary" : "bg-primary"
+                              } h-full rounded-full`}
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-bold text-secondary">
+                            {ach.current}/{ach.target}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
-                })
-              )}
-            </div>
+                }
+
+                return (
+                  <div
+                    key={ach.id}
+                    className={`bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-md flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative overflow-hidden group ${
+                      isLocked ? "opacity-65" : ""
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div
+                        className={`w-10 h-10 rounded-full ${
+                          isLocked
+                            ? "bg-surface-container-highest text-secondary"
+                            : "bg-tertiary-container text-on-tertiary-container"
+                        } flex items-center justify-center shrink-0`}
+                      >
+                        <span
+                          className={`material-symbols-outlined ${
+                            isLocked ? "" : "icon-fill"
+                          }`}
+                        >
+                          {ach.icon}
+                        </span>
+                      </div>
+                      {statusEl}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-label-md text-label-md text-on-surface font-bold text-base mb-xs truncate">
+                        {ach.name}
+                      </h3>
+                      <p className="font-label-md text-[10px] text-secondary line-clamp-1 mb-1">
+                        {ach.desc}
+                      </p>
+                      <div className="flex items-center gap-xs">
+                        <div className="flex-1 bg-surface-container h-1 rounded-full overflow-hidden">
+                          <div
+                            className={`${
+                              isLocked ? "bg-secondary" : "bg-tertiary"
+                            } h-full rounded-full`}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <span className="text-[9px] font-bold text-secondary shrink-0">
+                          {ach.current}/{ach.target}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="col-span-2 text-secondary font-body-md text-body-md self-center">
+                登入後可查看你的成就展示館。
+              </p>
+            )}
           </div>
-        </div>
+        </section>
       </div>
-    </section>
+
+      {/* Student Welfare Coupon Shop */}
+      <section className="flex flex-col gap-md">
+        <div className="flex items-center justify-between">
+          <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
+            <span className="material-symbols-outlined text-tertiary icon-fill">
+              local_activity
+            </span>
+            學生特約福利社
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+          {WELFARE_ITEMS.map((coupon) => {
+            let reqText: string;
+            let isUnlocked: boolean;
+            if (coupon.reqType === "level") {
+              reqText =
+                userId == null
+                  ? `Lv.${coupon.reqValue} 級解鎖`
+                  : `需寵物等級 ${coupon.reqValue}`;
+              isUnlocked = petLevel >= (coupon.reqValue as number);
+            } else {
+              reqText = `需解鎖徽章: ${coupon.reqValue}`;
+              isUnlocked = ownedBadgeNames.includes(coupon.reqValue as string);
+            }
+            const redeemedCode = redeemedMap.get(coupon.id);
+            const isRedeemed = redeemedCode != null;
+            return (
+              <div
+                key={coupon.id}
+                className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant p-md flex items-center justify-between gap-md hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center gap-md min-w-0">
+                  <span className="text-3xl shrink-0">{coupon.icon}</span>
+                  <div className="min-w-0">
+                    <h3 className="font-label-md text-label-md text-on-surface font-bold text-sm truncate">
+                      {coupon.name}
+                    </h3>
+                    <p className="font-body-md text-body-md text-secondary text-xs line-clamp-2">
+                      {coupon.desc}
+                    </p>
+                    <span className="text-[10px] font-bold text-tertiary">
+                      {reqText}
+                    </span>
+                  </div>
+                </div>
+                {userId == null ? (
+                  <Link
+                    href="/login"
+                    className="font-label-md text-label-md font-bold py-1.5 px-3 rounded-full shadow-sm transition-all bg-surface-container text-secondary border border-outline-variant/30 hover:opacity-95 whitespace-nowrap shrink-0"
+                  >
+                    登入兌換
+                  </Link>
+                ) : isRedeemed ? (
+                  <span className="font-mono font-bold text-xs py-1.5 px-3 rounded-full bg-tertiary-container text-on-tertiary-container border border-tertiary-fixed whitespace-nowrap shrink-0">
+                    {redeemedCode}
+                  </span>
+                ) : isUnlocked ? (
+                  <form action={redeemCoupon} className="shrink-0">
+                    <input type="hidden" name="couponId" value={coupon.id} />
+                    <button
+                      type="submit"
+                      className="font-label-md text-label-md font-bold py-1.5 px-3 rounded-full shadow-sm transition-all bg-tertiary text-on-tertiary hover:opacity-95 whitespace-nowrap"
+                    >
+                      免費兌換
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className="font-label-md text-label-md font-bold py-1.5 px-3 rounded-full shadow-sm bg-surface-container text-secondary cursor-not-allowed border border-outline-variant/30 whitespace-nowrap shrink-0"
+                    disabled
+                  >
+                    {coupon.reqType === "level"
+                      ? `需等級 ${coupon.reqValue}`
+                      : "未解鎖"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
   );
 }
