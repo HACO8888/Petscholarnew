@@ -104,11 +104,12 @@ export default function Header({ user }: { user: HeaderUser | null }) {
         </nav>
       </header>
 
-      {/* 行動導覽列：md 以下顯示（此時右側側欄隱藏）。固定於底部、可橫向捲動，避免水平溢出。 */}
+      {/* 行動/平板導覽列：xl 以下顯示，補齊桌機完整導覽（xl 以上）之外的所有寬度，
+          避免 768–1280px（如 iPad）出現完全沒有主導覽的死角。固定於底部、可橫向捲動。 */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-surface border-t border-outline-variant/30 shadow-[0_-1px_3px_rgba(0,0,0,0.08)] overflow-x-auto transition-colors"
+        className="xl:hidden fixed bottom-0 inset-x-0 z-50 bg-surface border-t border-outline-variant/30 shadow-[0_-1px_3px_rgba(0,0,0,0.08)] overflow-x-auto transition-colors"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        aria-label="行動裝置導覽"
+        aria-label="主導覽"
       >
         <div className="flex items-stretch h-14 w-max mx-auto px-1">
           {[...tabs, ...roleTabs.map((t) => ({ href: t.href, label: t.label }))].map((t) => {

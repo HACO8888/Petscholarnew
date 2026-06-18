@@ -37,8 +37,7 @@ export default async function LoginPage() {
             <h1 className="text-headline-lg font-bold tracking-tight text-surface">PetScholar</h1>
           </div>
           <p className="mb-sm max-w-lg text-headline-md text-surface-container-low">
-            &quot;Elevating academic achievement through professional engagement and structured
-            progress.&quot;
+            透過專業互助與循序漸進的累積，一起把學業成就再往上推一階。
           </p>
           <p className="text-body-lg text-secondary-fixed-dim">加入我們，開啟您的專屬學習旅程。</p>
         </div>
