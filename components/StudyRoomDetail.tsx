@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { deleteRoom } from "@/app/(app)/study-rooms/actions";
 
 interface RoomInfo {
   id: string;
@@ -37,6 +38,8 @@ interface StudyRoomDetailProps {
   members: Member[];
   memberCount: number;
   meName: string;
+  /** 是否可解散此自習室（建立者或系統管理員） */
+  canManage: boolean;
 }
 
 const POMO_SECONDS = 25 * 60;
@@ -54,6 +57,7 @@ export default function StudyRoomDetail({
   members,
   memberCount,
   meName,
+  canManage,
 }: StudyRoomDetailProps) {
   // ---- 番茄鐘 ----
   const [timeLeft, setTimeLeft] = useState(POMO_SECONDS);
@@ -191,12 +195,25 @@ export default function StudyRoomDetail({
 {memberCount} 位成員
           </p>
         </div>
-        <Link
-          href="/study-rooms"
-          className="bg-surface-container-high hover:bg-surface-container-highest text-error font-bold text-body-md px-5 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1 no-underline"
-        >
-          <span className="material-symbols-outlined">logout</span> 返回自習室
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          {canManage && (
+            <form action={deleteRoom}>
+              <input type="hidden" name="roomId" value={room.id} />
+              <button
+                type="submit"
+                className="bg-error-container hover:opacity-90 text-on-error-container font-bold text-body-md px-4 py-2 rounded-lg border border-error/20 shadow-sm transition-all flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[18px]">delete</span> 解散
+              </button>
+            </form>
+          )}
+          <Link
+            href="/study-rooms"
+            className="bg-surface-container-high hover:bg-surface-container-highest text-error font-bold text-body-md px-5 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1 no-underline"
+          >
+            <span className="material-symbols-outlined">logout</span> 返回自習室
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-lg">

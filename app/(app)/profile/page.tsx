@@ -38,15 +38,16 @@ export default async function ProfilePage() {
     redirect("/login");
   }
 
-  // 等級 / 金幣用真實 pet（沒有寵物列則給預設值）
+  // 等級 / 金幣 / 寵物名用真實 pet（沒有寵物列則給預設值）
   const [myPet] = await db
-    .select({ level: pets.level, coins: pets.coins })
+    .select({ level: pets.level, coins: pets.coins, name: pets.name })
     .from(pets)
     .where(eq(pets.userId, userId))
     .limit(1);
 
   const petLevel = myPet?.level ?? 1;
   const petCoins = myPet?.coins ?? 0;
+  const petName = myPet?.name ?? "未命名小精靈";
 
   // 解答數量＝該使用者未隱藏的留言（真實資料）
   const myComments = await db
@@ -340,6 +341,18 @@ export default async function ProfilePage() {
                 maxLength={100}
                 className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                 placeholder="請輸入姓名..."
+                type="text"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-on-surface mb-1">寵物暱稱</label>
+              <input
+                name="petName"
+                defaultValue={petName}
+                maxLength={40}
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                placeholder="替你的學習夥伴取個名字…"
                 type="text"
               />
             </div>

@@ -41,6 +41,9 @@ export default async function StudyRoomDetailPage({
     isSelf: m.userId === userId,
   }));
 
+  const canManage =
+    room.createdBy === userId || session?.user?.role === "admin";
+
   return (
     <StudyRoomDetail
       room={{
@@ -53,6 +56,7 @@ export default async function StudyRoomDetailPage({
       members={members}
       memberCount={members.length}
       meName={session?.user?.name ?? "你"}
+      canManage={canManage}
     />
   );
 }
