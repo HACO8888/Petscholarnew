@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { Role } from "./nav-config";
 import { logout } from "@/app/actions/auth";
 import GuidedTour, { startGuidedTour } from "./GuidedTour";
@@ -22,112 +22,118 @@ const TABS = [
   { href: "/profile", label: "個人檔案" },
 ];
 
-const ROLE_OPTS: { value: Role; label: string }[] = [
-  { value: "student", label: "一般學生" },
-  { value: "ta", label: "課程助教" },
-  { value: "professor", label: "課程教授" },
-  { value: "admin", label: "系統管理員" },
-];
-
 function tabClass(active: boolean, extra = "") {
   return `tab-link px-sm h-full flex items-center text-body-md font-medium ${extra || "text-secondary"} hover:text-primary border-b-2 ${active ? "border-primary text-primary" : "border-transparent"} transition-all`;
 }
 
 export default function Header({ user }: { user: HeaderUser | null }) {
   const pathname = usePathname();
-  const [role, setRole] = useState<Role>(user?.role ?? "student");
+  const role: Role = user?.role ?? "student";
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+
+  // 角色決定哪些分頁可見（由伺服器端 session 決定，使用者無法在前端偽造）。
+  const tabs = [...TABS];
+  const roleTabs: { href: string; label: string; extra: string }[] = [];
+  if (role === "professor" || role === "admin") {
+    roleTabs.push({ href: "/professor", label: "課程管理", extra: "text-purple-600 dark:text-purple-400" });
+  }
+  if (role === "admin") {
+    roleTabs.push({ href: "/admin", label: "系統管理後台", extra: "text-red-600 dark:text-red-400" });
+  }
 
   return (
     <>
-    <nav className="fixed top-0 w-full z-50 flex items-center justify-between px-4 md:px-margin-desktop h-16 bg-surface border-b border-outline-variant/30 shadow-sm transition-colors">
-      <div className="flex items-center flex-1 justify-between pr-xl">
-        <Link
-          href="/"
-          className="font-bold text-headline-md text-primary dark:text-primary-fixed tracking-tight cursor-pointer no-underline"
-        >
-          PetScholar
-        </Link>
-
-        <div className="hidden xl:flex items-center gap-[3em] ml-auto mr-xl h-16 top-nav-fixed">
-          {TABS.map((t) => (
-            <Link key={t.href} href={t.href} className={tabClass(isActive(t.href))}>
-              {t.label}
-            </Link>
-          ))}
-          {(role === "professor" || role === "admin") && (
+      <header className="fixed top-0 inset-x-0 z-50 bg-surface border-b border-outline-variant/30 shadow-sm transition-colors h-16">
+        <nav className="flex items-center justify-between gap-2 px-4 md:px-margin-desktop h-16">
+          <div className="flex items-center min-w-0 flex-1 gap-[3em]">
             <Link
-              href="/professor"
-              className={tabClass(isActive("/professor"), "text-purple-600 dark:text-purple-400")}
+              href="/"
+              className="font-bold text-headline-md text-primary dark:text-primary-fixed tracking-tight cursor-pointer no-underline whitespace-nowrap shrink-0"
             >
-              課程管理
+              PetScholar
             </Link>
-          )}
-          {role === "admin" && (
-            <Link
-              href="/admin"
-              className={tabClass(isActive("/admin"), "text-red-600 dark:text-red-400")}
-            >
-              系統管理後台
-            </Link>
-          )}
-        </div>
-      </div>
 
-      <div className="flex items-center gap-md">
-        <ThemeToggleButton />
+            {/* 桌機完整導覽（xl 以上）。較小螢幕改用下方可橫向捲動的分頁列。 */}
+            <div className="hidden xl:flex items-center gap-[3em] h-16">
+              {tabs.map((t) => (
+                <Link key={t.href} href={t.href} className={tabClass(isActive(t.href))}>
+                  {t.label}
+                </Link>
+              ))}
+              {roleTabs.map((t) => (
+                <Link key={t.href} href={t.href} className={tabClass(isActive(t.href), t.extra)}>
+                  {t.label}
+                </Link>
+              ))}
+            </div>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => startGuidedTour()}
-          className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-label-md px-4 py-2 rounded-full hidden sm:flex items-center justify-center gap-1 shadow-sm transition-all whitespace-nowrap shrink-0"
-        >
-          <span className="material-symbols-outlined text-[16px]">explore</span>
-          <span className="hidden lg:inline">3分鐘簡報導覽</span>
-          <span className="lg:hidden">簡報導覽</span>
-        </button>
+          <div className="flex items-center gap-2 md:gap-md shrink-0">
+            <ThemeToggleButton />
 
-        <div className="hidden md:flex items-center gap-1.5 bg-surface-container-low dark:bg-surface-container px-3 py-1.5 rounded-full border border-outline-variant/30 text-xs">
-          <span className="font-bold text-secondary text-[11px]">🎭 身分:</span>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as Role)}
-            className="bg-transparent border-none p-0 focus:ring-0 text-primary dark:text-primary-fixed-dim font-bold cursor-pointer outline-none text-[11.5px]"
-            aria-label="切換身分"
-          >
-            {ROLE_OPTS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {user ? (
-          <form action={logout}>
             <button
-              type="submit"
-              className="bg-primary text-on-primary hover:bg-surface-tint font-label-md text-label-md px-4 py-2 rounded-full transition-all flex items-center gap-1 whitespace-nowrap"
+              type="button"
+              onClick={() => startGuidedTour()}
+              className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-label-md px-3 sm:px-4 py-2 rounded-full hidden sm:flex items-center justify-center gap-1 shadow-sm transition-all whitespace-nowrap shrink-0"
             >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-              <span>登出</span>
+              <span className="material-symbols-outlined text-[16px]">explore</span>
+              <span className="hidden lg:inline">3分鐘簡報導覽</span>
+              <span className="lg:hidden">導覽</span>
             </button>
-          </form>
-        ) : (
-          <Link
-            href="/login"
-            className="bg-primary text-on-primary hover:bg-surface-tint font-label-md text-label-md px-4 py-2 rounded-full transition-all flex items-center gap-1 whitespace-nowrap no-underline"
-          >
-            <span className="material-symbols-outlined text-[18px]">login</span>
-            <span>登入</span>
-          </Link>
-        )}
-      </div>
-    </nav>
-    <GuidedTour role={role} />
+
+            {user ? (
+              <form action={logout}>
+                <button
+                  type="submit"
+                  className="bg-primary text-on-primary hover:bg-surface-tint font-label-md text-label-md px-3 sm:px-4 py-2 rounded-full transition-all flex items-center gap-1 whitespace-nowrap"
+                >
+                  <span className="material-symbols-outlined text-[18px]">logout</span>
+                  <span className="hidden sm:inline">登出</span>
+                </button>
+              </form>
+            ) : (
+              <Link
+                href="/login"
+                className="bg-primary text-on-primary hover:bg-surface-tint font-label-md text-label-md px-3 sm:px-4 py-2 rounded-full transition-all flex items-center gap-1 whitespace-nowrap no-underline"
+              >
+                <span className="material-symbols-outlined text-[18px]">login</span>
+                <span className="hidden sm:inline">登入</span>
+              </Link>
+            )}
+          </div>
+        </nav>
+      </header>
+
+      {/* 行動導覽列：md 以下顯示（此時右側側欄隱藏）。固定於底部、可橫向捲動，避免水平溢出。 */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-surface border-t border-outline-variant/30 shadow-[0_-1px_3px_rgba(0,0,0,0.08)] overflow-x-auto transition-colors"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        aria-label="行動裝置導覽"
+      >
+        <div className="flex items-stretch h-14 w-max mx-auto px-1">
+          {[...tabs, ...roleTabs.map((t) => ({ href: t.href, label: t.label }))].map((t) => {
+            const a = isActive(t.href);
+            return (
+              <Link
+                key={t.href}
+                href={t.href}
+                className={`flex items-center px-3.5 text-label-md font-medium whitespace-nowrap border-t-2 transition-colors -mt-px ${
+                  a
+                    ? "border-primary text-primary"
+                    : "border-transparent text-secondary hover:text-primary"
+                }`}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      <GuidedTour role={role} />
     </>
   );
 }
-
-import { useSyncExternalStore } from "react";
 
 function ThemeToggleButton() {
   const isDark = useSyncExternalStore(
@@ -141,15 +147,18 @@ function ThemeToggleButton() {
   function toggle() {
     const next = !isDark;
     document.documentElement.classList.toggle("dark", next);
-    try { localStorage.setItem("petscholar-theme", next ? "dark" : "light"); } catch {}
+    try {
+      localStorage.setItem("petscholar-theme", next ? "dark" : "light");
+    } catch {}
     window.dispatchEvent(new Event("petscholar-theme-change"));
   }
   return (
     <button
       type="button"
       onClick={toggle}
-      className="p-2 rounded-full hover:bg-surface-container transition-colors"
+      className="p-2 rounded-full hover:bg-surface-container transition-colors shrink-0"
       title="切換深淺模式"
+      aria-label="切換深淺模式"
     >
       <span className="material-symbols-outlined">{isDark ? "light_mode" : "dark_mode"}</span>
     </button>

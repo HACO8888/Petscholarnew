@@ -42,29 +42,6 @@ interface StudyRoomDetailProps {
 const POMO_SECONDS = 25 * 60;
 const AVATARS = ["👩‍🎓", "👨‍🎓", "🐱", "🐶", "🤖"];
 
-const DEFAULT_GOALS: Goal[] = [
-  { id: "goal-1", text: "理解二階常微分方程求解步驟", completed: false },
-  { id: "goal-2", text: "微積分第四章習題討論完成", completed: true },
-  { id: "goal-3", text: "整理 BST 旋轉操作觀念圖解", completed: false },
-];
-
-const DEFAULT_CHAT: ChatMessage[] = [
-  {
-    id: "chat-1",
-    author: "電機二王學霸",
-    text: "大家有第 3 題的公式詳解嗎？",
-    time: "15:42",
-    isSelf: false,
-  },
-  {
-    id: "chat-2",
-    author: "機械系老齒輪",
-    text: "有啊，我剛算出來，特解係數 A 應該是 1/2",
-    time: "15:43",
-    isSelf: false,
-  },
-];
-
 function nowTime() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -118,7 +95,7 @@ export default function StudyRoomDetail({
 
   // ---- 讀書目標清單（localStorage） ----
   const goalsKey = `study-goals:${room.id}`;
-  const [goals, setGoals] = useState<Goal[]>(DEFAULT_GOALS);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoal, setNewGoal] = useState("");
   const [goalsLoaded, setGoalsLoaded] = useState(false);
 
@@ -158,7 +135,7 @@ export default function StudyRoomDetail({
 
   // ---- 聊天室（localStorage） ----
   const chatKey = `study-chat:${room.id}`;
-  const [chat, setChat] = useState<ChatMessage[]>(DEFAULT_CHAT);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [newMsg, setNewMsg] = useState("");
   const [chatLoaded, setChatLoaded] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -211,7 +188,7 @@ export default function StudyRoomDetail({
           </h1>
           <p className="text-secondary text-body-md mt-1 flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">group</span>{" "}
-            {memberCount} 人正在專注
+{memberCount} 位成員
           </p>
         </div>
         <Link
@@ -243,11 +220,9 @@ export default function StudyRoomDetail({
                 <span className="text-[10px] font-bold text-on-surface truncate w-full text-center">
                   {m.name}
                 </span>
-                <div
-                  className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full border border-surface ${
-                    m.isSelf ? "bg-primary" : "bg-tertiary"
-                  }`}
-                />
+                {m.isSelf && (
+                  <span className="absolute top-1 right-1 bg-primary text-on-primary text-[8px] font-bold px-1 rounded-full">你</span>
+                )}
               </div>
             ))}
             {Array.from({ length: remainingSlots }).map((_, i) => (
@@ -370,12 +345,18 @@ export default function StudyRoomDetail({
               <span className="material-symbols-outlined text-secondary">
                 forum
               </span>{" "}
-              靜音文字討論區
+              專注筆記
+              <span className="ml-1 text-[10px] font-normal text-secondary">（僅自己可見）</span>
             </h3>
             <div className="flex-grow overflow-y-auto text-xs space-y-2 max-h-[200px] pr-1 flex flex-col">
               <div className="text-center text-[10px] text-secondary my-1.5">
-                -- 討論區為靜音模式，請打字討論 --
+                -- 自習時的個人專注筆記，僅儲存在本機 --
               </div>
+              {chat.length === 0 && (
+                <div className="flex-grow flex items-center justify-center text-center text-[10px] text-secondary py-4">
+                  還沒有訊息，發出第一則討論吧！
+                </div>
+              )}
               {chat.map((msg) =>
                 msg.isSelf ? (
                   <div

@@ -28,6 +28,8 @@ export const users = pgTable("user", {
   role: varchar("role", { length: 20 }).notNull().default("student"),
   gender: varchar("gender", { length: 20 }),
   petStyle: varchar("pet_style", { length: 40 }),
+  department: varchar("department", { length: 60 }),
+  bio: text("bio"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

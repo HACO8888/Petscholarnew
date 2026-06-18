@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
+  users,
   posts,
   comments,
   studyRoomMembers,
@@ -26,7 +27,7 @@ type RankRow = {
 
 const TABS: { key: TabKey; tab: string; title: string; unit: string }[] = [
   { key: "explorer", tab: "好奇探索者榜", title: "好奇探索者排行", unit: "分" },
-  { key: "studytime", tab: "自習時間榜", title: "自習時間排行", unit: "分" },
+  { key: "studytime", tab: "自習參與榜", title: "自習參與排行", unit: "間" },
   { key: "dept", tab: "學科貢獻榜", title: "學科貢獻排行", unit: "分" },
 ];
 
@@ -40,7 +41,7 @@ type Badge = {
   owned: boolean;
 };
 
-/** 好奇探索者榜 / 自習時間榜（explorer）：依作者名稱聚合留言（含種子資料），被採納 ×20 + 一般回覆 ×5 */
+/** 好奇探索者榜（explorer）：依作者名稱聚合留言（含種子資料），被採納 ×20 + 一般回覆 ×5 */
 async function loadWeekly(): Promise<RankRow[]> {
   const rows = await db
     .select({
@@ -63,6 +64,39 @@ async function loadWeekly(): Promise<RankRow[]> {
     image: null,
     points: r.adopted * 20 + (r.answers - r.adopted) * 5,
     dept: null,
+  }));
+}
+
+/**
+ * 自習參與榜（studytime）：依每位使用者實際加入的自習室數聚合 studyRoomMembers，
+ * join users 取真實名稱／頭像／系所。points = 加入的自習室數量。
+ */
+async function loadStudyTime(): Promise<RankRow[]> {
+  const rows = await db
+    .select({
+      userId: studyRoomMembers.userId,
+      name: users.name,
+      image: users.image,
+      department: users.department,
+      roomCount: sql<number>`count(*)::int`,
+    })
+    .from(studyRoomMembers)
+    .innerJoin(users, eq(users.id, studyRoomMembers.userId))
+    .groupBy(
+      studyRoomMembers.userId,
+      users.name,
+      users.image,
+      users.department,
+    )
+    .orderBy(desc(sql`count(*)`))
+    .limit(20);
+
+  return rows.map((r) => ({
+    userId: r.userId,
+    name: r.name,
+    image: r.image,
+    points: r.roomCount,
+    dept: r.department,
   }));
 }
 
@@ -102,9 +136,14 @@ export default async function LeaderboardPage({
     : "explorer";
   const activeTab = TABS.find((t) => t.key === activeKey) ?? TABS[0];
 
-  // dept 用貼文聚合真實排名；explorer / studytime 用留言聚合真實排名（忠實移植視覺，資料真實）
+  // 三個分頁皆為真實 DB 聚合：
+  // explorer 用留言（被採納/回覆）聚合、dept 用貼文聚合、studytime 用自習室參與數聚合。
   const ranked: RankRow[] =
-    activeKey === "dept" ? await loadDept() : await loadWeekly();
+    activeKey === "dept"
+      ? await loadDept()
+      : activeKey === "studytime"
+        ? await loadStudyTime()
+        : await loadWeekly();
 
   const podium = ranked.slice(0, 3);
   const listRows = ranked.slice(3, 7);
@@ -284,7 +323,7 @@ export default async function LeaderboardPage({
                   ? "/leaderboard"
                   : `/leaderboard?tab=${t.key}`
               }
-              className={`flex-1 py-2 px-4 font-bold text-body-md rounded-full transition-all text-center ${
+              className={`flex-1 py-2 px-2 sm:px-4 font-bold text-label-md sm:text-body-md rounded-full transition-all text-center whitespace-nowrap ${
                 isActive
                   ? "bg-primary text-on-primary shadow-sm dark:bg-primary-fixed dark:text-on-primary-fixed"
                   : "text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed"
@@ -319,14 +358,12 @@ export default async function LeaderboardPage({
               const isSelf = userId != null && member.userId === userId;
               const nameSuffix = isSelf ? " (您)" : "";
               const avatar = member.image ? (
-                <>
-                  { }
-                  <img
-                    src={member.image}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                </>
+                 
+                <img
+                  src={member.image}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center font-bold text-secondary text-lg bg-surface-container-highest">
                   {member.name?.[0] ?? "?"}
@@ -456,8 +493,8 @@ export default async function LeaderboardPage({
             <h2 className="font-headline-md text-headline-md text-on-surface">
               {activeTab.title}
             </h2>
-            <span className="font-label-md text-label-md text-primary">
-              查看完整榜單
+            <span className="font-label-md text-label-md text-secondary">
+              即時更新
             </span>
           </div>
           <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant overflow-hidden">
@@ -484,14 +521,12 @@ export default async function LeaderboardPage({
                       </div>
                       <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container">
                         {item.image ? (
-                          <>
-                            { }
-                            <img
-                              src={item.image}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          </>
+                           
+                          <img
+                            src={item.image}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-secondary font-bold bg-surface-container">
                             {item.name?.[0] ?? "?"}
@@ -506,9 +541,11 @@ export default async function LeaderboardPage({
                         >
                           {(item.name ?? "匿名使用者") + (isSelf ? " (您)" : "")}
                         </div>
-                        <div className="text-[10px] text-secondary">
-                          {item.dept ?? "未知系所"}
-                        </div>
+                        {item.dept ? (
+                          <div className="text-[10px] text-secondary truncate max-w-[40vw] sm:max-w-none">
+                            {item.dept}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <div

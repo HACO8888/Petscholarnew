@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { boards } from "@/db/schema";
@@ -18,9 +19,20 @@ export default async function NewPostPage({
   const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
 
   return (
-    <section className="max-w-2xl">
+    <section className="max-w-2xl min-w-0">
+      <Link
+        href="/boards"
+        className="mb-md inline-flex items-center gap-1 text-body-md font-medium text-secondary no-underline transition-colors hover:text-primary"
+      >
+        <span className="material-symbols-outlined text-[18px]">arrow_back</span> 返回看板列表
+      </Link>
       <h1 className="mb-lg text-headline-lg font-semibold text-on-background">發佈新提問</h1>
 
+      {boardRows.length === 0 ? (
+        <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-body-md text-on-surface-variant dark:bg-surface-container">
+          目前尚無可發佈的看板，請稍後再試或聯絡管理員。
+        </div>
+      ) : (
       <form
         action={createPost}
         className="space-y-lg rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 dark:bg-surface-container"
@@ -36,7 +48,7 @@ export default async function NewPostPage({
             <option value="" disabled>請選擇看板</option>
             {boardRows.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.icon} {b.name}
+                {b.icon ? `${b.icon} ${b.name}` : b.name}
               </option>
             ))}
           </select>
@@ -103,6 +115,7 @@ export default async function NewPostPage({
           發佈提問
         </button>
       </form>
+      )}
     </section>
   );
 }

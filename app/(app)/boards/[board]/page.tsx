@@ -37,30 +37,35 @@ export default async function BoardPage({
 
   return (
     <section>
-      <div className="mb-lg flex items-start justify-between gap-4">
-        <div>
+      <div className="mb-lg flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <Link href="/boards" className="text-label-md text-secondary hover:underline">
             ← 所有看板
           </Link>
-          <h1 className="mt-1 flex items-center gap-2 text-headline-lg font-semibold text-on-background">
-            <span>{board.icon}</span>
-            {board.name}
+          <h1 className="mt-1 flex items-center gap-2 text-headline-lg font-semibold text-on-background break-words">
+            {board.icon && <span aria-hidden="true">{board.icon}</span>}
+            <span className="min-w-0">{board.name}</span>
           </h1>
-          <p className="mt-1 text-body-md text-secondary">{board.description}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {board.departments.map((d) => (
-              <span
-                key={d}
-                className="rounded-full bg-surface-container-high px-2 py-0.5 text-label-md text-on-surface-variant"
-              >
-                {d}
-              </span>
-            ))}
-          </div>
+          {board.description && (
+            <p className="mt-1 text-body-md text-secondary">{board.description}</p>
+          )}
+          {board.departments.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {board.departments.map((d) => (
+                <span
+                  key={d}
+                  className="rounded-full bg-surface-container-high px-2 py-0.5 text-label-md text-on-surface-variant"
+                >
+                  {d}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-label-md text-secondary">{postRows.length} 則提問</p>
         </div>
         <Link
           href={`/posts/new?board=${board.id}`}
-          className="shrink-0 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-label-md font-bold text-on-primary no-underline transition-all hover:bg-surface-tint"
+          className="shrink-0 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-center text-label-md font-bold text-on-primary no-underline transition-all hover:bg-surface-tint sm:self-start sm:text-left"
         >
           發佈新提問
         </Link>

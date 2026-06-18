@@ -3,6 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "./nav-config";
+import { startGuidedTour } from "./GuidedTour";
+
+/** 側欄「說明」按鈕：啟動站內 3 分鐘導覽（沒有獨立說明頁，導覽即為說明來源）。 */
+export function SidebarHelpButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => startGuidedTour()}
+      className="w-full text-on-surface-variant rounded-lg flex items-center gap-md px-md py-sm hover:bg-surface-container-highest transition-colors"
+    >
+      <span className="material-symbols-outlined">help</span>
+      <span>說明與導覽</span>
+    </button>
+  );
+}
 
 const ITEMS = [
   { href: "/boards", label: "看板", icon: "dashboard" },
@@ -31,10 +46,10 @@ export default function SidebarNav({ role }: { role: Role }) {
         <Link
           key={it.href}
           href={it.href}
-          className={`rounded-lg flex items-center gap-md px-md py-sm transition-transform scale-95 active:scale-90 no-underline ${
+          className={`rounded-lg flex items-center gap-md px-md py-sm transition-colors active:scale-[0.98] no-underline ${
             active(it.href)
               ? "bg-primary-container text-on-primary-container"
-              : "text-on-surface-variant hover:bg-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-variant"
+              : "text-on-surface-variant hover:bg-surface-container-highest"
           }`}
         >
           <span className="material-symbols-outlined">{it.icon}</span>

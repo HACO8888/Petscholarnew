@@ -84,14 +84,17 @@ export default async function AdminPage({
     .where(whereClauses.length ? and(...whereClauses) : undefined)
     .orderBy(desc(posts.createdAt));
 
-  // ---- 全站統計（真實值） ----
-  const [totalPostsRow] = await db.select({ n: sql<number>`count(*)::int` }).from(posts);
-  const [blockedPostsRow] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(posts)
-    .where(eq(posts.hidden, true));
-  const totalPosts = totalPostsRow?.n ?? 0;
-  const blockedPosts = blockedPostsRow?.n ?? 0;
+  // ---- 全站統計（真實值，單一查詢一次聚合，避免多次掃描與數字不一致） ----
+  const [statsRow] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      solved: sql<number>`count(*) filter (where ${posts.solved})::int`,
+      blocked: sql<number>`count(*) filter (where ${posts.hidden})::int`,
+    })
+    .from(posts);
+  const totalPosts = statsRow?.total ?? 0;
+  const solvedPosts = statsRow?.solved ?? 0;
+  const blockedPosts = statsRow?.blocked ?? 0;
 
   // ---- 檢舉案件 ----
   const allReports = await db.select().from(reports).orderBy(desc(reports.createdAt));
@@ -100,7 +103,7 @@ export default async function AdminPage({
 
   // ---- 分析資料（由真實 posts 聚合，反映提問方向；含隱藏內容） ----
   const allPostsForAnalytics = await db
-    .select({ boardId: posts.boardId, boardName: boards.name, tags: posts.tags, solved: posts.solved })
+    .select({ boardName: boards.name, tags: posts.tags, solved: posts.solved })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id));
 
@@ -164,7 +167,7 @@ export default async function AdminPage({
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-md" id="admin-stats-grid">
               <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
                 <p className="text-xs text-secondary mb-1">已解決問題</p>
-                <h3 className="font-bold text-3xl text-green-600">{analyticsTotal - unsolvedCount}</h3>
+                <h3 className="font-bold text-3xl text-green-600 dark:text-green-400">{solvedPosts}</h3>
                 <p className="text-[10px] text-secondary mt-1">已被標記為已解決</p>
               </div>
               <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
@@ -174,12 +177,12 @@ export default async function AdminPage({
               </div>
               <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
                 <p className="text-xs text-secondary mb-1">待處理檢舉</p>
-                <h3 className="font-bold text-3xl text-red-600">{pendingReports.length}</h3>
+                <h3 className="font-bold text-3xl text-red-600 dark:text-red-400">{pendingReports.length}</h3>
                 <p className="text-[10px] text-secondary mt-1">可直接屏蔽或駁回</p>
               </div>
               <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
                 <p className="text-xs text-secondary mb-1">已封鎖問題</p>
-                <h3 className="font-bold text-3xl text-orange-600">{blockedPosts}</h3>
+                <h3 className="font-bold text-3xl text-orange-600 dark:text-orange-400">{blockedPosts}</h3>
                 <p className="text-[10px] text-secondary mt-1">已被隱藏、不對外顯示</p>
               </div>
             </div>
@@ -213,15 +216,15 @@ export default async function AdminPage({
                     可直接刪除問題，或刪除後封鎖提問帳號；封鎖與屏蔽結果會與檢舉案件即時同步。
                   </p>
                 </div>
-                <div className="flex items-center gap-sm">
-                  <form method="get" className="flex items-center gap-sm">
+                <div className="flex items-center gap-sm shrink-0">
+                  <form method="get" className="flex items-center gap-sm w-full">
                     {boardFilter && <input type="hidden" name="board" value={boardFilter} />}
                     <input type="hidden" name="panel" value="questions" />
                     <select
                       id="admin-question-filter"
                       name="q"
                       defaultValue={questionFilter}
-                      className="bg-surface border border-outline-variant text-on-surface rounded-lg text-xs py-1.5 px-2 focus:ring-primary focus:border-primary"
+                      className="min-w-0 flex-1 bg-surface border border-outline-variant text-on-surface rounded-lg text-xs py-1.5 px-2 focus:ring-primary focus:border-primary"
                     >
                       {QUESTION_FILTERS.map((f) => (
                         <option key={f.id} value={f.id}>
@@ -231,7 +234,7 @@ export default async function AdminPage({
                     </select>
                     <button
                       type="submit"
-                      className="bg-surface-container hover:bg-surface-container-high text-on-surface-variant text-xs font-bold py-1.5 px-3 rounded-lg border border-outline-variant/30"
+                      className="shrink-0 bg-surface-container hover:bg-surface-container-high text-on-surface-variant text-xs font-bold py-1.5 px-3 rounded-lg border border-outline-variant/30"
                     >
                       篩選
                     </button>
@@ -286,13 +289,15 @@ export default async function AdminPage({
                             </span>
                             <span
                               className={`text-[10px] px-2 py-0.5 rounded ${
-                                p.solved ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                                p.solved
+                                  ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                                  : "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300"
                               }`}
                             >
                               {p.solved ? "已解決" : "未解決"}
                             </span>
                             {p.hidden && (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
                                 問題已刪除
                               </span>
                             )}
@@ -363,11 +368,12 @@ export default async function AdminPage({
         {panel === "reports" && (
           <div className="admin-subpanel">
             <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[300px]">
-              <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-2">
-                <h3 className="font-bold text-body-lg text-red-600 dark:text-red-400 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[20px]">report</span> 檢舉案件與處理日誌
+              <div className="flex justify-between items-center gap-2 mb-md border-b border-outline-variant/20 pb-2">
+                <h3 className="font-bold text-body-lg text-red-600 dark:text-red-400 flex items-center gap-1 min-w-0">
+                  <span className="material-symbols-outlined text-[20px] shrink-0">report</span>
+                  <span className="truncate">檢舉案件與處理日誌</span>
                 </h3>
-                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                <span className="bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap">
                   {pendingReports.length} 案待理
                 </span>
               </div>
@@ -384,18 +390,18 @@ export default async function AdminPage({
                       id={`rep-card-${r.id}`}
                     >
                       <div className="flex items-center justify-between text-xs text-secondary">
-                        <span className="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded">
+                        <span className="bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-bold px-2 py-0.5 rounded">
                           {r.targetType === "post" ? "檢舉文章" : "檢舉回覆"}
                         </span>
                         <span>
-                          {r.reporter} • {formatDateTime(r.createdAt)}
+                          {r.reporter ?? "匿名"} • {formatDateTime(r.createdAt)}
                         </span>
                       </div>
                       <p className="text-xs text-on-surface font-bold">
-                        理由：<span className="font-normal text-secondary">{r.reason}</span>
+                        理由：<span className="font-normal text-secondary">{r.reason ?? "未填寫"}</span>
                       </p>
-                      <div className="bg-surface-container-high dark:bg-surface-container p-sm rounded text-xs text-secondary font-mono leading-normal border border-outline-variant/20 line-clamp-2">
-                        {r.targetText}
+                      <div className="bg-surface-container-high dark:bg-surface-container p-sm rounded text-xs text-secondary font-mono leading-normal border border-outline-variant/20 line-clamp-2 break-words">
+                        {r.targetText ?? "（內容已不可用）"}
                       </div>
                       <div className="flex gap-sm justify-end">
                         <form action={blockReport}>
@@ -456,11 +462,12 @@ export default async function AdminPage({
         {panel === "analytics" && (
           <div className="admin-subpanel">
             <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-              <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-2">
-                <h3 className="font-bold text-body-lg text-purple-600 dark:text-purple-400 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[20px]">query_stats</span> 最近提問方向洞悉
+              <div className="flex justify-between items-center gap-2 mb-md border-b border-outline-variant/20 pb-2">
+                <h3 className="font-bold text-body-lg text-purple-600 dark:text-purple-400 flex items-center gap-1 min-w-0">
+                  <span className="material-symbols-outlined text-[20px] shrink-0">query_stats</span>
+                  <span className="truncate">最近提問方向洞悉</span>
                 </h3>
-                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                <span className="bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap">
                   {analyticsTotal} 筆資料
                 </span>
               </div>
@@ -533,9 +540,9 @@ function AdminBars({
         const pct = total ? Math.max(8, Math.round((count / total) * 100)) : 0;
         return (
           <div key={label} className="space-y-1">
-            <div className="flex justify-between text-xs font-semibold">
-              <span>{label}</span>
-              <span>{count} 筆</span>
+            <div className="flex justify-between gap-2 text-xs font-semibold">
+              <span className="truncate min-w-0">{label}</span>
+              <span className="shrink-0 whitespace-nowrap">{count} 筆</span>
             </div>
             <div className="w-full bg-surface-container-low h-2 rounded-full overflow-hidden">
               <div className={`${accent} h-full rounded-full`} style={{ width: `${pct}%` }} />

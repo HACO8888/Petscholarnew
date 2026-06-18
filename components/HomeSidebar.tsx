@@ -1,10 +1,40 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { claimCheckin, feedPet, simulateTimePass, healPet } from "@/app/(app)/pet/actions";
+
+/**
+ * 首頁側邊欄的互動會改動寵物狀態，但底層 action 只會 revalidate 寵物相關頁。
+ * 這裡用 server action 包一層，補上首頁 "/" 的 revalidate，讓側邊欄即時更新。
+ */
+async function homeCheckin() {
+  "use server";
+  await claimCheckin();
+  revalidatePath("/");
+}
+
+async function homeSimulateTimePass() {
+  "use server";
+  await simulateTimePass();
+  revalidatePath("/");
+}
+
+async function homeHealPet() {
+  "use server";
+  await healPet();
+  revalidatePath("/");
+}
+
+async function homeFeedPet(formData: FormData) {
+  "use server";
+  await feedPet(formData);
+  revalidatePath("/");
+}
 
 export interface HomeSidebarData {
   loggedIn: boolean;
   userName: string;
   userDept: string;
+  userImage: string | null;
   petName: string;
   level: number;
   hp: number;
@@ -26,17 +56,22 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
   return (
     <aside className="w-full xl:w-64 flex flex-col gap-lg shrink-0">
       {/* User Profile widget */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-sm">
-          <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-surface-container-low border border-outline-variant/20 shadow-inner">
-            <span className="text-2xl">👤</span>
+      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex items-center justify-between gap-2">
+        <div className="flex items-center gap-sm min-w-0">
+          <div className="w-10 h-10 shrink-0 rounded-full overflow-hidden flex items-center justify-center bg-surface-container-low border border-outline-variant/20 shadow-inner">
+            {data.userImage ? (
+               
+              <img src={data.userImage} alt={data.userName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-2xl">👤</span>
+            )}
           </div>
-          <div>
-            <h4 className="font-bold text-body-md text-on-surface">{data.userName}</h4>
-            <p className="text-[10px] text-secondary truncate max-w-[120px]">{data.userDept}</p>
+          <div className="min-w-0">
+            <h4 className="font-bold text-body-md text-on-surface truncate">{data.userName}</h4>
+            <p className="text-[10px] text-secondary truncate">{data.userDept}</p>
           </div>
         </div>
-        <Link href="/profile" className="p-2 text-secondary hover:text-primary transition-colors" title="編輯個人設定">
+        <Link href="/profile" className="shrink-0 p-2 text-secondary hover:text-primary transition-colors" title="編輯個人設定">
           <span className="material-symbols-outlined text-[20px]">settings</span>
         </Link>
       </div>
@@ -87,7 +122,7 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
               </div>
             </div>
             {data.loggedIn ? (
-              <form action={claimCheckin}>
+              <form action={homeCheckin}>
                 <button
                   type="submit"
                   disabled={data.checkedIn}
@@ -106,7 +141,7 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
           {data.loggedIn ? (
             <>
               {/* Simulate hour passing — 對齊 legacy index.html sidebar */}
-              <form action={simulateTimePass}>
+              <form action={homeSimulateTimePass}>
                 <button
                   type="submit"
                   className="w-full mt-2 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1"
@@ -116,7 +151,7 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
               </form>
 
               {/* Heal pet entry */}
-              <form action={healPet}>
+              <form action={homeHealPet}>
                 <button
                   type="submit"
                   disabled={data.coins < 20 || data.hp >= data.maxHp}
@@ -157,7 +192,7 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
             </div>
           ) : (
             data.quickFeed.map((f) => (
-              <form key={f.itemId} action={feedPet} className="flex items-center justify-between gap-1 rounded-lg bg-surface-container-low dark:bg-surface-container p-1.5">
+              <form key={f.itemId} action={homeFeedPet} className="flex items-center justify-between gap-1 rounded-lg bg-surface-container-low dark:bg-surface-container p-1.5">
                 <input type="hidden" name="itemId" value={f.itemId} />
                 <span className="flex items-center gap-1 text-[11px] text-on-surface truncate">
                   <span className="text-base">{f.icon}</span>

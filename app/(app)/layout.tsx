@@ -9,11 +9,11 @@ import type { Role } from "@/db/schema";
 const DEFAULT_SIDEBAR: SidebarData = {
   loggedIn: false,
   role: "student",
-  petName: "未命名小精靈",
-  petStyle: "classic",
-  hp: 500,
-  maxHp: 500,
-  coins: 100,
+  petName: "",
+  petStyle: null,
+  hp: 0,
+  maxHp: 0,
+  coins: 0,
 };
 
 export default async function AppLayout({
@@ -43,7 +43,7 @@ export default async function AppLayout({
   return (
     <>
       <Sidebar data={sidebar} />
-      <main className="max-w-7xl mx-auto w-full pt-24 pb-16 px-4 md:px-margin-desktop md:pr-[calc(256px+32px)] min-h-[calc(100vh-64px)] animate-fade-in-up">
+      <main className="max-w-7xl mx-auto w-full pt-24 pb-24 md:pb-16 px-4 md:px-margin-desktop md:pr-[calc(256px+32px)] min-h-[calc(100vh-64px)] animate-fade-in-up">
         {children}
       </main>
     </>

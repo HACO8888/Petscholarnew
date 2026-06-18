@@ -1,13 +1,29 @@
 import Link from "next/link";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { studyRooms, studyRoomMembers, users } from "@/db/schema";
+import { studyRooms, studyRoomMembers, users, pets } from "@/db/schema";
 import { createRoom, joinRoom, leaveRoom } from "./actions";
+
+function initial(name: string | null | undefined): string {
+  const trimmed = (name ?? "").trim();
+  return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
+}
 
 export default async function StudyRoomsPage() {
   const session = await auth();
   const userId = session?.user?.id ?? null;
+
+  // 使用者金幣餘額（真實寵物錢包）
+  let coins: number | null = null;
+  if (userId) {
+    const [pet] = await db
+      .select({ coins: pets.coins })
+      .from(pets)
+      .where(eq(pets.userId, userId))
+      .limit(1);
+    coins = pet?.coins ?? 0;
+  }
 
   const rooms = await db
     .select({
@@ -52,11 +68,46 @@ export default async function StudyRoomsPage() {
     joined = new Set(mine.map((m) => m.roomId));
   }
 
+  // ---- 學習雷達（真實資料） ----
+  // 在線人數：目前正在自習室中的不重複使用者數
+  const [{ onlineCount }] = await db
+    .select({
+      onlineCount: sql<number>`count(distinct ${studyRoomMembers.userId})::int`,
+    })
+    .from(studyRoomMembers);
+
+  // 雷達頭像：取自習室成員（真實使用者）；若無成員，改用最近註冊使用者作為夥伴
+  type RadarPin = {
+    id: string;
+    name: string | null;
+    image: string | null;
+  };
+
+  const radarFromMembers = await db
+    .selectDistinctOn([studyRoomMembers.userId], {
+      id: users.id,
+      name: users.name,
+      image: users.image,
+    })
+    .from(studyRoomMembers)
+    .innerJoin(users, eq(studyRoomMembers.userId, users.id))
+    .orderBy(asc(studyRoomMembers.userId))
+    .limit(12);
+
+  let radarPins: RadarPin[] = radarFromMembers;
+  if (radarPins.length === 0) {
+    radarPins = await db
+      .select({ id: users.id, name: users.name, image: users.image })
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(8);
+  }
+
   return (
     <div className="space-y-xl">
       {/* Page Header */}
-      <header className="flex items-center justify-between">
-        <div>
+      <header className="flex flex-wrap items-start justify-between gap-md">
+        <div className="min-w-0">
           <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">
             自習室
           </h1>
@@ -64,91 +115,72 @@ export default async function StudyRoomsPage() {
             加入自習室與其他同學一起專注學習
           </p>
         </div>
-        <div className="hidden sm:flex items-center gap-sm bg-surface-container px-md py-sm rounded-full shadow-sm">
-          <span className="material-symbols-outlined text-tertiary">
-            account_balance_wallet
-          </span>
-          <span className="font-label-md text-label-md text-on-surface">
-            餘額: 120 枚金幣
-          </span>
-        </div>
+        {coins !== null && (
+          <div className="flex items-center gap-sm bg-surface-container px-md py-sm rounded-full shadow-sm flex-shrink-0">
+            <span className="material-symbols-outlined text-tertiary">
+              account_balance_wallet
+            </span>
+            <span className="font-label-md text-label-md text-on-surface whitespace-nowrap">
+              餘額: {coins} 枚金幣
+            </span>
+          </div>
+        )}
       </header>
 
       {/* Study Radar Section */}
       <section className="bg-surface-container-low rounded-xl p-lg border border-outline-variant/50">
-        <div className="flex items-center justify-between mb-md">
-          <div className="flex items-center gap-sm">
+        <div className="flex items-center justify-between gap-sm mb-md">
+          <div className="flex items-center gap-sm min-w-0 flex-wrap">
             <span className="material-symbols-outlined text-primary">radar</span>
             <h2 className="font-headline-md text-headline-md text-on-surface">
               學習雷達
             </h2>
-            <span className="bg-primary-container text-on-primary-container px-2 py-0.5 rounded-full font-label-md text-[10px]">
-              附近在線 24 人
-            </span>
+            {onlineCount > 0 && (
+              <span className="bg-primary-container text-on-primary-container px-2 py-0.5 rounded-full font-label-md text-[10px] whitespace-nowrap">
+                自習室成員 {onlineCount} 人
+              </span>
+            )}
           </div>
-          <button className="text-primary hover:underline font-label-md text-label-md">
-            查看全部
-          </button>
         </div>
-        <div className="flex gap-md overflow-x-auto hide-scrollbar pb-sm">
-          {/* Radar Item 1 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
-              { }
-              <img
-                alt="Student 1"
-                className="w-full h-full rounded-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgxMHO6xe4zUswzQvFNoe85-NrjfXlpT91Lv4XcLSKWLz1ZjW1dc_DEFcCJbEQXRUF9VnnicIWemKTBkdByfMNTSXF6Q8dbO-AVEGp_xIRHfPwmoY-R6Xe8wvbOOgNgVRxC-NmZ1t2fQhTbQUvz4yjwB5m-i_ojzmmRPUuxcW4DKxaPf4fZpApVYSvt-QlE4_wUopPObW84JlD6UC_D2u-gVWU1C2cCuqCMnUIAngqeEYXyPMu6hlGXa2hT-otlxUlQVaFWD_vpHVr"
-              />
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#4ade80] rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
-              Alice
+
+        {radarPins.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-lg gap-sm">
+            <span className="material-symbols-outlined text-secondary text-[40px]">
+              radar
             </span>
+            <p className="font-body-md text-body-md text-secondary">
+              目前還沒有同學在自習室中，成為第一個開始專注的人吧！
+            </p>
           </div>
-          {/* Radar Item 2 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
-              { }
-              <img
-                alt="Student 2"
-                className="w-full h-full rounded-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuwwTybjO4ML4U7OYzYl8S6-4K8tOtMz08IZZqKXtyI3fios2UykUf0enLDDoY4TR0vKKQAKNKrrvbX9f6WJx_wZL6_C8wl7ZkHPQfzacRfp2LAh4x7B-I_GK0TeKgs9CUCbZWwJi9MCoG1QuKLxmR_rXe2tiVjMJVBY18eHJsvGsVWoVqywAg99ojg-JnZiLlr0H2mngsiusXyCrNxPSYbIfZAf5Ug_yq4gTSxhFHtdCnQMDswrG8e_t97c0WG1W1XAbw29Hm2FeN"
-              />
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#4ade80] rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
-              Bob M.
-            </span>
-          </div>
-          {/* Radar Item 3 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group opacity-60 hover:opacity-100 transition-opacity">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-secondary transition-colors">
-              <div className="w-full h-full rounded-full bg-secondary-container flex items-center justify-center text-secondary">
-                <span className="material-symbols-outlined">person</span>
+        ) : (
+          <div className="flex gap-md overflow-x-auto hide-scrollbar pb-sm">
+            {radarPins.map((pin) => (
+              <div
+                key={pin.id}
+                title={pin.name ?? "同學"}
+                className="flex flex-col items-center min-w-[72px] sm:min-w-[80px] group"
+              >
+                <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
+                  {pin.image ? (
+                     
+                    <img
+                      alt={pin.name ?? "同學"}
+                      className="w-full h-full rounded-full object-cover"
+                      src={pin.image}
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-body-lg">
+                      {initial(pin.name)}
+                    </div>
+                  )}
+                </div>
+                <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
+                  {pin.name ?? "同學"}
+                </span>
               </div>
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-secondary rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-secondary mt-xs truncate w-full text-center">
-              Charlie
-            </span>
+            ))}
           </div>
-          {/* Radar Item 4 */}
-          <div className="flex flex-col items-center min-w-[80px] cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
-              { }
-              <img
-                alt="Student 4"
-                className="w-full h-full rounded-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbrOvwbntl_YpDeGO76BqUGUVtrU2GHssDtmHVh8fBLmcvj0pvF5FSBH9E-LPNmP2OpTPIDFaTDed-bZLm0AQcwpquASQdq1LwKwKjADHSBaYa29Ck68vEmkbO1CM1ymm354mv4i4wuCkmr4PS3lrxG2TX1u9C0YnqQEyeBs91xRjqL9042NvkQvSeqnj84WLWheVMMIwaMVLSf4uiIGcljz7XxbFz5zxE4FbnGxty-deaPNDbIOTbxTgLz6kdVKvS9fZlvKLT3OgV"
-              />
-              <div className="absolute bottom-1 right-1 w-3 h-3 bg-[#facc15] rounded-full border-2 border-surface" />
-            </div>
-            <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
-              David
-            </span>
-          </div>
-        </div>
+        )}
       </section>
 
       {/* Active Study Rooms */}
@@ -313,18 +345,17 @@ export default async function StudyRoomsPage() {
                              
                             <img
                               key={i}
-                              alt={m.name ?? "Participant"}
+                              alt={m.name ?? "成員"}
                               className="w-6 h-6 rounded-full border border-surface object-cover"
                               src={m.image}
                             />
                           ) : (
                             <div
                               key={i}
-                              className="w-6 h-6 rounded-full border border-surface bg-secondary-container flex items-center justify-center text-on-secondary-container"
+                              title={m.name ?? "成員"}
+                              className="w-6 h-6 rounded-full border border-surface bg-secondary-container flex items-center justify-center text-on-secondary-container text-[10px] font-bold"
                             >
-                              <span className="material-symbols-outlined text-[14px]">
-                                person
-                              </span>
+                              {initial(m.name)}
                             </div>
                           ),
                         )}

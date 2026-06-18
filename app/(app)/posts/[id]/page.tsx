@@ -36,9 +36,9 @@ export default async function PostPage({
   const tree = buildCommentTree(commentRows, renderContentHtml, formatDateTime);
 
   return (
-    <section>
+    <section className="min-w-0">
       {/* Top bar: back button + bounty pill */}
-      <div className="flex justify-between items-center mb-md">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-md">
         <Link
           href={board ? `/boards/${board.id}` : "/boards"}
           className="text-secondary hover:text-primary font-bold text-body-md flex items-center gap-1 py-1.5 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 transition-all no-underline"
@@ -47,29 +47,33 @@ export default async function PostPage({
         </Link>
 
         <div className="bg-tertiary-container text-on-tertiary-container px-4 py-1.5 rounded-full font-bold text-body-md flex items-center gap-1 shadow-sm">
-          <span className="material-symbols-outlined text-[18px] text-tertiary icon-fill">monetization_on</span>
+          <span className="material-symbols-outlined text-[18px] text-on-tertiary-container icon-fill">monetization_on</span>
           <span>懸賞金幣:</span>
           <strong>{post.bounty}</strong>
         </div>
       </div>
 
       {/* Main post card */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm mb-lg">
+      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm mb-lg min-w-0">
         <div className="flex flex-wrap gap-2 items-center mb-sm">
           <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-primary-container text-on-primary-container">
             {post.department || "未分系"}
           </span>
           {post.solved ? (
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-green-100 text-green-700">已解決</span>
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-tertiary-container text-on-tertiary-container">
+              已解決
+            </span>
           ) : (
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-yellow-100 text-yellow-700">未解決</span>
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-secondary-container text-on-secondary-container">
+              未解決
+            </span>
           )}
           <span className="text-secondary text-xs ml-auto">{formatDateTime(post.createdAt)}</span>
         </div>
         <h2 className="font-bold text-headline-lg text-on-surface mb-md">{post.title}</h2>
 
         {/* Metadata author */}
-        <div className="flex items-center gap-sm mb-lg text-secondary text-xs pb-3 border-b border-outline-variant/20">
+        <div className="flex flex-wrap items-center gap-x-sm gap-y-2 mb-lg text-secondary text-xs pb-3 border-b border-outline-variant/20">
           <span className="material-symbols-outlined text-[16px]">person</span>
           <span>
             提問學生: <strong className="text-on-surface">{post.authorName}</strong>
@@ -102,10 +106,12 @@ export default async function PostPage({
           )}
         </div>
 
-        <RichContent
-          html={renderContentHtml(post.content)}
-          className="text-on-surface-variant text-body-lg leading-relaxed mb-lg"
-        />
+        <div className="overflow-x-auto mb-lg">
+          <RichContent
+            html={renderContentHtml(post.content)}
+            className="text-on-surface-variant text-body-lg leading-relaxed"
+          />
+        </div>
 
         {/* Tags list */}
         {post.tags.length > 0 && (
@@ -132,8 +138,8 @@ export default async function PostPage({
       </div>
 
       {/* Answers tree header */}
-      <div className="flex items-center justify-between mb-md border-b border-outline-variant/30 pb-2">
-        <h3 className="font-bold text-headline-md text-on-surface flex items-center gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-md border-b border-outline-variant/30 pb-2">
+        <h3 className="font-bold text-headline-md text-on-surface flex items-center gap-1 min-w-0">
           <span className="material-symbols-outlined text-primary">forum</span> 學霸解答與留言回覆
         </h3>
         {!post.solved && session?.user && (

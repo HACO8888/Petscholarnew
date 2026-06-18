@@ -6,11 +6,20 @@ import { formatDateTime } from "@/lib/format";
 import { auth } from "@/auth";
 import { getOrCreatePet, isSameDay } from "@/lib/pet";
 import HomeSidebar, { type HomeSidebarData } from "@/components/HomeSidebar";
+import type { Role } from "@/db/schema";
+
+const ROLE_LABELS: Record<string, string> = {
+  student: "學生",
+  ta: "課程助教",
+  professor: "課程教授",
+  admin: "系統管理員",
+};
 
 const DEFAULT_HOME_SIDEBAR: HomeSidebarData = {
   loggedIn: false,
-  userName: "新同學",
-  userDept: "請選擇系所 · 身分: 學生",
+  userName: "訪客",
+  userDept: "請先登入",
+  userImage: null,
   petName: "未命名小精靈",
   level: 1,
   hp: 500,
@@ -59,7 +68,7 @@ export default async function HomePage({
   if (session?.user?.id) {
     const pet = await getOrCreatePet(session.user.id);
     const [me] = await db
-      .select({ name: users.name })
+      .select({ name: users.name, department: users.department, role: users.role, image: users.image })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
@@ -69,10 +78,15 @@ export default async function HomePage({
       .innerJoin(shopItems, eq(inventory.itemId, shopItems.id))
       .where(and(eq(inventory.userId, session.user.id), eq(shopItems.type, "food"), gt(inventory.quantity, 0)))
       .limit(4);
+    const roleLabel = ROLE_LABELS[(me?.role as Role) ?? "student"] ?? "學生";
+    const deptText = me?.department?.trim()
+      ? `${me.department} · ${roleLabel}`
+      : `請選擇系所 · ${roleLabel}`;
     sidebar = {
       loggedIn: true,
       userName: me?.name ?? session.user.name ?? "同學",
-      userDept: "請選擇系所",
+      userDept: deptText,
+      userImage: me?.image ?? session.user.image ?? null,
       petName: pet.name,
       level: pet.level,
       hp: pet.hp,
@@ -106,7 +120,7 @@ export default async function HomePage({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-md mb-lg">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-md mb-lg">
             {boardRows.map((b) => {
               const isActive = activeBoard?.id === b.id;
               return (
@@ -123,12 +137,12 @@ export default async function HomePage({
             })}
           </div>
 
-          <div className="flex items-center justify-between mb-md border-b border-outline-variant/30 pb-3">
-            <div className="flex items-center gap-2">
-              <h2 className="font-bold text-headline-md text-on-surface">{activeBoard ? `${activeBoard.name}提問` : "所有熱門提問"}</h2>
-              <span className="bg-surface-container-high dark:bg-surface-variant text-on-surface-variant px-2.5 py-0.5 rounded-full text-xs font-semibold">{postRows.length} 篇貼文</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-md border-b border-outline-variant/30 pb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="font-bold text-headline-md text-on-surface truncate">{activeBoard ? `${activeBoard.name}提問` : "所有熱門提問"}</h2>
+              <span className="shrink-0 bg-surface-container-high dark:bg-surface-variant text-on-surface-variant px-2.5 py-0.5 rounded-full text-xs font-semibold">{postRows.length} 篇貼文</span>
             </div>
-            <Link href="/posts/new" className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-4 py-2 rounded-lg flex items-center gap-1 shadow-sm transition-all no-underline">
+            <Link href="/posts/new" className="shrink-0 bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-4 py-2 rounded-lg flex items-center gap-1 shadow-sm transition-all no-underline">
               <span className="material-symbols-outlined text-[18px]">add_circle</span> 發佈新提問
             </Link>
           </div>
@@ -146,18 +160,24 @@ export default async function HomePage({
                   className="block bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/20 rounded-xl p-md shadow-sm hover:shadow-md transition-all cursor-pointer relative no-underline"
                 >
                   <div className="flex justify-between items-start mb-sm gap-2">
-                    <h3 className="font-bold text-body-lg text-primary dark:text-primary-fixed-dim">{p.title}</h3>
-                    <span className="text-xs font-bold text-yellow-600 bg-yellow-500/10 px-2 py-0.5 rounded" style={p.solved ? { background: "rgba(0,0,0,0.05)", color: "#666" } : undefined}>
+                    <h3 className="font-bold text-body-lg text-primary dark:text-primary-fixed-dim min-w-0 break-words">{p.title}</h3>
+                    <span
+                      className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${
+                        p.solved
+                          ? "text-on-surface-variant bg-surface-container-high dark:bg-surface-variant"
+                          : "text-amber-700 dark:text-amber-300 bg-amber-500/10"
+                      }`}
+                    >
                       🪙 {p.solved ? "已結算" : `懸賞 ${p.bounty}`}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-secondary mb-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary mb-2">
                     <span className="bg-primary/5 text-primary border border-primary/10 px-1.5 py-0.5 rounded text-[10px]">{p.department ?? p.boardName}</span>
                     <span>提問學生: <strong>{p.authorName}</strong></span>
                     <span>•</span>
                     <span>{formatDateTime(p.createdAt)}</span>
                     <span>•</span>
-                    <span className={p.solved ? "text-green-600 font-bold" : "text-yellow-600 font-bold"}>{p.solved ? "已解決" : "未解決"}</span>
+                    <span className={p.solved ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-amber-700 dark:text-amber-300 font-bold"}>{p.solved ? "已解決" : "未解決"}</span>
                   </div>
                   <div className="flex flex-wrap gap-sm">
                     {p.tags.map((t) => (

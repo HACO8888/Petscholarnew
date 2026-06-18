@@ -9,6 +9,7 @@ import { updateProfile } from "./actions";
 const GENDER_OPTIONS = [
   { value: "female", label: "🙋‍♀️ 女生" },
   { value: "male", label: "🙋‍♂️ 男生" },
+  { value: "undisclosed", label: "🤐 不透露" },
 ];
 
 const PET_STYLE_OPTIONS = [
@@ -18,12 +19,6 @@ const PET_STYLE_OPTIONS = [
   { value: "rabbit", emoji: "🐰", label: "兔子" },
   { value: "dragon", emoji: "🐲", label: "小龍" },
 ];
-
-// 個人檔案頭像（依性別給予真人頭像，沿用 Stitch 部署版圖片）
-const MALE_AVATAR =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBHaUoUmD0NCQT0xkjGAhDfZcg0aBzllN0eFaNJtLBJf8cc_LGkd5eJLBbe92XyjZcFmqtTtPMy4nmqui7orI5FCwxtzZipXn7IT-ADqLhM-YTMnLuhwW5IkvAQb9VJ8EQNXDa-NeT0hvQnvHccj3YXgjW3PbfLOycAjzkdgDJWR7eHCVwig2L_UZfEHNjKWxKHhiTtGZPC5nhE25w7fJW4k4D14gGtDhExwWSmAB903j0EwwVPcfvR4EdG5X-hEsi442t72MF0CECQ";
-const FEMALE_AVATAR =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuCQl_reV6ws8NunKUIiBujXJByBxK5IMcwxJ0EoBSdXSSK6Kc9jiz-GpPRrajRhQ-1FE_MC_4YpkxExVD5KULWY1WmqmzdUDO-SLjR9Z3ktwUo_MFvDNR0IoroLRJQOuqae0tWi4J7dBv5PB7qnWDrA-oicG1BgNrV5Gsju0wnr93uWVBbG7qF8lrAsNt8PksKUx-DJC9SLNjiuHJYmierGTlMFQkfRnVx6H7mqyKik3x-eVCN_UIpr4btVBI8WzYOSJxbeuZ0LE9LQ";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -116,9 +111,13 @@ export default async function ProfilePage() {
     },
   ];
 
-  const profileAvatar = me.gender === "male" ? MALE_AVATAR : FEMALE_AVATAR;
-  // users 表無系所欄位；以最近一篇貼文的科系作為顯示，否則用通用文案
-  const department = questionRows.find((q) => q.department)?.department ?? "校園學術社群成員";
+  // 頭像優先用 Google 大頭照（me.image），無則用姓名字首，再無則用預設 icon
+  const displayName = me.name?.trim() || "未命名同學";
+  const avatarInitial = displayName.charAt(0).toUpperCase();
+  // 系所優先用真實 users.department，無則用通用文案
+  const department = me.department?.trim() || "校園學術社群成員";
+  // 自我介紹用真實 users.bio
+  const bio = me.bio?.trim() || "";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-xl">
@@ -127,20 +126,37 @@ export default async function ProfilePage() {
         {/* User Info Card */}
         <div className="md:col-span-2 bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col md:flex-row items-center md:items-start gap-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary-container rounded-full blur-3xl opacity-20 -mr-10 -mt-10"></div>
-          <div className="relative">
-            { }
-            <img
-              alt="Profile Picture"
-              className="w-32 h-32 rounded-full border-4 border-surface shadow-sm object-cover"
-              src={me.image ?? profileAvatar}
-            />
+          <div className="relative shrink-0">
+            {me.image ? (
+               
+              <img
+                alt={displayName}
+                className="w-32 h-32 rounded-full border-4 border-surface shadow-sm object-cover"
+                src={me.image}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-32 h-32 rounded-full border-4 border-surface shadow-sm bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg select-none">
+                {avatarInitial || (
+                  <span className="material-symbols-outlined text-[48px]" style={{ fontSize: "48px" }}>
+                    person
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex-1 text-center md:text-left z-10">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface">{me.name ?? "未命名同學"}</h1>
-            <p className="font-body-lg text-body-lg text-secondary mb-md">{department}</p>
-            <p className="font-body-md text-body-md text-on-surface-variant max-w-md">
-              熱衷於演算法與系統架構設計。希望能透過分享知識幫助更多學弟妹度過難關。專長：Python, C++, 雲端架構。
-            </p>
+          <div className="flex-1 min-w-0 text-center md:text-left z-10">
+            <h1 className="font-headline-lg text-headline-lg text-on-surface break-words">{displayName}</h1>
+            <p className="font-body-lg text-body-lg text-secondary mb-md break-words">{department}</p>
+            {bio ? (
+              <p className="font-body-md text-body-md text-on-surface-variant max-w-md whitespace-pre-line break-words">
+                {bio}
+              </p>
+            ) : (
+              <p className="font-body-md text-body-md text-on-surface-variant max-w-md">
+                還沒有自我介紹，點下方「個人檔案設定」填寫你的專長與簡介吧。
+              </p>
+            )}
           </div>
         </div>
         {/* Stats Mini Bento */}
@@ -221,7 +237,13 @@ export default async function ProfilePage() {
                   <span className="mx-xs">•</span>
                   <span>{formatDateTime(q.createdAt)}</span>
                   <span className="mx-xs">•</span>
-                  <span className={`${q.solved ? "text-green-600" : "text-yellow-600"} font-bold`}>
+                  <span
+                    className={`font-bold px-2 py-0.5 rounded-full text-label-md ${
+                      q.solved
+                        ? "bg-tertiary-container text-on-tertiary-container"
+                        : "bg-secondary-container text-on-secondary-container"
+                    }`}
+                  >
                     {q.solved ? "已解決" : "未解決"}
                   </span>
                 </div>
@@ -273,7 +295,13 @@ export default async function ProfilePage() {
                 >
                   <div className="flex items-center justify-between gap-sm mb-xs">
                     <h3 className="font-bold text-primary text-body-md line-clamp-1">{q.title}</h3>
-                    <span className={`font-label-md text-label-md ${q.solved ? "text-green-700" : "text-yellow-700"}`}>
+                    <span
+                      className={`font-label-md text-label-md font-bold shrink-0 px-2 py-0.5 rounded-full ${
+                        q.solved
+                          ? "bg-tertiary-container text-on-tertiary-container"
+                          : "bg-secondary-container text-on-secondary-container"
+                      }`}
+                    >
                       {q.solved ? "已解決" : "未解決"}
                     </span>
                   </div>
@@ -296,7 +324,7 @@ export default async function ProfilePage() {
         </div>
       </section>
 
-      {/* 個人檔案編輯表單（保留：displayName / gender / petStyle name 不可改） */}
+      {/* 個人檔案編輯表單：暱稱 / 系所 / 自我介紹 / 性別 / 電子雞角色 */}
       <section className="lg:col-span-12 flex flex-col gap-md">
         <h2 className="font-headline-md text-headline-md text-on-surface mb-xs">個人檔案與電子雞設定</h2>
         <form
@@ -310,10 +338,35 @@ export default async function ProfilePage() {
                 name="displayName"
                 defaultValue={me.name ?? ""}
                 maxLength={100}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                 placeholder="請輸入姓名..."
                 type="text"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-on-surface mb-1">系所</label>
+              <input
+                name="department"
+                defaultValue={me.department ?? ""}
+                maxLength={60}
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                placeholder="例如：資訊工程系"
+                type="text"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-on-surface mb-1">自我介紹</label>
+              <textarea
+                name="bio"
+                defaultValue={me.bio ?? ""}
+                maxLength={500}
+                rows={4}
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none resize-y"
+                placeholder="介紹一下你的專長、興趣，或想分享給學弟妹的話..."
+              />
+              <p className="mt-1 text-label-md text-secondary">最多 500 字。</p>
             </div>
 
             <div>
@@ -321,7 +374,7 @@ export default async function ProfilePage() {
               <select
                 name="gender"
                 defaultValue={me.gender ?? "female"}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 outline-none"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
               >
                 {GENDER_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -336,7 +389,7 @@ export default async function ProfilePage() {
               <select
                 name="petStyle"
                 defaultValue={me.petStyle ?? "classic"}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 outline-none"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
               >
                 {PET_STYLE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>

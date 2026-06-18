@@ -18,6 +18,8 @@ export async function updateProfile(formData: FormData) {
   const displayNameRaw = (formData.get("displayName") as string | null)?.trim() ?? "";
   const genderRaw = formData.get("gender") as string | null;
   const petStyleRaw = formData.get("petStyle") as string | null;
+  const departmentRaw = (formData.get("department") as string | null)?.trim() ?? "";
+  const bioRaw = (formData.get("bio") as string | null)?.trim() ?? "";
 
   const displayName = displayNameRaw.slice(0, 100) || null;
   const gender =
@@ -26,10 +28,12 @@ export async function updateProfile(formData: FormData) {
     petStyleRaw && (PET_STYLES as readonly string[]).includes(petStyleRaw)
       ? petStyleRaw
       : null;
+  const department = departmentRaw.slice(0, 60) || null;
+  const bio = bioRaw.slice(0, 500) || null;
 
   await db
     .update(users)
-    .set({ name: displayName, gender, petStyle })
+    .set({ name: displayName, gender, petStyle, department, bio })
     .where(eq(users.id, session.user.id));
 
   revalidatePath("/profile");
