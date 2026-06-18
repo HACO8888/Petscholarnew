@@ -46,6 +46,7 @@ export default function SidebarNav({ role }: { role: Role }) {
         <Link
           key={it.href}
           href={it.href}
+          aria-current={active(it.href) ? "page" : undefined}
           className={`rounded-lg flex items-center gap-md px-md py-sm transition-colors active:scale-[0.98] no-underline ${
             active(it.href)
               ? "bg-primary-container text-on-primary-container"

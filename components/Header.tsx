@@ -56,12 +56,22 @@ export default function Header({ user }: { user: HeaderUser | null }) {
             {/* 桌機完整導覽（xl 以上）。較小螢幕改用下方可橫向捲動的分頁列。 */}
             <div className="hidden xl:flex items-center gap-[3em] h-16">
               {tabs.map((t) => (
-                <Link key={t.href} href={t.href} className={tabClass(isActive(t.href))}>
+                <Link
+                  key={t.href}
+                  href={t.href}
+                  aria-current={isActive(t.href) ? "page" : undefined}
+                  className={tabClass(isActive(t.href))}
+                >
                   {t.label}
                 </Link>
               ))}
               {roleTabs.map((t) => (
-                <Link key={t.href} href={t.href} className={tabClass(isActive(t.href), t.extra)}>
+                <Link
+                  key={t.href}
+                  href={t.href}
+                  aria-current={isActive(t.href) ? "page" : undefined}
+                  className={tabClass(isActive(t.href), t.extra)}
+                >
                   {t.label}
                 </Link>
               ))}
@@ -118,6 +128,7 @@ export default function Header({ user }: { user: HeaderUser | null }) {
               <Link
                 key={t.href}
                 href={t.href}
+                aria-current={a ? "page" : undefined}
                 className={`flex items-center px-3.5 text-label-md font-medium whitespace-nowrap border-t-2 transition-colors -mt-px ${
                   a
                     ? "border-primary text-primary"

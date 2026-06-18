@@ -215,6 +215,10 @@ body {
 .hp-bar { background: linear-gradient(90deg, #34d399, #10b981); }
 .exp-bar { background: linear-gradient(90deg, #60a5fa, #4b6172); }
 
+/* 跨瀏覽器隱藏捲軸（橫向食物/導覽列用）。先前 class 未定義、形同無效。 */
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
 /* 修正命名空間衝突：自訂 --spacing-{xs,sm,md,lg,xl} 會讓 max-w-{xs,sm,md,lg,xl}
    變成間距值(8~32px)。這裡以未分層規則還原 t-shirt 容器寬度（unlayered 優先於
    Tailwind 的 @layer utilities，保證生效）。 */

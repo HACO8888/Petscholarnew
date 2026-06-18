@@ -234,10 +234,10 @@ export default function GuidedTour({ role = "student" }: { role?: Role }) {
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
-            <p className="text-label-sm text-secondary font-bold">
+            <p className="text-label-md text-secondary font-bold">
               互動式網站導覽 {stepIndex + 1} / {total}
             </p>
-            <h3 className="font-bold text-title-lg text-on-surface mt-0.5">{step.title}</h3>
+            <h3 className="font-bold text-headline-md text-on-surface mt-0.5">{step.title}</h3>
           </div>
           <button
             type="button"
