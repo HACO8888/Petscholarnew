@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { shopItems, inventory } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
-import { buyItem, toggleEquip } from "@/app/pet/actions";
+import { buyItem, toggleEquip } from "@/app/(app)/pet/actions";
 
 // 對應部署版 _7/code.html 各食物的 Stitch <img>，依稀有度(grade)分配真實食物圖片。
 // 同一稀有度有多張時，依出現順序輪流套用，視覺與部署版一致。

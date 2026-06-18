@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { boards } from "@/db/schema";
 import { auth } from "@/auth";
-import { createPost } from "@/app/posts/actions";
+import { createPost } from "@/app/(app)/posts/actions";
 
 export default async function NewPostPage({
   searchParams,

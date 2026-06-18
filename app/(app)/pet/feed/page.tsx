@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { shopItems, inventory } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
-import { feedPet } from "@/app/pet/actions";
+import { feedPet } from "@/app/(app)/pet/actions";
 
 export default async function PetFeedPage() {
   const session = await auth();

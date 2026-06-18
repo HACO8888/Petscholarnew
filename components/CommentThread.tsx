@@ -8,7 +8,7 @@ import {
   adoptAnswer,
   reportComment,
   verifyAnswerAsTA,
-} from "@/app/posts/actions";
+} from "@/app/(app)/posts/actions";
 
 interface ThreadProps {
   nodes: CommentNode[];

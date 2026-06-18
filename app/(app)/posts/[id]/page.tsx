@@ -9,7 +9,7 @@ import { buildCommentTree } from "@/lib/comment-tree";
 import { formatDateTime } from "@/lib/format";
 import CommentThread from "@/components/CommentThread";
 import CommentTreeSvg from "@/components/CommentTreeSvg";
-import { addComment, reportPost } from "@/app/posts/actions";
+import { addComment, reportPost } from "@/app/(app)/posts/actions";
 
 export default async function PostPage({
   params,

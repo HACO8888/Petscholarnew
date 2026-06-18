@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { simulateTimePass, healPet } from "@/app/pet/actions";
+import { simulateTimePass, healPet } from "@/app/(app)/pet/actions";
 import { logout } from "@/app/actions/auth";
 import SidebarNav from "./SidebarNav";
 import type { Role } from "./nav-config";
