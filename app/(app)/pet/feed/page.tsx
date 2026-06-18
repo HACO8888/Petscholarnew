@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { and, eq, gt } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { shopItems, inventory } from "@/db/schema";
-import { getOrCreatePet } from "@/lib/pet";
+import { shopItems, inventory, users } from "@/db/schema";
+import { getOrCreatePet, statusFromHp } from "@/lib/pet";
 import { feedPet } from "@/app/(app)/pet/actions";
+import PetMascot from "@/components/PetMascot";
 
 export default async function PetFeedPage() {
   const session = await auth();
@@ -13,6 +14,11 @@ export default async function PetFeedPage() {
   const userId = session.user.id;
 
   const pet = await getOrCreatePet(userId);
+  const [me] = await db
+    .select({ petStyle: users.petStyle })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
 
   const foodRows = await db
     .select({
@@ -34,11 +40,9 @@ export default async function PetFeedPage() {
     )
     .orderBy(shopItems.sortOrder);
 
-  const hpRatio = pet.maxHp > 0 ? pet.hp / pet.maxHp : 0;
-  const filledHearts = Math.max(
-    0,
-    Math.min(5, pet.hp > 0 ? Math.round(hpRatio * 5) : 0),
-  );
+  // 愛心顯示與 Sidebar/HomeSidebar 一致：每 100 HP 一顆，上限隨 maxHp 成長
+  const maxHearts = Math.max(1, Math.round(pet.maxHp / 100));
+  const filledHearts = Math.min(maxHearts, Math.max(0, Math.floor(pet.hp / 100)));
   const isHungry = pet.hp <= Math.round(pet.maxHp * 0.35);
 
   return (
@@ -50,7 +54,7 @@ export default async function PetFeedPage() {
             生命值
           </span>
           <div className="flex text-error" aria-label={`生命值 ${pet.hp}/${pet.maxHp}`}>
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: maxHearts }).map((_, i) => (
               <span
                 key={i}
                 aria-hidden
@@ -85,13 +89,15 @@ export default async function PetFeedPage() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
           <div className="w-[260px] h-[260px] md:w-[500px] md:h-[500px] rounded-full bg-primary-fixed blur-3xl"></div>
         </div>
-        {/* Pet Container */}
-        <div className="relative mb-md">
-          { }
-          <img
-            alt={`${pet.name} 學習夥伴`}
-            className="w-56 h-56 sm:w-64 sm:h-64 md:w-80 md:h-80 object-contain drop-shadow-2xl transition-transform duration-300 ease-out z-10 relative"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsgDFI3t3murIaM6LOyFuTo2_5VHcIaiGOOxU0-PLU4CeH-5Dq6AfqSxv1wurTlkINBEkjz3ROkehz_BP9JDQDYKhMgtQsSuV4qf22TgBjMkdUvAVZJCJDNLwIiQD-mteBWz19UYrAwFyozhkJubz2OMR1JQLLDHYwlZGhijDzKdr7Bkp0bfKe-140PEddCVCLL2armwnpExwowHhCES0Y_6aUm4g8L3ntD8ylaPmAu16aH-Bqwi_5ySO0IV8lu-s60PLWTOrvKION"
+        {/* Pet Container：以真實 petStyle + 已穿戴配件渲染，讓商城購買/穿戴有可見效果 */}
+        <div className="relative mb-md anim-float z-10">
+          <PetMascot
+            petStyle={me?.petStyle ?? "classic"}
+            face={statusFromHp(pet.hp, pet.maxHp).face}
+            equippedHat={pet.equippedHat}
+            equippedBackground={pet.equippedBackground}
+            equippedRareStyle={pet.equippedRareStyle}
+            large
           />
           {/* Base Shadow */}
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-40 sm:w-48 h-8 bg-black/10 blur-xl rounded-full z-0"></div>

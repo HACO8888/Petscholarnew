@@ -210,6 +210,7 @@ export async function adoptAnswer(formData: FormData) {
           .update(pets)
           .set({
             coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty)}`,
+            hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,
             maxHp: grown.maxHp,
@@ -291,6 +292,7 @@ export async function verifyAnswerAsTA(formData: FormData) {
           .update(pets)
           .set({
             coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty)}`,
+            hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,
             maxHp: grown.maxHp,

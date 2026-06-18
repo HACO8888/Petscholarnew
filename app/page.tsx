@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { boards, posts, users, shopItems, inventory } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
 import { auth } from "@/auth";
-import { getOrCreatePet, isSameDay } from "@/lib/pet";
+import { getOrCreatePet, isCheckedInToday } from "@/lib/pet";
 import HomeSidebar, { type HomeSidebarData } from "@/components/HomeSidebar";
 import type { Role } from "@/db/schema";
 
@@ -20,12 +20,17 @@ const DEFAULT_HOME_SIDEBAR: HomeSidebarData = {
   userName: "訪客",
   userDept: "請先登入",
   userImage: null,
-  petName: "未命名小精靈",
+  petName: "未領養",
+  petStyle: null,
+  equippedHat: false,
+  equippedBackground: false,
+  equippedRareStyle: false,
   level: 1,
-  hp: 500,
-  maxHp: 500,
+  // 未登入不顯示假數值（先前是 500/500、100 金幣），改為 0 的鎖定狀態
+  hp: 0,
+  maxHp: 0,
   exp: 0,
-  coins: 100,
+  coins: 0,
   checkedIn: false,
   quickFeed: [],
 };
@@ -68,7 +73,7 @@ export default async function HomePage({
   if (session?.user?.id) {
     const pet = await getOrCreatePet(session.user.id);
     const [me] = await db
-      .select({ name: users.name, department: users.department, role: users.role, image: users.image })
+      .select({ name: users.name, department: users.department, role: users.role, image: users.image, petStyle: users.petStyle })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
@@ -88,12 +93,16 @@ export default async function HomePage({
       userDept: deptText,
       userImage: me?.image ?? session.user.image ?? null,
       petName: pet.name,
+      petStyle: me?.petStyle ?? "classic",
+      equippedHat: pet.equippedHat,
+      equippedBackground: pet.equippedBackground,
+      equippedRareStyle: pet.equippedRareStyle,
       level: pet.level,
       hp: pet.hp,
       maxHp: pet.maxHp,
       exp: pet.exp,
       coins: pet.coins,
-      checkedIn: isSameDay(pet.lastCheckIn, new Date()),
+      checkedIn: isCheckedInToday(pet.lastCheckIn),
       quickFeed: food,
     };
   }

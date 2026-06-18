@@ -28,22 +28,27 @@ export function maxExpForLevel(level: number): number {
   return level * 100;
 }
 
-/** 套用經驗值並處理升級（exp 溢出進位、maxHp 隨等級提升） */
+/**
+ * 套用經驗值並處理升級（exp 溢出進位、maxHp 隨等級提升）。
+ * 回傳 hpGain＝本次升級新增的 maxHp 量，呼叫端應把它補進當前 HP，
+ * 否則升級瞬間會多出一顆空心、HP 比例不升反降（升級看起來像退步）。
+ */
 export function applyExp(
   level: number,
   exp: number,
   maxHp: number,
   gained: number,
-): { level: number; exp: number; maxHp: number } {
-  let newLevel = level;
+): { level: number; exp: number; maxHp: number; hpGain: number } {
+  let newLevel = Math.max(1, level);
   let newExp = exp + gained;
   let newMaxHp = maxHp;
-  while (newExp >= maxExpForLevel(newLevel)) {
+  // 上限保護：避免異常大的輸入造成過多迴圈
+  while (newExp >= maxExpForLevel(newLevel) && newLevel < 999) {
     newExp -= maxExpForLevel(newLevel);
     newLevel += 1;
     newMaxHp += HP_PER_HEART; // 每升一級多一顆愛心上限
   }
-  return { level: newLevel, exp: newExp, maxHp: newMaxHp };
+  return { level: newLevel, exp: newExp, maxHp: newMaxHp, hpGain: newMaxHp - maxHp };
 }
 
 export function statusFromHp(
@@ -57,11 +62,13 @@ export function statusFromHp(
   return { key: "tired", label: "有點疲憊", face: "😪" };
 }
 
-export function isSameDay(a: Date | null, b: Date): boolean {
-  if (!a) return false;
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+/** 以 Asia/Taipei（UTC+8）今日起點為界，判斷某時間是否落在「今天」——與簽到發放邏輯一致。 */
+export function isCheckedInToday(last: Date | null, now: Date = new Date()): boolean {
+  if (!last) return false;
+  const taipei = new Date(now.getTime() + 8 * 3600 * 1000);
+  const startOfTodayTaipei = new Date(
+    Date.UTC(taipei.getUTCFullYear(), taipei.getUTCMonth(), taipei.getUTCDate()) -
+      8 * 3600 * 1000,
   );
+  return last.getTime() >= startOfTodayTaipei.getTime();
 }

@@ -12,6 +12,9 @@ export interface SidebarData {
   hp: number;
   maxHp: number;
   coins: number;
+  equippedHat: boolean;
+  equippedBackground: boolean;
+  equippedRareStyle: boolean;
 }
 
 const STYLE_EMOJI: Record<string, string> = {
@@ -32,7 +35,20 @@ export default function Sidebar({ data }: { data: SidebarData }) {
     <aside className="hidden md:flex bg-surface-container dark:bg-surface-container-high font-label-md text-label-md shadow-md fixed right-0 top-16 h-[calc(100vh-64px)] w-64 flex-col p-md border-l border-outline-variant dark:border-outline">
       {/* Pet Status */}
       <div className="flex flex-col items-center mb-xl p-md bg-surface rounded-xl shadow-sm border border-outline-variant text-center">
-        <div className={`w-24 h-24 rounded-full mb-sm border-2 border-primary-container bg-primary-container/30 shadow-sm flex items-center justify-center text-5xl ${data.loggedIn ? "" : "opacity-60 grayscale"}`}>
+        <div
+          className={`relative w-24 h-24 rounded-full mb-sm border-2 shadow-sm flex items-center justify-center text-5xl ${
+            data.loggedIn ? "" : "opacity-60 grayscale"
+          } ${
+            data.loggedIn && data.equippedBackground
+              ? "border-tertiary bg-gradient-to-br from-primary-container to-tertiary-container"
+              : "border-primary-container bg-primary-container/30"
+          } ${data.loggedIn && data.equippedRareStyle ? "ring-4 ring-tertiary" : ""}`}
+        >
+          {data.loggedIn && data.equippedHat && (
+            <span className="absolute -top-3 text-2xl" aria-hidden>
+              🎓
+            </span>
+          )}
           {data.loggedIn ? emoji : "🥚"}
         </div>
         {data.loggedIn ? (

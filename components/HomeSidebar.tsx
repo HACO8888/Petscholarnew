@@ -36,6 +36,10 @@ export interface HomeSidebarData {
   userDept: string;
   userImage: string | null;
   petName: string;
+  petStyle: string | null;
+  equippedHat: boolean;
+  equippedBackground: boolean;
+  equippedRareStyle: boolean;
   level: number;
   hp: number;
   maxHp: number;
@@ -44,6 +48,14 @@ export interface HomeSidebarData {
   checkedIn: boolean;
   quickFeed: { itemId: string; name: string; icon: string | null; quantity: number }[];
 }
+
+const STYLE_EMOJI: Record<string, string> = {
+  classic: "🤖",
+  cat: "🐱",
+  dog: "🐶",
+  rabbit: "🐰",
+  dragon: "🐉",
+};
 
 export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
   const maxHearts = Math.max(1, Math.round(data.maxHp / 100));
@@ -79,7 +91,24 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
       {/* Electronic Pet mascot widget */}
       <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col items-center relative overflow-hidden">
         <div className="relative mt-4 mb-2">
-          <div className="anim-float w-[120px] h-[120px] flex items-center justify-center text-[88px] leading-none">🤖</div>
+          <div
+            className={`anim-float relative w-[120px] h-[120px] flex items-center justify-center rounded-full text-[88px] leading-none ${
+              data.loggedIn && data.equippedBackground
+                ? "bg-gradient-to-br from-primary-container to-tertiary-container shadow-[0_0_36px_-6px_var(--color-primary)]"
+                : ""
+            } ${data.loggedIn && data.equippedRareStyle ? "ring-4 ring-tertiary" : ""}`}
+          >
+            {data.loggedIn && data.equippedHat && (
+              <span className="absolute -top-2 text-4xl" aria-hidden>
+                🎓
+              </span>
+            )}
+            <span aria-hidden>
+              {data.loggedIn
+                ? STYLE_EMOJI[data.petStyle ?? "classic"] ?? STYLE_EMOJI.classic
+                : "🥚"}
+            </span>
+          </div>
         </div>
 
         <div className="flex justify-between items-center w-full mb-3 px-1">

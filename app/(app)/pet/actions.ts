@@ -103,7 +103,8 @@ export async function feedPet(formData: FormData) {
     if (!pet) throw new Error("寵物不存在");
 
     const leveled = applyExp(pet.level, pet.exp, pet.maxHp, item.expGain);
-    const newHp = Math.min(leveled.maxHp, pet.hp + item.hpRestore);
+    // 升級新增的上限（hpGain）也補進當前 HP，避免升級瞬間多出空心、HP 比例下降
+    const newHp = Math.min(leveled.maxHp, pet.hp + item.hpRestore + leveled.hpGain);
 
     await tx
       .update(pets)

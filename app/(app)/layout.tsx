@@ -14,6 +14,9 @@ const DEFAULT_SIDEBAR: SidebarData = {
   hp: 0,
   maxHp: 0,
   coins: 0,
+  equippedHat: false,
+  equippedBackground: false,
+  equippedRareStyle: false,
 };
 
 export default async function AppLayout({
@@ -37,6 +40,9 @@ export default async function AppLayout({
       hp: pet.hp,
       maxHp: pet.maxHp,
       coins: pet.coins,
+      equippedHat: pet.equippedHat,
+      equippedBackground: pet.equippedBackground,
+      equippedRareStyle: pet.equippedRareStyle,
     };
   }
 
