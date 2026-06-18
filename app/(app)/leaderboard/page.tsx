@@ -129,6 +129,9 @@ export default async function LeaderboardPage({
 }) {
   const session = await auth();
   const userId = session?.user?.id ?? null;
+  // explorer/dept 榜以 authorName 聚合（保留種子資料），故自我高亮以顯示名稱比對；
+  // studytime 榜以真實 userId 聚合，故以 userId 比對。
+  const userName = session?.user?.name ?? null;
 
   const { tab } = await searchParams;
   const activeKey: TabKey = TAB_KEYS.includes(tab as TabKey)
@@ -355,7 +358,10 @@ export default async function LeaderboardPage({
             [podium[1], podium[0], podium[2]].map((member, slot) => {
               if (!member) return null;
               const rank = slot === 1 ? 1 : slot === 0 ? 2 : 3;
-              const isSelf = userId != null && member.userId === userId;
+              const isSelf =
+                activeKey === "studytime"
+                  ? userId != null && member.userId === userId
+                  : userName != null && member.name === userName;
               const nameSuffix = isSelf ? " (您)" : "";
               const avatar = member.image ? (
                  
@@ -505,7 +511,10 @@ export default async function LeaderboardPage({
             ) : (
               listRows.map((item, idx) => {
                 const rank = idx + 4;
-                const isSelf = userId != null && item.userId === userId;
+                const isSelf =
+                  activeKey === "studytime"
+                    ? userId != null && item.userId === userId
+                    : userName != null && item.name === userName;
                 return (
                   <div
                     key={item.userId}

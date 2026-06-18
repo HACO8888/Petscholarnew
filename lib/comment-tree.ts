@@ -5,6 +5,7 @@ export interface CommentNode {
   authorName: string;
   authorId: string | null;
   isAdopted: boolean;
+  hidden: boolean;
   time: string;
   contentHtml: string;
   children: CommentNode[];
@@ -30,6 +31,7 @@ export function buildCommentTree(
       authorName: r.authorName,
       authorId: r.authorId,
       isAdopted: r.isAdopted,
+      hidden: r.hidden,
       time: fmtTime(r.createdAt),
       contentHtml: renderHtml(r.content),
       children: [],
@@ -44,6 +46,17 @@ export function buildCommentTree(
     else roots.push(node);
   }
   return roots;
+}
+
+/**
+ * 移除被隱藏（檢舉封鎖）的留言「整棵子樹」。
+ * 直接以 hidden=false 過濾查詢會讓被隱藏父留言底下的可見回覆變成孤兒、被升級為頂層留言
+ * （脫離脈絡、繞過審核）；故先以完整資料建樹，再連同子樹一起剪除被隱藏的節點。
+ */
+export function pruneHidden(nodes: CommentNode[]): CommentNode[] {
+  return nodes
+    .filter((n) => !n.hidden)
+    .map((n) => ({ ...n, children: pruneHidden(n.children) }));
 }
 
 export function countNodes(nodes: CommentNode[]): number {

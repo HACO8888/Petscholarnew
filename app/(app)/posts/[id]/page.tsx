@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, boards, comments } from "@/db/schema";
 import { RichContent, renderContentHtml } from "@/lib/rich-content";
-import { buildCommentTree } from "@/lib/comment-tree";
+import { buildCommentTree, pruneHidden } from "@/lib/comment-tree";
 import { formatDateTime } from "@/lib/format";
 import CommentThread from "@/components/CommentThread";
 import CommentTreeSvg from "@/components/CommentTreeSvg";
@@ -28,12 +28,15 @@ export default async function PostPage({
     .where(eq(boards.id, post.boardId))
     .limit(1);
 
+  // 取全部留言（含被隱藏者）建樹後再剪除被隱藏子樹，避免被隱藏父留言的回覆被升級為頂層。
   const commentRows = await db
     .select()
     .from(comments)
-    .where(and(eq(comments.postId, id), eq(comments.hidden, false)));
+    .where(eq(comments.postId, id));
 
-  const tree = buildCommentTree(commentRows, renderContentHtml, formatDateTime);
+  const tree = pruneHidden(
+    buildCommentTree(commentRows, renderContentHtml, formatDateTime),
+  );
 
   return (
     <section className="min-w-0">
