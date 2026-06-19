@@ -249,8 +249,39 @@ export const reports = pgTable("report", {
   index("report_created_idx").on(t.createdAt),
 ]);
 
+// ---- 自習室文字聊天（DB 持久化 + Socket.IO 即時廣播） ----
+
+export const chatMessages = pgTable(
+  "chat_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    roomId: varchar("room_id", { length: 48 })
+      .notNull()
+      .references(() => studyRooms.id, { onDelete: "cascade" }),
+    // 作者刪除帳號時保留訊息但解除關聯
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // 快照作者顯示名稱（即使 user 被刪仍可顯示）
+    authorName: text("author_name").notNull(),
+    content: text("content").notNull(),
+    // 由 admin 隱藏的訊息不會回傳給一般使用者
+    hidden: boolean("hidden").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // 載入某房歷史（依時間）：以 (roomId, createdAt) 複合 index 加速
+    index("chat_room_created_idx").on(t.roomId, t.createdAt),
+    index("chat_user_idx").on(t.userId),
+  ],
+);
+
 export type StudyRoom = typeof studyRooms.$inferSelect;
 export type Report = typeof reports.$inferSelect;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type NewChatMessage = typeof chatMessages.$inferInsert;
 
 // ---- 福利社優惠券兌換紀錄 ----
 export const couponRedemptions = pgTable(
