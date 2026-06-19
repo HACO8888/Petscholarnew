@@ -526,9 +526,12 @@ export async function updateUser(formData: FormData) {
     .returning({ id: users.id });
   if (updated.length === 0) throw new Error("使用者不存在");
 
-  // 角色／科系等變更會反映在多個頁面（後台、個人檔案、貼文作者顯示）。
+  // 角色／科系等變更會反映在多個頁面（後台、個人檔案、公開檔案、排行榜、自習室建立者）。
   revalidatePath("/admin");
   revalidatePath("/profile");
+  revalidatePath(`/u/${userId}`);
+  revalidatePath("/leaderboard");
+  revalidatePath("/study-rooms");
 }
 
 // ============================================================

@@ -9,6 +9,10 @@ import { posts, comments, boards, pets, reports, departments } from "@/db/schema
 import { getOrCreatePet, applyExp } from "@/lib/pet";
 
 const ADOPT_EXP = 20;
+// 採納基礎獎勵：即使發問者未設懸賞，解答被採納也固定發放金幣（鼓勵解題）。
+const ADOPT_BASE_REWARD = 15;
+// 發問者獎勵：自己的提問獲得（被）採納解答 → 問題被解決，給小額金幣（鼓勵發問）。
+const ASK_RESOLVED_REWARD = 5;
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -227,7 +231,7 @@ export async function adoptAnswer(formData: FormData) {
           .update(pets)
           .set({
             // 懸賞託管轉帳 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
-            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward}`,
+            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward + ADOPT_BASE_REWARD}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,
@@ -238,6 +242,12 @@ export async function adoptAnswer(formData: FormData) {
       }
     }
   });
+
+  // 發問者：自己的提問獲得採納解答 → 問題解決，給小額金幣鼓勵發問
+  await db
+    .update(pets)
+    .set({ coins: sql`${pets.coins} + ${ASK_RESOLVED_REWARD}`, updatedAt: new Date() })
+    .where(eq(pets.userId, userId));
 
   revalidatePath(`/posts/${postId}`);
   revalidatePath("/discussion");
@@ -310,7 +320,7 @@ export async function verifyAnswerAsTA(formData: FormData) {
           .update(pets)
           .set({
             // 懸賞託管轉帳 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
-            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward}`,
+            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward + ADOPT_BASE_REWARD}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,

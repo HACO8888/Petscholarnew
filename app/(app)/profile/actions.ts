@@ -72,4 +72,7 @@ export async function updateProfile(formData: FormData) {
 
   revalidatePath("/profile");
   revalidatePath("/");
+  // 暱稱/系所/造型/頭像也顯示在公開檔案與排行榜，一併重新驗證避免顯示舊值
+  revalidatePath(`/u/${userId}`);
+  revalidatePath("/leaderboard");
 }

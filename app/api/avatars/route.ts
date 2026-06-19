@@ -16,6 +16,7 @@ export const runtime = "nodejs";
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB 上限
 const AVATAR_FILE_PREFIX = "/api/avatars/file";
 
+// 僅允許點陣圖格式白名單；刻意不含 image/svg+xml（SVG 可含腳本，會造成 XSS）。
 const EXT_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
@@ -23,7 +24,6 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/gif": "gif",
   "image/webp": "webp",
   "image/avif": "avif",
-  "image/svg+xml": "svg",
 };
 
 /** 從舊的本站 avatar image URL 取回 object key（非本站 avatar 則回 null）。 */
@@ -67,7 +67,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "檔案過大（上限 5MB）" }, { status: 400 });
   }
 
-  const ext = EXT_BY_TYPE[contentType.toLowerCase()] ?? "bin";
+  const ext = EXT_BY_TYPE[contentType.toLowerCase()];
+  if (!ext) {
+    return NextResponse.json(
+      { error: "不支援的圖片格式（僅 JPG/PNG/GIF/WebP/AVIF；不接受 SVG）" },
+      { status: 400 },
+    );
+  }
   const key = `avatars/${userId}/${crypto.randomUUID()}.${ext}`;
 
   try {
