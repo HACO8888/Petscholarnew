@@ -59,6 +59,31 @@ export async function presignedGetUrl(key: string, expiresIn = 3600): Promise<st
   );
 }
 
+/**
+ * 取得物件的串流 body 與其 metadata（供 route 直接串流回傳，例如自訂頭像）。
+ * 回傳的 body 是 web ReadableStream，可直接放進 Response。
+ */
+export async function getObjectStream(key: string): Promise<{
+  body: ReadableStream<Uint8Array>;
+  contentType: string;
+  contentLength?: number;
+}> {
+  const out = await getS3().send(
+    new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }),
+  );
+  const body = out.Body as
+    | { transformToWebStream: () => ReadableStream<Uint8Array> }
+    | undefined;
+  if (!body || typeof body.transformToWebStream !== "function") {
+    throw new Error("物件無內容");
+  }
+  return {
+    body: body.transformToWebStream(),
+    contentType: out.ContentType ?? "application/octet-stream",
+    contentLength: out.ContentLength,
+  };
+}
+
 /** 刪除物件。 */
 export async function deleteObject(key: string): Promise<void> {
   await getS3().send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
