@@ -41,6 +41,22 @@ import {
 // 強制錄製：每段最長時長，到點先上傳再續錄（避免單檔過大 / 失聯時整段遺失）。
 const REC_SEGMENT_MS = 150_000; // 2.5 分鐘
 
+// 房間層級合併錄製的 canvas 解析度與 grid 設定。
+const MIX_CANVAS_W = 1280;
+const MIX_CANVAS_H = 720;
+const MIX_FPS = 15;
+
+// 依「有開鏡頭的參與者數」決定 grid 欄列數（1 滿版、2 並排、3–4 為 2×2…）。
+function gridDims(n: number): { cols: number; rows: number } {
+  if (n <= 1) return { cols: 1, rows: 1 };
+  if (n === 2) return { cols: 2, rows: 1 };
+  if (n <= 4) return { cols: 2, rows: 2 };
+  if (n <= 6) return { cols: 3, rows: 2 };
+  if (n <= 9) return { cols: 3, rows: 3 };
+  const cols = Math.ceil(Math.sqrt(n));
+  return { cols, rows: Math.ceil(n / cols) };
+}
+
 /** 語音 peer：socket id → 使用者 id/名稱 + 媒體串流 + 是否有視訊。 */
 export interface VoicePeer {
   id: string;
@@ -64,10 +80,12 @@ export interface VoiceCallContextValue {
   speakingKeys: Set<string>;
   muted: boolean;
   cameraOn: boolean;
-  /** 是否正在錄製（加入語音即恆為 true，使用者無法關閉）。 */
+  /** 房間是否正在被錄製（房內任一成員為錄製端即 true。全員都看得到「錄音中」指示）。 */
   recording: boolean;
-  /** 目前錄製是否含影像（鏡頭開啟時）。 */
+  /** 目前房間錄製是否含影像（房內有人開鏡頭時）。 */
   recordingVideo: boolean;
+  /** 我是否為本房錄製端（只有錄製端才真的跑 MediaRecorder 上傳合併串流）。 */
+  amRecorder: boolean;
   /** 是否成功套用 RNNoise（false = 退回瀏覽器內建降噪）。 */
   rnnoiseActive: boolean;
   error: string | null;
@@ -119,7 +137,7 @@ export default function VoiceCallProvider({
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [recordingVideo, setRecordingVideo] = useState(false);
+  const [amRecorder, setAmRecorder] = useState(false);
   const [rnnoiseActive, setRnnoiseActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -136,6 +154,8 @@ export default function VoiceCallProvider({
   const peerInfoRef = useRef(
     new Map<string, { userId: string | null; name: string }>(),
   );
+  // participants 的 ref 鏡像：供合併錄製的 sync/rAF 閉包讀目前對端（避免閉包過期）。
+  const participantsRef = useRef<VoicePeer[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
   const rawMicTrackRef = useRef<MediaStreamTrack | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -152,6 +172,26 @@ export default function VoiceCallProvider({
   const recStartRef = useRef(0);
   const recSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceActiveRef = useRef(false);
+
+  // ---- 房間層級「合併錄製」資源（只有錄製端才會建立）----
+  // 我是否為本房錄製端（與 amRecorder 同步，供錄製器/rAF 等閉包讀最新值）。
+  const amRecorderRef = useRef(false);
+  // 混音：AudioContext + destination；sources 以 key（"self" 或 peer socket id）對應。
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const audioSourcesRef = useRef(
+    new Map<string, MediaStreamAudioSourceNode>(),
+  );
+  // 合併視訊：隱藏 canvas + rAF；每個有開鏡頭參與者一個隱藏 <video> 來源。
+  const mixCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRafRef = useRef<number | null>(null);
+  const mixVideoElsRef = useRef(new Map<string, HTMLVideoElement>());
+  // 目前合併錄製輸出的 MediaStream（混音 track +（有人開鏡頭時）canvas track）。
+  const mixedStreamRef = useRef<MediaStream | null>(null);
+  // rAF 迴圈以 ref 自我參照最新 drawMixFrame（避免閉包過期 / 宣告前存取）。
+  const drawMixFrameRef = useRef<() => void>(() => {});
+  // canvas 是否已附加到合併串流（用來判斷「從無人開鏡頭→有人」需重啟分段以納入視訊）。
+  const mixHasVideoRef = useRef(false);
   const speakingRef = useRef<SpeakingDetector | null>(null);
   // 分段錄音「續錄」需在 onstop 內呼叫自己。以 ref 持有最新 startSegment 以避開自我參照。
   const startSegmentRef = useRef<() => void>(() => {});
@@ -291,18 +331,271 @@ export default function VoiceCallProvider({
     [closePeer],
   );
 
-  // ---- 強制錄製：分段錄音器 ----
-  const startSegment = useCallback(() => {
+  // ====================================================================
+  // 房間層級「合併錄製」：只有錄製端（amRecorder）會用到。
+  // 混音：本地麥克風 + 每個 peer inbound → AudioContext destination 一條 audio track。
+  // 合併視訊：所有開鏡頭者畫成 canvas grid（含名稱小標）→ captureStream 一條 video track。
+  // 兩者組成 mixedStreamRef，供 MediaRecorder 沿用既有分段 + 上傳邏輯。
+  // ====================================================================
+
+  // 目前合併錄製的「音訊輸入」清單：本地麥克風（key "self"）+ 各 peer（key = socket id）。
+  // 本地用 micStream（原始麥克風串流；peer 端送來的已各自經過自己的 RNNoise）。
+  const collectAudioInputs = useCallback((): {
+    key: string;
+    stream: MediaStream;
+  }[] => {
+    const inputs: { key: string; stream: MediaStream }[] = [];
+    const mic = micStreamRef.current;
+    if (mic && mic.getAudioTracks().length > 0) {
+      inputs.push({ key: "self", stream: mic });
+    }
+    for (const p of participantsRef.current) {
+      if (p.stream.getAudioTracks().length > 0) {
+        inputs.push({ key: p.id, stream: p.stream });
+      }
+    }
+    return inputs;
+  }, []);
+
+  // 目前合併錄製的「視訊磚」清單：所有有開鏡頭者（本地處理後視訊 + 各 peer 視訊）。
+  const collectVideoTiles = useCallback((): {
+    key: string;
+    name: string;
+    stream: MediaStream;
+  }[] => {
+    const tiles: { key: string; name: string; stream: MediaStream }[] = [];
     const ls = localStreamRef.current;
-    if (!ls || !voiceActiveRef.current) return;
+    if (ls && ls.getVideoTracks().some((t) => t.readyState === "live")) {
+      tiles.push({ key: "self", name: "你", stream: ls });
+    }
+    for (const p of participantsRef.current) {
+      if (
+        p.hasVideo &&
+        p.stream.getVideoTracks().some((t) => t.readyState === "live")
+      ) {
+        tiles.push({ key: p.id, name: p.name, stream: p.stream });
+      }
+    }
+    return tiles;
+  }, []);
+
+  // 同步混音 source nodes：依目前音訊輸入增刪 MediaStreamAudioSourceNode。
+  const syncAudioSources = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    const dest = audioDestRef.current;
+    if (!ctx || !dest) return;
+    const inputs = collectAudioInputs();
+    const wanted = new Set(inputs.map((i) => i.key));
+    // 移除已不存在的 source。
+    for (const [key, node] of [...audioSourcesRef.current.entries()]) {
+      if (!wanted.has(key)) {
+        try {
+          node.disconnect();
+        } catch {
+          /* ignore */
+        }
+        audioSourcesRef.current.delete(key);
+      }
+    }
+    // 新增缺少的 source。
+    for (const { key, stream } of inputs) {
+      if (audioSourcesRef.current.has(key)) continue;
+      try {
+        const node = ctx.createMediaStreamSource(stream);
+        node.connect(dest);
+        audioSourcesRef.current.set(key, node);
+      } catch {
+        /* 該串流暫無法接（無 audio track）→ 略過 */
+      }
+    }
+  }, [collectAudioInputs]);
+
+  // 同步 canvas 視訊來源 <video> 元素：依目前視訊磚增刪隱藏 video。
+  const syncVideoEls = useCallback(() => {
+    const tiles = collectVideoTiles();
+    const wanted = new Set(tiles.map((t) => t.key));
+    for (const [key, el] of [...mixVideoElsRef.current.entries()]) {
+      if (!wanted.has(key)) {
+        el.srcObject = null;
+        mixVideoElsRef.current.delete(key);
+      }
+    }
+    for (const { key, stream } of tiles) {
+      let el = mixVideoElsRef.current.get(key);
+      if (!el) {
+        el = document.createElement("video");
+        el.muted = true;
+        el.playsInline = true;
+        el.autoplay = true;
+        mixVideoElsRef.current.set(key, el);
+      }
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+        void el.play().catch(() => {});
+      }
+    }
+  }, [collectVideoTiles]);
+
+  // canvas 逐格繪製：把所有開鏡頭者畫成 grid，每格貼名稱小標。
+  const drawMixFrame = useCallback(() => {
+    const canvas = mixCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const tiles = collectVideoTiles();
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const n = tiles.length;
+    if (n > 0) {
+      const { cols, rows } = gridDims(n);
+      const cellW = canvas.width / cols;
+      const cellH = canvas.height / rows;
+      tiles.forEach((tile, i) => {
+        const el = mixVideoElsRef.current.get(tile.key);
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = col * cellW;
+        const y = row * cellH;
+        if (el && el.readyState >= 2 && el.videoWidth > 0) {
+          // 以 cover 方式置中裁切，避免變形。
+          const vw = el.videoWidth;
+          const vh = el.videoHeight;
+          const scale = Math.max(cellW / vw, cellH / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          const dx = x + (cellW - dw) / 2;
+          const dy = y + (cellH - dh) / 2;
+          try {
+            ctx.drawImage(el, dx, dy, dw, dh);
+          } catch {
+            /* 該幀暫不可繪 → 略過 */
+          }
+        }
+        // 名稱小標。
+        const label = tile.name;
+        ctx.font = "600 20px system-ui, sans-serif";
+        const padX = 8;
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(x + 8, y + cellH - 36, tw + padX * 2, 28);
+        ctx.fillStyle = "#ffffff";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, x + 8 + padX, y + cellH - 36 + 14);
+      });
+    }
+    canvasRafRef.current = requestAnimationFrame(() =>
+      drawMixFrameRef.current(),
+    );
+  }, [collectVideoTiles]);
+  // 讓 rAF 迴圈永遠呼叫到最新 drawMixFrame。
+  useEffect(() => {
+    drawMixFrameRef.current = drawMixFrame;
+  }, [drawMixFrame]);
+
+  // 釋放所有合併錄製資源（停 rAF、斷 source、關 AudioContext、清 video）。
+  const teardownMix = useCallback(() => {
+    if (canvasRafRef.current != null) {
+      cancelAnimationFrame(canvasRafRef.current);
+      canvasRafRef.current = null;
+    }
+    for (const node of audioSourcesRef.current.values()) {
+      try {
+        node.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+    audioSourcesRef.current.clear();
+    if (audioCtxRef.current) {
+      void audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    audioDestRef.current = null;
+    for (const el of mixVideoElsRef.current.values()) {
+      el.srcObject = null;
+    }
+    mixVideoElsRef.current.clear();
+    mixedStreamRef.current = null;
+    mixHasVideoRef.current = false;
+  }, []);
+
+  // 建立合併串流（首次成為錄製端時）：AudioContext 混音 +（有人開鏡頭才加）canvas 視訊。
+  // 回傳要餵給 MediaRecorder 的 MediaStream（音訊必有，視訊視情況）。
+  const buildMixedStream = useCallback((): MediaStream | null => {
+    try {
+      const Ctor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      const ctx = new Ctor();
+      void ctx.resume().catch(() => {});
+      const dest = ctx.createMediaStreamDestination();
+      audioCtxRef.current = ctx;
+      audioDestRef.current = dest;
+      syncAudioSources();
+
+      const mixed = new MediaStream();
+      for (const t of dest.stream.getAudioTracks()) mixed.addTrack(t);
+
+      // 視訊：有人開鏡頭才建立 canvas track；否則純音訊。
+      const tiles = collectVideoTiles();
+      if (tiles.length > 0) {
+        const canvas = mixCanvasRef.current;
+        if (canvas) {
+          syncVideoEls();
+          if (canvasRafRef.current == null) drawMixFrame();
+          const vstream = canvas.captureStream(MIX_FPS);
+          const vtrack = vstream.getVideoTracks()[0];
+          if (vtrack) {
+            mixed.addTrack(vtrack);
+            mixHasVideoRef.current = true;
+          }
+        }
+      }
+      mixedStreamRef.current = mixed;
+      return mixed;
+    } catch {
+      teardownMix();
+      return null;
+    }
+  }, [collectVideoTiles, drawMixFrame, syncAudioSources, syncVideoEls, teardownMix]);
+
+  // ---- 強制錄製：分段錄音器（錄製端：錄合併串流；非錄製端：不建立）----
+  const startSegment = useCallback(() => {
+    // 只有錄製端才真的開錄；非錄製端僅維持「房間錄製中」指示（由 voice:recorder 控制）。
+    if (!amRecorderRef.current || !voiceActiveRef.current) return;
+    // 確保合併串流存在（首段或交接後重建）。
+    let mixed = mixedStreamRef.current;
+    if (!mixed) mixed = buildMixedStream();
+    else {
+      // 既有合併串流：同步音訊 / 視訊來源（peer 進出、開關鏡頭），並視需要動態加 canvas 視訊。
+      syncAudioSources();
+      const tiles = collectVideoTiles();
+      if (tiles.length > 0 && !mixHasVideoRef.current) {
+        const canvas = mixCanvasRef.current;
+        if (canvas) {
+          syncVideoEls();
+          if (canvasRafRef.current == null) drawMixFrame();
+          const vtrack = canvas.captureStream(MIX_FPS).getVideoTracks()[0];
+          if (vtrack) {
+            mixed.addTrack(vtrack);
+            mixHasVideoRef.current = true;
+          }
+        }
+      } else if (tiles.length > 0) {
+        syncVideoEls();
+      }
+    }
+    const ls = mixed;
+    if (!ls) return;
     try {
       recChunksRef.current = [];
+      // 段起即快照房 id：離開時 teardown 會同步把 roomIdRef 清空，
+      // 而 onstop 為非同步，需以此快照確保「最後一段」仍上傳到正確房。
+      const segRoomId = roomIdRef.current;
       const recorder = new MediaRecorder(ls);
       recorderRef.current = recorder;
       recStartRef.current = performance.now();
-      const hasVideo = ls.getVideoTracks().length > 0;
-      setRecording(true);
-      setRecordingVideo(hasVideo);
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) recChunksRef.current.push(e.data);
       };
@@ -310,17 +603,18 @@ export default function VoiceCallProvider({
         const chunks = recChunksRef.current;
         recChunksRef.current = [];
         const durMs = Math.round(performance.now() - recStartRef.current);
-        // 續錄：只要還在通話中就立即開下一段（以最新 localStream）
-        if (voiceActiveRef.current) startSegmentRef.current();
-        else {
-          setRecording(false);
-          setRecordingVideo(false);
+        // 續錄：仍在通話且仍為錄製端就立即開下一段（以最新合併串流）。
+        // 否則（離開語音或交接出去）不續錄，並釋放合併資源。
+        if (voiceActiveRef.current && amRecorderRef.current) {
+          startSegmentRef.current();
+        } else {
+          teardownMix();
         }
         if (chunks.length === 0) return;
         const type = recorder.mimeType || "audio/webm";
         const blob = new Blob(chunks, { type });
         if (blob.size === 0) return;
-        const rid = roomIdRef.current;
+        const rid = segRoomId;
         if (!rid) return;
         const fd = new FormData();
         fd.append("audio", blob, "recording.webm");
@@ -340,9 +634,16 @@ export default function VoiceCallProvider({
       }, REC_SEGMENT_MS);
     } catch {
       setError("此瀏覽器不支援錄製，無法符合錄音規範。");
-      setRecording(false);
+      teardownMix();
     }
-  }, []);
+  }, [
+    buildMixedStream,
+    collectVideoTiles,
+    drawMixFrame,
+    syncAudioSources,
+    syncVideoEls,
+    teardownMix,
+  ]);
   // 讓 onstop 內的續錄永遠呼叫到最新的 startSegment（startSegment 無依賴，恆穩定）。
   useEffect(() => {
     startSegmentRef.current = startSegment;
@@ -361,6 +662,53 @@ export default function VoiceCallProvider({
     }
   }, [startSegment]);
 
+  // 停止本地 MediaRecorder（交接出去或離開時）。最後一段在 onstop 上傳；
+  // onstop 內因 amRecorder 已 false 而不續錄並 teardownMix。
+  const stopRecorderAndUpload = useCallback(() => {
+    if (recSegmentTimerRef.current) {
+      clearTimeout(recSegmentTimerRef.current);
+      recSegmentTimerRef.current = null;
+    }
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      recorderRef.current.stop();
+    } else {
+      teardownMix();
+    }
+  }, [teardownMix]);
+
+  // ---- 套用伺服器指派的錄製端 ----
+  // recorderId：本房目前錄製端 socket id（null = 暫無）。
+  // 房間是否錄製中（recording 指示）：只要有 recorder 存在 → 全房皆為 true。
+  // 我是否為錄製端：比對自己的 socket.id。錄製端負責跑 MediaRecorder 上傳合併串流。
+  const applyRecorder = useCallback(
+    (recorderId: string | null) => {
+      const mySocketId = socketRef.current?.id ?? null;
+      const mineNow = !!recorderId && recorderId === mySocketId;
+      const roomRecording = !!recorderId;
+      // 房間錄製中指示（全房一致）。
+      setRecording(roomRecording);
+
+      const wasRecorder = amRecorderRef.current;
+      if (mineNow === wasRecorder) {
+        // 身分未變：若仍是錄製端，確保有在錄（例如剛 join 即被指派）。
+        if (mineNow && voiceActiveRef.current && !recorderRef.current) {
+          startSegment();
+        }
+        return;
+      }
+      amRecorderRef.current = mineNow;
+      setAmRecorder(mineNow);
+      if (mineNow) {
+        // 我成為錄製端：開始錄合併串流。
+        if (voiceActiveRef.current) startSegment();
+      } else {
+        // 交接出去：停止並上傳最後一段、釋放合併資源。
+        stopRecorderAndUpload();
+      }
+    },
+    [startSegment, stopRecorderAndUpload],
+  );
+
   // ---- 關閉鏡頭（也供 forceCameraOff 用）----
   const disableCamera = useCallback(() => {
     const ls = localStreamRef.current;
@@ -369,7 +717,6 @@ export default function VoiceCallProvider({
       return;
     }
     const videoTracks = ls.getVideoTracks();
-    const hadVideo = videoTracks.length > 0;
     for (const pc of pcsRef.current.values()) {
       for (const sender of pc.getSenders()) {
         if (sender.track && sender.track.kind === "video") {
@@ -390,8 +737,9 @@ export default function VoiceCallProvider({
     rawCamTrackRef.current = null;
     setLocalStream(new MediaStream(ls.getTracks()));
     setCameraOn(false);
-    if (hadVideo) restartRecording();
-  }, [restartRecording]);
+    // 房間層級合併錄製：本地關鏡頭會反映在合併 grid 上（由錄製端的 mix-sync effect
+    // 依 cameraOn 變動處理）；本人若非錄製端則無 MediaRecorder 需重啟。
+  }, []);
 
   // ---- 開啟鏡頭 ----
   const enableCamera = useCallback(async () => {
@@ -443,12 +791,12 @@ export default function VoiceCallProvider({
       setCameraOn(true);
       // 送 peer 的是處理後 track。
       for (const pc of pcsRef.current.values()) pc.addTrack(outboundTrack, ls);
-      // 以處理後 track 重啟錄製 → MediaRecorder 錄到套背景後畫面。
-      restartRecording();
+      // 房間層級合併錄製：本地開鏡頭（套背景後畫面）會被畫進合併 grid（由錄製端的
+      // mix-sync effect 依 cameraOn 變動納入 canvas 視訊）；本人若非錄製端則無 MediaRecorder。
     } catch {
       setError("無法取得相機權限。");
     }
-  }, [restartRecording, showNotice]);
+  }, [showNotice]);
 
   // ---- 完整關閉（離開語音）：釋放所有資源 ----
   const teardown = useCallback(() => {
@@ -462,9 +810,13 @@ export default function VoiceCallProvider({
       clearTimeout(recSegmentTimerRef.current);
       recSegmentTimerRef.current = null;
     }
-    // 停止錄製：最後一段在 onstop 上傳（voiceActive 已 false，不再續錄）。
+    // 卸任錄製端身分後再停錄：onstop 因 amRecorder 已 false 而不續錄、並 teardownMix。
+    // 最後一段在 onstop 上傳（segRoomId 快照確保正確房）。
+    amRecorderRef.current = false;
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       recorderRef.current.stop();
+    } else {
+      teardownMix();
     }
     noiseHandleRef.current?.destroy();
     noiseHandleRef.current = null;
@@ -491,14 +843,14 @@ export default function VoiceCallProvider({
     setLocalStream(null);
     setInVoice(false);
     setRecording(false);
-    setRecordingVideo(false);
+    setAmRecorder(false);
     setRnnoiseActive(false);
     setCameraOn(false);
     setMuted(false);
     setParticipants([]);
     setActiveRoomId(null);
     setActiveRoomName(null);
-  }, [closePeer]);
+  }, [closePeer, teardownMix]);
 
   const leave = useCallback(() => {
     teardown();
@@ -615,6 +967,15 @@ export default function VoiceCallProvider({
             closePeer(id),
           );
 
+          // 伺服器指派 / 變更本房錄製端：更新 amRecorder 與「房間錄製中」指示，
+          // 並在我成為 / 卸任錄製端時啟動 / 停止合併錄製。
+          socket.on(
+            "voice:recorder",
+            ({ recorderId }: { recorderId: string | null }) => {
+              applyRecorder(recorderId ?? null);
+            },
+          );
+
           // 被管理員強制靜音：停用本地原始麥克風 track。
           socket.on("voice:force-mute", ({ by }: { by?: string }) => {
             if (rawMicTrackRef.current) rawMicTrackRef.current.enabled = false;
@@ -695,6 +1056,7 @@ export default function VoiceCallProvider({
                 name: string;
                 userId?: string | null;
               }[];
+              recorderId?: string | null;
               error?: string;
             }) => {
               if (!ack?.ok) {
@@ -703,10 +1065,13 @@ export default function VoiceCallProvider({
                 return;
               }
               setInVoice(true);
-              // 強制錄製：加入即自動開始。
-              startSegment();
               for (const p of ack.peers ?? [])
                 void makePeer(p.id, p.name, p.userId ?? null, true);
+              // 房間層級錄製：依伺服器指派的 recorderId 決定我是否為錄製端。
+              // 只有錄製端才會開始跑 MediaRecorder；全房依此顯示「錄音中」指示。
+              // （首位加入者會被指派為 recorder，需靠 ack 得知；voice:recorder 廣播
+              //  亦會送達，applyRecorder 對同身分為冪等。）
+              applyRecorder(ack.recorderId ?? null);
             },
           );
         } catch {
@@ -715,7 +1080,7 @@ export default function VoiceCallProvider({
         }
       })();
     },
-    [closePeer, disableCamera, makePeer, showNotice, startSegment, teardown],
+    [applyRecorder, closePeer, disableCamera, makePeer, showNotice, teardown],
   );
 
   const toggleMute = useCallback(() => {
@@ -771,6 +1136,52 @@ export default function VoiceCallProvider({
     );
   }, []);
 
+  // participants 的 ref 鏡像（供合併錄製 sync/rAF 讀最新對端）。
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
+
+  // 錄製端：對端進出 / 開關鏡頭時，同步合併串流的音訊與視訊來源。
+  // 「無人開鏡頭 → 有人」需把 canvas 視訊 track 補進合併串流（重啟分段以納入）；
+  // 「有人 → 無人開鏡頭」需移除視訊 track 改回純音訊（重啟分段，避免錄到整片黑畫面）。
+  useEffect(() => {
+    if (!amRecorder || !voiceActiveRef.current) return;
+    if (!mixedStreamRef.current) return;
+    syncAudioSources();
+    const hasTiles = collectVideoTiles().length > 0;
+    if (hasTiles !== mixHasVideoRef.current) {
+      // 視訊有無狀態改變：重啟分段（onstop 續錄會以正確的合併串流重建）。
+      if (!hasTiles) {
+        // 改回純音訊：移除既有 canvas 視訊 track 並停 rAF，重建乾淨的合併串流。
+        const mixed = mixedStreamRef.current;
+        for (const t of mixed.getVideoTracks()) {
+          t.stop();
+          mixed.removeTrack(t);
+        }
+        if (canvasRafRef.current != null) {
+          cancelAnimationFrame(canvasRafRef.current);
+          canvasRafRef.current = null;
+        }
+        for (const el of mixVideoElsRef.current.values()) el.srcObject = null;
+        mixVideoElsRef.current.clear();
+        mixHasVideoRef.current = false;
+      }
+      restartRecording();
+    } else if (hasTiles) {
+      // 視訊磚清單變動（peer 換人、開關鏡頭）但仍有視訊：僅同步來源 video 元素。
+      syncVideoEls();
+    }
+    // 依賴 participants / cameraOn 變動觸發同步。
+  }, [
+    amRecorder,
+    participants,
+    cameraOn,
+    syncAudioSources,
+    collectVideoTiles,
+    syncVideoEls,
+    restartRecording,
+  ]);
+
   // 卸載（理論上 Provider 掛在 layout 不會卸載。保險起見釋放資源）。
   useEffect(() => {
     return () => {
@@ -779,6 +1190,11 @@ export default function VoiceCallProvider({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 房間錄製是否含影像（全房一致指示）：房間正在錄 + 房內任一人開鏡頭（本地或任一 peer）。
+  // 純由現有 state 派生（不需獨立 state / effect）。
+  const recordingVideo =
+    recording && (cameraOn || participants.some((p) => p.hasVideo));
 
   const value: VoiceCallContextValue = {
     activeRoomId,
@@ -790,6 +1206,7 @@ export default function VoiceCallProvider({
     cameraOn,
     recording,
     recordingVideo,
+    amRecorder,
     rnnoiseActive,
     error,
     notice,
@@ -808,6 +1225,22 @@ export default function VoiceCallProvider({
 
   return (
     <VoiceCallContext.Provider value={value}>
+      {/* 房間層級合併錄製用的隱藏 canvas（錄製端把所有開鏡頭者畫成 grid 後 captureStream）。 */}
+      <canvas
+        ref={mixCanvasRef}
+        width={MIX_CANVAS_W}
+        height={MIX_CANVAS_H}
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          left: -99999,
+          top: 0,
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
       {children}
     </VoiceCallContext.Provider>
   );
