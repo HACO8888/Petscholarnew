@@ -32,14 +32,16 @@ export default function StudyRoomEditDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1"
+        title="編輯房間"
+        className="text-on-surface-variant font-bold text-body-md px-3 py-1.5 rounded-full hover:bg-surface-container-highest transition-all flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
-        <span className="material-symbols-outlined text-[18px]">edit</span> 編輯房間
+        <span className="material-symbols-outlined text-[18px]">edit</span>
+        <span className="hidden sm:inline">編輯</span>
       </button>
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
           onClick={() => setOpen(false)}
         >
           <form
@@ -52,15 +54,17 @@ export default function StudyRoomEditDialog({
           >
             <input type="hidden" name="roomId" value={room.id} />
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
-                <span className="material-symbols-outlined text-primary">edit</span>
+              <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-[20px]">
+                  edit
+                </span>
                 編輯自習室
               </h3>
               <button
                 type="button"
                 aria-label="關閉"
                 onClick={() => setOpen(false)}
-                className="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container"
+                className="p-1 rounded-full text-secondary hover:text-on-surface hover:bg-surface-container focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -69,7 +73,7 @@ export default function StudyRoomEditDialog({
             <div>
               <label
                 htmlFor="edit-room-name"
-                className="block text-xs font-bold text-secondary mb-1"
+                className="block text-sm font-bold text-secondary mb-1.5"
               >
                 自習室名稱
               </label>
@@ -80,14 +84,14 @@ export default function StudyRoomEditDialog({
                 required
                 maxLength={80}
                 defaultValue={room.name}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-room-subject"
-                className="block text-xs font-bold text-secondary mb-1"
+                className="block text-sm font-bold text-secondary mb-1.5"
               >
                 科目 / 主題（選填）
               </label>
@@ -97,14 +101,14 @@ export default function StudyRoomEditDialog({
                 type="text"
                 maxLength={40}
                 defaultValue={room.subject ?? ""}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-room-description"
-                className="block text-xs font-bold text-secondary mb-1"
+                className="block text-sm font-bold text-secondary mb-1.5"
               >
                 說明（選填）
               </label>
@@ -114,14 +118,14 @@ export default function StudyRoomEditDialog({
                 type="text"
                 maxLength={120}
                 defaultValue={room.description ?? ""}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-room-capacity"
-                className="block text-xs font-bold text-secondary mb-1"
+                className="block text-sm font-bold text-secondary mb-1.5"
               >
                 人數上限（不可低於目前 {memberCount} 人）
               </label>
@@ -132,14 +136,14 @@ export default function StudyRoomEditDialog({
                 min={Math.max(2, memberCount)}
                 max={12}
                 defaultValue={room.capacity}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <div>
               <label
                 htmlFor="edit-room-password"
-                className="block text-xs font-bold text-secondary mb-1"
+                className="block text-sm font-bold text-secondary mb-1.5"
               >
                 房間密碼{" "}
                 <span className="font-normal text-on-surface-variant">
@@ -155,10 +159,10 @@ export default function StudyRoomEditDialog({
                 maxLength={64}
                 disabled={removePw}
                 placeholder={room.hasPassword ? "••••（不變更）" : "設定密碼…"}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-sm outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
               />
               {room.hasPassword && (
-                <label className="mt-2 flex items-center gap-2 text-xs text-secondary cursor-pointer">
+                <label className="mt-2 flex items-center gap-2 text-sm text-secondary cursor-pointer">
                   <input
                     type="checkbox"
                     name="removePassword"
@@ -175,15 +179,15 @@ export default function StudyRoomEditDialog({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="bg-surface-container text-on-surface-variant font-bold text-xs px-4 py-2 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest"
+                className="bg-surface-container text-on-surface-variant font-bold text-sm px-4 py-2 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1"
+                className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-sm px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <span className="material-symbols-outlined text-[16px]">save</span>
+                <span className="material-symbols-outlined text-[18px]">save</span>
                 儲存
               </button>
             </div>
