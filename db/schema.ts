@@ -175,6 +175,8 @@ export const shopItems = pgTable("shop_item", {
   description: text("description"),
   type: varchar("type", { length: 16 }).notNull().default("food"),
   accessoryType: varchar("accessory_type", { length: 16 }),
+  // 等級解鎖：寵物達到此等級才能購買（0 = 無限制）
+  minLevel: integer("min_level").notNull().default(0),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
@@ -309,6 +311,17 @@ export type Report = typeof reports.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type VoiceRecording = typeof voiceRecordings.$inferSelect;
+
+// ---- 科系（由管理員維護的清單；所有選科系處只能從此清單選） ----
+export const departments = pgTable("department", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  name: text("name").notNull(),
+  // 所屬學院（對應 board.id，如 cmee/ceecs…；可為 null）
+  college: varchar("college", { length: 32 }),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export type Department = typeof departments.$inferSelect;
 
 // ---- 福利社優惠券兌換紀錄 ----
 export const couponRedemptions = pgTable(

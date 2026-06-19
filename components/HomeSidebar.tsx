@@ -65,6 +65,30 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
   const hpPct = data.maxHp > 0 ? Math.round((data.hp / data.maxHp) * 100) : 0;
   const expPct = maxExp > 0 ? Math.round((data.exp / maxExp) * 100) : 0;
 
+  // 未登入：不顯示佔位的寵物/使用者視窗，只給一張精簡的登入卡（資訊登入才看得到）
+  if (!data.loggedIn) {
+    return (
+      <aside className="w-full xl:w-64 flex flex-col gap-lg shrink-0">
+        <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col items-center text-center gap-3">
+          <span className="text-5xl" aria-hidden>
+            🥚
+          </span>
+          <h3 className="font-bold text-body-lg text-on-surface">登入領養你的學習寵物</h3>
+          <p className="text-xs text-secondary leading-relaxed">
+            登入後可養成電子雞、每日簽到賺金幣、餵食成長，並解鎖個人檔案與互動。
+          </p>
+          <Link
+            href="/login"
+            className="w-full bg-primary text-on-primary font-bold text-label-md py-2 rounded-lg hover:bg-surface-tint transition-colors no-underline flex items-center justify-center gap-1"
+          >
+            <span className="material-symbols-outlined text-[18px]">login</span>
+            登入 / 註冊
+          </Link>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-full xl:w-64 flex flex-col gap-lg shrink-0">
       {/* User Profile widget */}

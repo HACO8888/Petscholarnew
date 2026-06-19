@@ -19,22 +19,29 @@ export function SidebarHelpButton() {
   );
 }
 
-const ITEMS = [
+// auth: true 的項目需登入才顯示（個人/寵物相關）。
+const ITEMS: { href: string; label: string; icon: string; auth?: boolean }[] = [
   { href: "/", label: "首頁", icon: "home" },
   { href: "/boards", label: "看板", icon: "dashboard" },
   { href: "/discussion", label: "討論版", icon: "forum" },
   { href: "/study-rooms", label: "自習室", icon: "menu_book" },
   { href: "/shop", label: "寵物商城", icon: "storefront" },
-  { href: "/pet/feed", label: "寵物餵食", icon: "restaurant" },
+  { href: "/pet/feed", label: "寵物餵食", icon: "restaurant", auth: true },
   { href: "/leaderboard", label: "排行榜", icon: "leaderboard" },
-  { href: "/profile", label: "個人檔案", icon: "person" },
+  { href: "/profile", label: "個人檔案", icon: "person", auth: true },
 ];
 
-export default function SidebarNav({ role }: { role: Role }) {
+export default function SidebarNav({
+  role,
+  loggedIn = false,
+}: {
+  role: Role;
+  loggedIn?: boolean;
+}) {
   const pathname = usePathname();
   const active = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
-  const items = [...ITEMS];
+  const items = ITEMS.filter((it) => !it.auth || loggedIn);
   if (role === "professor" || role === "admin") {
     items.push({ href: "/professor", label: "課程教授主頁", icon: "school" });
   }

@@ -17,6 +17,7 @@
  *   - 機密一律讀 process.env（DATABASE_URL / REDIS_URL）。
  */
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
 import postgres from "postgres";
@@ -91,9 +92,11 @@ async function loadRoomHistory(roomId, limit = HISTORY_LIMIT) {
 
 async function saveMessage({ roomId, userId, authorName, content }) {
   const trimmed = content.trim().slice(0, MAX_MESSAGE_LENGTH);
+  // id 須由應用端產生：DB 欄位無 default（Drizzle $defaultFn 僅 JS 端生效，原生 SQL 不適用）
+  const id = randomUUID();
   const rows = await sql`
-    INSERT INTO "chat_message" (room_id, user_id, author_name, content)
-    VALUES (${roomId}, ${userId}, ${(authorName || "成員").slice(0, 200)}, ${trimmed})
+    INSERT INTO "chat_message" (id, room_id, user_id, author_name, content)
+    VALUES (${id}, ${roomId}, ${userId}, ${(authorName || "成員").slice(0, 200)}, ${trimmed})
     RETURNING id, room_id AS "roomId", user_id AS "userId",
               author_name AS "authorName", content, created_at AS "createdAt"
   `;
