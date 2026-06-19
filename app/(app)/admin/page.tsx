@@ -3,31 +3,72 @@ import { redirect } from "next/navigation";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { posts, boards, reports } from "@/db/schema";
+import {
+  posts,
+  boards,
+  comments,
+  reports,
+  studyRooms,
+  studyRoomMembers,
+  shopItems,
+  users,
+} from "@/db/schema";
 import AccessDenied from "@/components/AccessDenied";
+import ConfirmSubmit from "@/components/admin/ConfirmSubmit";
 import { formatDateTime } from "@/lib/format";
-import { blockReport, rejectReport, deletePost, restorePost } from "./actions";
+import { ROLE_OPTIONS, type Role } from "@/components/nav-config";
+import {
+  blockReport,
+  rejectReport,
+  deletePost,
+  restorePost,
+  purgePost,
+  hideComment,
+  restoreComment,
+  purgeComment,
+  updateBoard,
+  deleteBoard,
+  dissolveRoom,
+  updateShopItem,
+  toggleShopItem,
+  deleteShopItem,
+  setUserRole,
+  bootstrapAdmin,
+} from "./actions";
 
-/** 後台子面板（對應 legacy 的 admin-panel-tab）。 */
+/** 後台子面板：涵蓋所有可管理實體。 */
 const PANELS = [
-  { id: "overview", label: "總覽與上線" },
-  { id: "questions", label: "全站提問紀錄" },
-  { id: "reports", label: "檢舉案件與日誌" },
-  { id: "analytics", label: "提問方向洞悉" },
+  { id: "overview", label: "總覽", icon: "dashboard" },
+  { id: "boards", label: "看板", icon: "dashboard_customize" },
+  { id: "posts", label: "貼文", icon: "forum" },
+  { id: "comments", label: "留言", icon: "chat" },
+  { id: "rooms", label: "自習室", icon: "meeting_room" },
+  { id: "shop", label: "商城商品", icon: "storefront" },
+  { id: "users", label: "使用者", icon: "group" },
+  { id: "reports", label: "檢舉案件", icon: "report" },
 ] as const;
 type PanelId = (typeof PANELS)[number]["id"];
 
-/** legacy 全站提問紀錄狀態篩選（select#admin-question-filter）。 */
-const QUESTION_FILTERS = [
-  { id: "all", label: "全部問題" },
+/** 貼文狀態篩選。 */
+const POST_FILTERS = [
+  { id: "all", label: "全部" },
   { id: "unsolved", label: "未解決" },
   { id: "solved", label: "已解決" },
-  { id: "blocked", label: "封鎖帳號及問題" },
+  { id: "hidden", label: "已隱藏" },
 ] as const;
-type QuestionFilter = (typeof QUESTION_FILTERS)[number]["id"];
+type PostFilter = (typeof POST_FILTERS)[number]["id"];
 
-/** 保留目前 searchParams、覆寫部分鍵的小工具，供子面板/篩選連結使用。 */
-function buildHref(base: Record<string, string | undefined>, override: Record<string, string | undefined>) {
+const CARD = "bg-surface-container-lowest dark:bg-surface-container-high rounded-xl border border-outline-variant/30 shadow-sm";
+const FIELD = "bg-surface border border-outline-variant text-on-surface rounded-lg text-xs py-1.5 px-2 focus:ring-primary focus:border-primary";
+const BTN_PRIMARY = "bg-primary hover:bg-surface-tint text-on-primary font-bold text-[11px] px-3 py-1.5 rounded-lg";
+const BTN_NEUTRAL = "bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[11px] px-3 py-1.5 rounded-lg border border-outline-variant/30";
+const BTN_DANGER = "bg-error hover:opacity-90 text-on-error font-bold text-[11px] px-3 py-1.5 rounded-lg";
+
+/** 保留目前 searchParams、覆寫部分鍵的小工具。 */
+function buildHref(
+  base: Record<string, string | undefined>,
+  override: Record<string, string | undefined>,
+) {
   const merged = { ...base, ...override };
   const qs = Object.entries(merged)
     .filter(([, v]) => v != null && v !== "")
@@ -39,100 +80,42 @@ function buildHref(base: Record<string, string | undefined>, override: Record<st
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ board?: string; panel?: string; q?: string }>;
+  searchParams: Promise<{ panel?: string; board?: string; q?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "admin") {
-    return <AccessDenied need="系統管理員" />;
-  }
 
   const sp = await searchParams;
-  const boardFilter = sp.board;
-  const panel: PanelId = (PANELS.some((p) => p.id === sp.panel) ? sp.panel : "overview") as PanelId;
-  const questionFilter: QuestionFilter = (QUESTION_FILTERS.some((f) => f.id === sp.q)
-    ? sp.q
-    : "all") as QuestionFilter;
 
-  const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
-
-  // ---- 全站提問紀錄（含被封鎖者；學院 + 狀態篩選真的會過濾） ----
-  const whereClauses = [
-    boardFilter ? eq(posts.boardId, boardFilter) : undefined,
-    questionFilter === "solved" ? eq(posts.solved, true) : undefined,
-    questionFilter === "unsolved" ? eq(posts.solved, false) : undefined,
-    questionFilter === "blocked" ? eq(posts.hidden, true) : undefined,
-  ].filter(Boolean);
-
-  const postRows = await db
-    .select({
-      id: posts.id,
-      title: posts.title,
-      content: posts.content,
-      authorName: posts.authorName,
-      department: posts.department,
-      boardId: posts.boardId,
-      boardName: boards.name,
-      tags: posts.tags,
-      bounty: posts.bounty,
-      solved: posts.solved,
-      hidden: posts.hidden,
-      createdAt: posts.createdAt,
-    })
-    .from(posts)
-    .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(whereClauses.length ? and(...whereClauses) : undefined)
-    .orderBy(desc(posts.createdAt));
-
-  // ---- 全站統計（真實值，單一查詢一次聚合，避免多次掃描與數字不一致） ----
-  const [statsRow] = await db
-    .select({
-      total: sql<number>`count(*)::int`,
-      solved: sql<number>`count(*) filter (where ${posts.solved})::int`,
-      blocked: sql<number>`count(*) filter (where ${posts.hidden})::int`,
-    })
-    .from(posts);
-  const totalPosts = statsRow?.total ?? 0;
-  const solvedPosts = statsRow?.solved ?? 0;
-  const blockedPosts = statsRow?.blocked ?? 0;
-
-  // ---- 檢舉案件 ----
-  const allReports = await db.select().from(reports).orderBy(desc(reports.createdAt));
-  const pendingReports = allReports.filter((r) => r.status === "pending");
-  const resolvedReports = allReports.filter((r) => r.status !== "pending");
-
-  // ---- 分析資料（由真實 posts 聚合，反映提問方向；含隱藏內容） ----
-  const allPostsForAnalytics = await db
-    .select({ boardName: boards.name, tags: posts.tags, solved: posts.solved })
-    .from(posts)
-    .innerJoin(boards, eq(posts.boardId, boards.id));
-
-  const tagCounts = new Map<string, number>();
-  const boardCounts = new Map<string, number>();
-  for (const p of allPostsForAnalytics) {
-    boardCounts.set(p.boardName, (boardCounts.get(p.boardName) ?? 0) + 1);
-    for (const t of p.tags ?? []) {
-      if (!t) continue;
-      tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-    }
+  // 非 admin：若符合 bootstrap 條件，顯示「成為管理員」的安全入口；否則拒絕存取。
+  if (session.user.role !== "admin") {
+    const bootstrapEmail = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
+    const canBootstrap =
+      !!bootstrapEmail && session.user.email?.toLowerCase() === bootstrapEmail;
+    if (!canBootstrap) return <AccessDenied need="系統管理員" />;
+    return <BootstrapPrompt email={session.user.email ?? ""} />;
   }
-  const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const topBoards = [...boardCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const analyticsTotal = allPostsForAnalytics.length;
-  const unsolvedCount = allPostsForAnalytics.filter((p) => !p.solved).length;
-  const topTag = topTags[0]?.[0] ?? "尚無明顯主題";
-  const topBoard = topBoards[0]?.[0] ?? "尚無集中學院";
 
-  const tabBase = { board: boardFilter, q: questionFilter };
+  const panel: PanelId = (PANELS.some((p) => p.id === sp.panel)
+    ? sp.panel
+    : "overview") as PanelId;
+  const boardFilter = sp.board;
+  const postFilter: PostFilter = (POST_FILTERS.some((f) => f.id === sp.q)
+    ? sp.q
+    : "all") as PostFilter;
+
+  const tabBase = { board: boardFilter, q: postFilter };
 
   return (
     <section className="tab-section active" id="sect-admin">
       <div className="mb-lg border-b border-outline-variant/30 pb-3 bg-gradient-to-r from-red-500/10 via-orange-500/10 to-transparent p-md rounded-lg">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-md">
           <div>
-            <h1 className="font-semibold text-headline-lg text-red-600 dark:text-red-400">🛡️ 系統管理員後台</h1>
+            <h1 className="font-semibold text-headline-lg text-red-600 dark:text-red-400">
+              🛡️ 系統管理員主控台
+            </h1>
             <p className="text-secondary text-body-md">
-              只有切換為「系統管理員」身分時才會顯示。可查看全站提問紀錄、上線狀態、刪除不恰當問題、封鎖帳號並分析近期提問方向。
+              管理全站所有可管理資料：看板、貼文、留言、自習室、商城商品、使用者角色與檢舉案件。所有操作皆在 server 端嚴格驗權。
             </p>
           </div>
           <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 px-3 py-1 rounded-full text-xs font-bold w-fit">
@@ -142,414 +125,805 @@ export default async function AdminPage({
         </div>
       </div>
 
-      <div id="admin-dashboard-content" className="space-y-lg">
-        <div className="bg-surface-container-lowest dark:bg-surface-container-high rounded-xl border border-outline-variant/30 shadow-sm p-sm overflow-x-auto">
-          <div className="flex gap-sm min-w-max">
-            {PANELS.map((p) => (
-              <Link
-                key={p.id}
-                href={buildHref(tabBase, { panel: p.id })}
-                className={`admin-panel-tab px-md py-sm rounded-lg border text-xs font-bold transition-all no-underline ${
-                  panel === p.id
-                    ? "bg-red-600 text-white border-red-600 shadow"
-                    : "bg-surface text-secondary border-outline-variant"
-                }`}
-              >
-                {p.label}
-              </Link>
-            ))}
-          </div>
+      {/* ====== 子面板分頁 ====== */}
+      <div className={`${CARD} p-sm overflow-x-auto mb-lg`}>
+        <div className="flex gap-sm min-w-max">
+          {PANELS.map((p) => (
+            <Link
+              key={p.id}
+              href={buildHref({}, { panel: p.id })}
+              className={`flex items-center gap-1 px-md py-sm rounded-lg border text-xs font-bold transition-all no-underline ${
+                panel === p.id
+                  ? "bg-red-600 text-white border-red-600 shadow"
+                  : "bg-surface text-secondary border-outline-variant hover:bg-surface-container"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[16px]">{p.icon}</span>
+              {p.label}
+            </Link>
+          ))}
         </div>
+      </div>
 
-        {/* ====================== 總覽與上線 ====================== */}
-        {panel === "overview" && (
-          <div className="admin-subpanel space-y-lg">
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-md" id="admin-stats-grid">
-              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-                <p className="text-xs text-secondary mb-1">已解決問題</p>
-                <h3 className="font-bold text-3xl text-green-600 dark:text-green-400">{solvedPosts}</h3>
-                <p className="text-[10px] text-secondary mt-1">已被標記為已解決</p>
-              </div>
-              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-                <p className="text-xs text-secondary mb-1">全站問題總數</p>
-                <h3 className="font-bold text-3xl text-primary">{totalPosts}</h3>
-                <p className="text-[10px] text-secondary mt-1">跨所有學院看板</p>
-              </div>
-              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-                <p className="text-xs text-secondary mb-1">待處理檢舉</p>
-                <h3 className="font-bold text-3xl text-red-600 dark:text-red-400">{pendingReports.length}</h3>
-                <p className="text-[10px] text-secondary mt-1">可直接屏蔽或駁回</p>
-              </div>
-              <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-                <p className="text-xs text-secondary mb-1">已封鎖問題</p>
-                <h3 className="font-bold text-3xl text-orange-600 dark:text-orange-400">{blockedPosts}</h3>
-                <p className="text-[10px] text-secondary mt-1">已被隱藏、不對外顯示</p>
-              </div>
-            </div>
-
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-              <div className="flex items-center justify-between mb-md border-b border-outline-variant/20 pb-2">
-                <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[20px]">groups</span> 上線人數與帳號狀態
-                </h3>
-              </div>
-              <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 hide-scrollbar" id="admin-online-users-list">
-                <p className="text-body-md text-secondary">
-                  本系統採資料庫 session，目前未提供「即時上線人數」與「帳號封鎖名單」資料來源（schema 無對應欄位），
-                  故此處不顯示估計數字以避免誤導。提問與檢舉之管理請使用上方各子面板。
-                </p>
-              </div>
-            </div>
-          </div>
+      <div className="space-y-lg">
+        {panel === "overview" && <OverviewPanel />}
+        {panel === "boards" && <BoardsPanel />}
+        {panel === "posts" && (
+          <PostsPanel
+            boardFilter={boardFilter}
+            postFilter={postFilter}
+            tabBase={tabBase}
+          />
         )}
-
-        {/* ====================== 全站提問紀錄 ====================== */}
-        {panel === "questions" && (
-          <div className="admin-subpanel">
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-sm mb-md border-b border-outline-variant/20 pb-2">
-                <div>
-                  <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[20px]">history</span> 全站提問紀錄
-                  </h3>
-                  <p className="text-xs text-secondary">
-                    可直接刪除問題，或刪除後封鎖提問帳號；封鎖與屏蔽結果會與檢舉案件即時同步。
-                  </p>
-                </div>
-                <div className="flex items-center gap-sm shrink-0">
-                  <form method="get" className="flex items-center gap-sm w-full">
-                    {boardFilter && <input type="hidden" name="board" value={boardFilter} />}
-                    <input type="hidden" name="panel" value="questions" />
-                    <select
-                      id="admin-question-filter"
-                      name="q"
-                      defaultValue={questionFilter}
-                      className="min-w-0 flex-1 bg-surface border border-outline-variant text-on-surface rounded-lg text-xs py-1.5 px-2 focus:ring-primary focus:border-primary"
-                    >
-                      {QUESTION_FILTERS.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="submit"
-                      className="shrink-0 bg-surface-container hover:bg-surface-container-high text-on-surface-variant text-xs font-bold py-1.5 px-3 rounded-lg border border-outline-variant/30"
-                    >
-                      篩選
-                    </button>
-                  </form>
-                </div>
-              </div>
-
-              {/* 學院（board）篩選 pills */}
-              <div className="flex flex-wrap gap-2 mb-md border-b border-outline-variant/30 pb-3">
-                <Link
-                  href={buildHref(tabBase, { panel: "questions", board: undefined })}
-                  className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
-                    !boardFilter
-                      ? "bg-primary text-on-primary"
-                      : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
-                  }`}
-                >
-                  全部
-                </Link>
-                {boardRows.map((b) => (
-                  <Link
-                    key={b.id}
-                    href={buildHref(tabBase, { panel: "questions", board: b.id })}
-                    className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
-                      boardFilter === b.id
-                        ? "bg-primary text-on-primary"
-                        : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
-                    }`}
-                  >
-                    {b.icon} {b.name}
-                  </Link>
-                ))}
-              </div>
-
-              <div className="space-y-md max-h-[620px] overflow-y-auto pr-1 hide-scrollbar" id="admin-question-records-list">
-                {postRows.length === 0 ? (
-                  <div className="text-center text-secondary text-xs py-10 border border-dashed border-outline-variant/40 rounded-xl">
-                    目前沒有符合條件的問題紀錄。
-                  </div>
-                ) : (
-                  postRows.map((p) => (
-                    <div
-                      key={p.id}
-                      className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface space-y-2"
-                      id={`admin-question-${p.id}`}
-                    >
-                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
-                              {p.boardName}
-                            </span>
-                            <span
-                              className={`text-[10px] px-2 py-0.5 rounded ${
-                                p.solved
-                                  ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
-                                  : "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300"
-                              }`}
-                            >
-                              {p.solved ? "已解決" : "未解決"}
-                            </span>
-                            {p.hidden && (
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
-                                問題已刪除
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="font-bold text-sm text-on-surface line-clamp-1">{p.title}</h4>
-                          <p className="text-xs text-secondary line-clamp-2 mt-1">{p.content}</p>
-                        </div>
-                        <div className="flex md:flex-col gap-1.5 shrink-0">
-                          <Link
-                            href={`/posts/${p.id}`}
-                            className="bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[10px] px-3 py-1.5 rounded-lg border border-outline-variant/30 no-underline"
-                          >
-                            查看
-                          </Link>
-                          {p.hidden ? (
-                            <form action={restorePost}>
-                              <input type="hidden" name="postId" value={p.id} />
-                              <button
-                                type="submit"
-                                className="w-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[10px] px-3 py-1.5 rounded-lg border border-outline-variant/30"
-                              >
-                                還原問題
-                              </button>
-                            </form>
-                          ) : (
-                            <form action={deletePost}>
-                              <input type="hidden" name="postId" value={p.id} />
-                              <button
-                                type="submit"
-                                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
-                              >
-                                刪除問題
-                              </button>
-                            </form>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-1 text-[10px] text-secondary">
-                        <span>
-                          作者：<strong>{p.authorName}</strong>
-                        </span>
-                        <span>•</span>
-                        <span>{p.department ?? "未指定科系"}</span>
-                        <span>•</span>
-                        <span>🪙 {p.bounty} 金幣</span>
-                        <span>•</span>
-                        <span>{formatDateTime(p.createdAt)}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {(p.tags ?? []).slice(0, 5).map((t) => (
-                          <span
-                            key={t}
-                            className="text-[10px] px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container"
-                          >
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ====================== 檢舉案件與處理日誌 ====================== */}
-        {panel === "reports" && (
-          <div className="admin-subpanel">
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[300px]">
-              <div className="flex justify-between items-center gap-2 mb-md border-b border-outline-variant/20 pb-2">
-                <h3 className="font-bold text-body-lg text-red-600 dark:text-red-400 flex items-center gap-1 min-w-0">
-                  <span className="material-symbols-outlined text-[20px] shrink-0">report</span>
-                  <span className="truncate">檢舉案件與處理日誌</span>
-                </h3>
-                <span className="bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap">
-                  {pendingReports.length} 案待理
-                </span>
-              </div>
-              <div className="space-y-md max-h-[360px] overflow-y-auto pr-1 hide-scrollbar mb-md" id="admin-reports-list">
-                {pendingReports.length === 0 ? (
-                  <div className="bg-surface-container-low p-md rounded-xl text-center text-xs text-secondary py-8">
-                    目前沒有待處理的檢舉案件。
-                  </div>
-                ) : (
-                  pendingReports.map((r) => (
-                    <div
-                      key={r.id}
-                      className="bg-surface-container-low dark:bg-surface p-md rounded-xl border border-outline-variant/30 space-y-sm"
-                      id={`rep-card-${r.id}`}
-                    >
-                      <div className="flex items-center justify-between text-xs text-secondary">
-                        <span className="bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-bold px-2 py-0.5 rounded">
-                          {r.targetType === "post" ? "檢舉文章" : "檢舉回覆"}
-                        </span>
-                        <span>
-                          {r.reporter ?? "匿名"} • {formatDateTime(r.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-on-surface font-bold">
-                        理由：<span className="font-normal text-secondary">{r.reason ?? "未填寫"}</span>
-                      </p>
-                      <div className="bg-surface-container-high dark:bg-surface-container p-sm rounded text-xs text-secondary font-mono leading-normal border border-outline-variant/20 line-clamp-2 break-words">
-                        {r.targetText ?? "（內容已不可用）"}
-                      </div>
-                      <div className="flex gap-sm justify-end">
-                        <form action={blockReport}>
-                          <input type="hidden" name="reportId" value={r.id} />
-                          <button
-                            type="submit"
-                            className="bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
-                          >
-                            屏蔽內容
-                          </button>
-                        </form>
-                        <form action={rejectReport}>
-                          <input type="hidden" name="reportId" value={r.id} />
-                          <button
-                            type="submit"
-                            className="bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[10px] px-3 py-1.5 rounded-lg border border-outline-variant/30"
-                          >
-                            駁回案件
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              <h4 className="font-bold text-xs text-on-surface mb-2 border-t border-outline-variant/20 pt-3">
-                📋 操作歷史日誌
-              </h4>
-              <div className="flex-grow space-y-2 text-xs overflow-y-auto max-h-[360px] pr-1 hide-scrollbar" id="admin-logs-list">
-                {resolvedReports.length === 0 ? (
-                  <div className="text-center text-secondary py-8">無歷史操作日誌。</div>
-                ) : (
-                  resolvedReports.map((r) => {
-                    const actionText = r.status === "blocked" ? "屏蔽隱藏" : "駁回免置";
-                    return (
-                      <div
-                        key={r.id}
-                        className="p-sm bg-surface-container-low dark:bg-surface rounded border border-outline-variant/10 leading-normal mb-1.5"
-                      >
-                        <span className="font-bold text-primary dark:text-primary-fixed-dim">[{actionText}]</span>{" "}
-                        <span>
-                          管理員審查了 {r.reporter ?? "匿名"} 的{r.targetType === "post" ? "文章" : "回覆"}
-                          檢舉案，結果為 [{actionText}]。
-                        </span>
-                        <span className="block text-[9px] text-secondary text-right mt-1">
-                          {r.resolvedAt ? formatDateTime(r.resolvedAt) : "—"}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ====================== 提問方向洞悉 ====================== */}
-        {panel === "analytics" && (
-          <div className="admin-subpanel">
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm">
-              <div className="flex justify-between items-center gap-2 mb-md border-b border-outline-variant/20 pb-2">
-                <h3 className="font-bold text-body-lg text-purple-600 dark:text-purple-400 flex items-center gap-1 min-w-0">
-                  <span className="material-symbols-outlined text-[20px] shrink-0">query_stats</span>
-                  <span className="truncate">最近提問方向洞悉</span>
-                </h3>
-                <span className="bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 px-2 py-0.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap">
-                  {analyticsTotal} 筆資料
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
-                <div>
-                  <h4 className="font-bold text-xs text-on-surface mb-2">熱門標籤</h4>
-                  <div className="space-y-2" id="admin-tag-analysis">
-                    <AdminBars items={topTags} total={analyticsTotal} accent="bg-purple-500" />
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-on-surface mb-2">學院分布</h4>
-                  <div className="space-y-2" id="admin-board-analysis">
-                    <AdminBars items={topBoards} total={analyticsTotal} accent="bg-primary" />
-                  </div>
-                </div>
-              </div>
-              <div className="mt-md bg-primary/5 border border-primary/10 rounded-xl p-md">
-                <h4 className="font-bold text-xs text-primary mb-2 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">lightbulb</span> 系統洞悉
-                </h4>
-                <div className="space-y-1 text-xs text-secondary" id="admin-insights-list">
-                  {analyticsTotal === 0 ? (
-                    <p>目前尚無足夠的提問資料可供分析。</p>
-                  ) : (
-                    <>
-                      <p>
-                        • 近期最常被提問的方向是 <strong className="text-primary">{topTag}</strong>
-                        ，可安排 TA 或教授補充教材。
-                      </p>
-                      <p>
-                        • 問題主要集中在 <strong className="text-primary">{topBoard}</strong>
-                        ，建議優先觀察該學院的期末學習壓力。
-                      </p>
-                      <p>
-                        • 目前尚有 <strong className="text-primary">{unsolvedCount}</strong> 筆未解決問題，可推播給相關科系學霸或助教。
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {panel === "comments" && <CommentsPanel />}
+        {panel === "rooms" && <RoomsPanel />}
+        {panel === "shop" && <ShopPanel />}
+        {panel === "users" && <UsersPanel currentUserId={session.user.id} />}
+        {panel === "reports" && <ReportsPanel />}
       </div>
     </section>
   );
 }
 
-/** legacy renderAdminBars 的 server component 版本。 */
-function AdminBars({
-  items,
-  total,
-  accent,
-}: {
-  items: [string, number][];
-  total: number;
-  accent: string;
-}) {
-  if (items.length === 0) {
-    return (
-      <div className="text-xs text-secondary bg-surface-container-low p-3 rounded-lg text-center">
-        目前沒有足夠資料。
-      </div>
-    );
-  }
+// ============================================================
+// Bootstrap：非 admin 但符合 ADMIN_BOOTSTRAP_EMAIL 時的入口
+// ============================================================
+
+function BootstrapPrompt({ email }: { email: string }) {
   return (
-    <>
-      {items.map(([label, count]) => {
-        const pct = total ? Math.max(8, Math.round((count / total) * 100)) : 0;
-        return (
-          <div key={label} className="space-y-1">
-            <div className="flex justify-between gap-2 text-xs font-semibold">
-              <span className="truncate min-w-0">{label}</span>
-              <span className="shrink-0 whitespace-nowrap">{count} 筆</span>
+    <section className="flex flex-col items-center justify-center py-24 text-center">
+      <span className="material-symbols-outlined text-[48px] text-primary">
+        verified_user
+      </span>
+      <h1 className="mt-2 text-headline-md font-semibold text-on-background">
+        初始化系統管理員
+      </h1>
+      <p className="mt-2 max-w-md text-body-md text-secondary">
+        系統偵測到你的帳號（<strong className="text-on-surface">{email}</strong>）符合伺服器設定的
+        <code className="mx-1 rounded bg-surface-container px-1">ADMIN_BOOTSTRAP_EMAIL</code>
+        ，可在此把自己升級為第一位系統管理員。升級後建議移除該環境變數。
+      </p>
+      <form action={bootstrapAdmin} className="mt-lg">
+        <button
+          type="submit"
+          className="rounded-full bg-primary px-5 py-2.5 text-label-md font-bold text-on-primary no-underline transition-all hover:bg-surface-tint"
+        >
+          成為系統管理員
+        </button>
+      </form>
+      <p className="mt-md text-xs text-secondary">
+        升級後可能需重新整理或重新登入才會套用新角色。
+      </p>
+    </section>
+  );
+}
+
+// ============================================================
+// 總覽
+// ============================================================
+
+async function OverviewPanel() {
+  const [[postStats], [commentStats], [roomCount], [userCount], [itemCount], [boardCount], [pendingReports]] =
+    await Promise.all([
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          solved: sql<number>`count(*) filter (where ${posts.solved})::int`,
+          hidden: sql<number>`count(*) filter (where ${posts.hidden})::int`,
+        })
+        .from(posts),
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          hidden: sql<number>`count(*) filter (where ${comments.hidden})::int`,
+        })
+        .from(comments),
+      db.select({ c: sql<number>`count(*)::int` }).from(studyRooms),
+      db.select({ c: sql<number>`count(*)::int` }).from(users),
+      db.select({ c: sql<number>`count(*)::int` }).from(shopItems),
+      db.select({ c: sql<number>`count(*)::int` }).from(boards),
+      db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(reports)
+        .where(eq(reports.status, "pending")),
+    ]);
+
+  const stats: { label: string; value: number; hint: string; accent: string }[] = [
+    { label: "看板", value: boardCount?.c ?? 0, hint: "學院/主題分類", accent: "text-primary" },
+    { label: "貼文總數", value: postStats?.total ?? 0, hint: `${postStats?.hidden ?? 0} 篇已隱藏`, accent: "text-primary" },
+    { label: "已解決貼文", value: postStats?.solved ?? 0, hint: "已標記解答", accent: "text-green-600 dark:text-green-400" },
+    { label: "留言總數", value: commentStats?.total ?? 0, hint: `${commentStats?.hidden ?? 0} 則已隱藏`, accent: "text-primary" },
+    { label: "自習室", value: roomCount?.c ?? 0, hint: "進行中房間", accent: "text-primary" },
+    { label: "商城商品", value: itemCount?.c ?? 0, hint: "可購買項目", accent: "text-primary" },
+    { label: "使用者", value: userCount?.c ?? 0, hint: "已註冊帳號", accent: "text-primary" },
+    { label: "待處理檢舉", value: pendingReports?.c ?? 0, hint: "需審查", accent: "text-red-600 dark:text-red-400" },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-md">
+      {stats.map((s) => (
+        <div key={s.label} className={`${CARD} p-md`}>
+          <p className="text-xs text-secondary mb-1">{s.label}</p>
+          <h3 className={`font-bold text-3xl ${s.accent}`}>{s.value}</h3>
+          <p className="text-[10px] text-secondary mt-1">{s.hint}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// 看板
+// ============================================================
+
+async function BoardsPanel() {
+  // 每個看板的貼文數，提供刪除前的影響評估。
+  const rows = await db
+    .select({
+      id: boards.id,
+      name: boards.name,
+      icon: boards.icon,
+      description: boards.description,
+      sortOrder: boards.sortOrder,
+      postCount: sql<number>`count(${posts.id})::int`,
+    })
+    .from(boards)
+    .leftJoin(posts, eq(posts.boardId, boards.id))
+    .groupBy(boards.id)
+    .orderBy(boards.sortOrder);
+
+  return (
+    <PanelShell title="看板管理" icon="dashboard_customize" count={`${rows.length} 個看板`}>
+      {rows.length === 0 ? (
+        <EmptyState text="尚無看板。" />
+      ) : (
+        <div className="space-y-md">
+          {rows.map((b) => (
+            <div key={b.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">{b.icon}</span>
+                <span className="font-bold text-sm text-on-surface">{b.name}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                  {b.postCount} 篇貼文
+                </span>
+                <code className="text-[10px] text-secondary">{b.id}</code>
+              </div>
+              <form action={updateBoard} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-end">
+                <input type="hidden" name="boardId" value={b.id} />
+                <div className="grid grid-cols-1 gap-2">
+                  <label className="text-[10px] text-secondary">
+                    名稱
+                    <input name="name" defaultValue={b.name} className={`${FIELD} w-full mt-0.5`} required />
+                  </label>
+                  <label className="text-[10px] text-secondary">
+                    描述
+                    <input name="description" defaultValue={b.description ?? ""} className={`${FIELD} w-full mt-0.5`} />
+                  </label>
+                </div>
+                <label className="text-[10px] text-secondary">
+                  排序
+                  <input type="number" name="sortOrder" defaultValue={b.sortOrder} className={`${FIELD} w-24 mt-0.5`} />
+                </label>
+                <button type="submit" className={BTN_PRIMARY}>儲存</button>
+              </form>
+              <div className="flex justify-end mt-2">
+                <form action={deleteBoard}>
+                  <input type="hidden" name="boardId" value={b.id} />
+                  <ConfirmSubmit
+                    message={`確定刪除看板「${b.name}」？其下 ${b.postCount} 篇貼文與所有留言將一併永久刪除，無法復原。`}
+                    className={BTN_DANGER}
+                  >
+                    刪除看板
+                  </ConfirmSubmit>
+                </form>
+              </div>
             </div>
-            <div className="w-full bg-surface-container-low h-2 rounded-full overflow-hidden">
-              <div className={`${accent} h-full rounded-full`} style={{ width: `${pct}%` }} />
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 貼文
+// ============================================================
+
+async function PostsPanel({
+  boardFilter,
+  postFilter,
+  tabBase,
+}: {
+  boardFilter?: string;
+  postFilter: PostFilter;
+  tabBase: Record<string, string | undefined>;
+}) {
+  const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
+
+  const whereClauses = [
+    boardFilter ? eq(posts.boardId, boardFilter) : undefined,
+    postFilter === "solved" ? eq(posts.solved, true) : undefined,
+    postFilter === "unsolved" ? eq(posts.solved, false) : undefined,
+    postFilter === "hidden" ? eq(posts.hidden, true) : undefined,
+  ].filter(Boolean);
+
+  const rows = await db
+    .select({
+      id: posts.id,
+      title: posts.title,
+      content: posts.content,
+      authorName: posts.authorName,
+      department: posts.department,
+      boardName: boards.name,
+      bounty: posts.bounty,
+      solved: posts.solved,
+      hidden: posts.hidden,
+      createdAt: posts.createdAt,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(whereClauses.length ? and(...whereClauses) : undefined)
+    .orderBy(desc(posts.createdAt))
+    .limit(200);
+
+  return (
+    <PanelShell title="貼文管理" icon="forum" count={`${rows.length} 筆`}>
+      {/* 狀態篩選 */}
+      <div className="flex flex-wrap gap-2 mb-md">
+        {POST_FILTERS.map((f) => (
+          <Link
+            key={f.id}
+            href={buildHref({ ...tabBase, panel: "posts" }, { q: f.id })}
+            className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
+              postFilter === f.id
+                ? "bg-primary text-on-primary"
+                : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
+      </div>
+      {/* 看板篩選 */}
+      <div className="flex flex-wrap gap-2 mb-md border-b border-outline-variant/30 pb-3">
+        <Link
+          href={buildHref({ ...tabBase, panel: "posts" }, { board: undefined })}
+          className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
+            !boardFilter
+              ? "bg-secondary-container text-on-secondary-container"
+              : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
+          }`}
+        >
+          全部看板
+        </Link>
+        {boardRows.map((b) => (
+          <Link
+            key={b.id}
+            href={buildHref({ ...tabBase, panel: "posts" }, { board: b.id })}
+            className={`text-label-md font-medium px-3 py-1 rounded-full no-underline ${
+              boardFilter === b.id
+                ? "bg-secondary-container text-on-secondary-container"
+                : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container"
+            }`}
+          >
+            {b.icon} {b.name}
+          </Link>
+        ))}
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState text="沒有符合條件的貼文。" />
+      ) : (
+        <div className="space-y-md max-h-[640px] overflow-y-auto pr-1 hide-scrollbar">
+          {rows.map((p) => (
+            <div key={p.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface space-y-2">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">{p.boardName}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${
+                      p.solved
+                        ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                        : "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300"
+                    }`}>
+                      {p.solved ? "已解決" : "未解決"}
+                    </span>
+                    {p.hidden && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
+                        已隱藏
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="font-bold text-sm text-on-surface line-clamp-1">{p.title}</h4>
+                  <p className="text-xs text-secondary line-clamp-2 mt-1">{p.content}</p>
+                </div>
+                <div className="flex md:flex-col gap-1.5 shrink-0">
+                  <Link href={`/posts/${p.id}`} className={`${BTN_NEUTRAL} no-underline text-center`}>查看</Link>
+                  {p.hidden ? (
+                    <form action={restorePost}>
+                      <input type="hidden" name="postId" value={p.id} />
+                      <button type="submit" className={`${BTN_NEUTRAL} w-full`}>取消隱藏</button>
+                    </form>
+                  ) : (
+                    <form action={deletePost}>
+                      <input type="hidden" name="postId" value={p.id} />
+                      <button type="submit" className={`${BTN_NEUTRAL} w-full`}>隱藏</button>
+                    </form>
+                  )}
+                  <form action={purgePost}>
+                    <input type="hidden" name="postId" value={p.id} />
+                    <ConfirmSubmit
+                      message={`永久刪除貼文「${p.title}」及其所有留言？此操作無法復原。`}
+                      className={`${BTN_DANGER} w-full`}
+                    >
+                      永久刪除
+                    </ConfirmSubmit>
+                  </form>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 text-[10px] text-secondary">
+                <span>作者：<strong>{p.authorName}</strong></span>
+                <span>•</span>
+                <span>{p.department ?? "未指定科系"}</span>
+                <span>•</span>
+                <span>🪙 {p.bounty} 金幣</span>
+                <span>•</span>
+                <span>{formatDateTime(p.createdAt)}</span>
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 留言
+// ============================================================
+
+async function CommentsPanel() {
+  const rows = await db
+    .select({
+      id: comments.id,
+      content: comments.content,
+      authorName: comments.authorName,
+      isAdopted: comments.isAdopted,
+      hidden: comments.hidden,
+      createdAt: comments.createdAt,
+      postId: comments.postId,
+      postTitle: posts.title,
+    })
+    .from(comments)
+    .leftJoin(posts, eq(comments.postId, posts.id))
+    .orderBy(desc(comments.createdAt))
+    .limit(200);
+
+  return (
+    <PanelShell title="留言管理" icon="chat" count={`${rows.length} 筆（最近 200）`}>
+      {rows.length === 0 ? (
+        <EmptyState text="尚無留言。" />
+      ) : (
+        <div className="space-y-md max-h-[640px] overflow-y-auto pr-1 hide-scrollbar">
+          {rows.map((c) => (
+            <div key={c.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface space-y-2">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    {c.isAdopted && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 font-bold">
+                        已採納
+                      </span>
+                    )}
+                    {c.hidden && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
+                        已隱藏
+                      </span>
+                    )}
+                    <span className="text-[10px] text-secondary">
+                      於 <strong className="text-on-surface">{c.postTitle ?? "（貼文已刪除）"}</strong>
+                    </span>
+                  </div>
+                  <p className="text-xs text-on-surface line-clamp-3 whitespace-pre-wrap break-words">{c.content}</p>
+                </div>
+                <div className="flex md:flex-col gap-1.5 shrink-0">
+                  {c.postId && (
+                    <Link href={`/posts/${c.postId}`} className={`${BTN_NEUTRAL} no-underline text-center`}>查看</Link>
+                  )}
+                  {c.hidden ? (
+                    <form action={restoreComment}>
+                      <input type="hidden" name="commentId" value={c.id} />
+                      <button type="submit" className={`${BTN_NEUTRAL} w-full`}>取消隱藏</button>
+                    </form>
+                  ) : (
+                    <form action={hideComment}>
+                      <input type="hidden" name="commentId" value={c.id} />
+                      <button type="submit" className={`${BTN_NEUTRAL} w-full`}>隱藏</button>
+                    </form>
+                  )}
+                  <form action={purgeComment}>
+                    <input type="hidden" name="commentId" value={c.id} />
+                    <ConfirmSubmit
+                      message="永久刪除此留言及其所有子留言？此操作無法復原。"
+                      className={`${BTN_DANGER} w-full`}
+                    >
+                      永久刪除
+                    </ConfirmSubmit>
+                  </form>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 text-[10px] text-secondary">
+                <span>作者：<strong>{c.authorName}</strong></span>
+                <span>•</span>
+                <span>{formatDateTime(c.createdAt)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 自習室
+// ============================================================
+
+async function RoomsPanel() {
+  const rows = await db
+    .select({
+      id: studyRooms.id,
+      name: studyRooms.name,
+      subject: studyRooms.subject,
+      description: studyRooms.description,
+      capacity: studyRooms.capacity,
+      createdBy: studyRooms.createdBy,
+      creatorName: users.name,
+      memberCount: sql<number>`count(${studyRoomMembers.userId})::int`,
+    })
+    .from(studyRooms)
+    .leftJoin(studyRoomMembers, eq(studyRoomMembers.roomId, studyRooms.id))
+    .leftJoin(users, eq(users.id, studyRooms.createdBy))
+    .groupBy(studyRooms.id, users.name)
+    .orderBy(studyRooms.sortOrder);
+
+  return (
+    <PanelShell title="自習室管理" icon="meeting_room" count={`${rows.length} 間`}>
+      {rows.length === 0 ? (
+        <EmptyState text="尚無自習室。" />
+      ) : (
+        <div className="space-y-md">
+          {rows.map((r) => (
+            <div key={r.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="font-bold text-sm text-on-surface">{r.name}</span>
+                    {r.subject && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">{r.subject}</span>
+                    )}
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-bold">
+                      {r.memberCount}/{r.capacity} 人
+                    </span>
+                  </div>
+                  {r.description && <p className="text-xs text-secondary line-clamp-2">{r.description}</p>}
+                  <p className="text-[10px] text-secondary mt-1">
+                    建立者：<strong>{r.creatorName ?? (r.createdBy ? "（已離開帳號）" : "系統預設")}</strong>
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <form action={dissolveRoom}>
+                    <input type="hidden" name="roomId" value={r.id} />
+                    <ConfirmSubmit
+                      message={`確定解散自習室「${r.name}」？所有 ${r.memberCount} 名成員將被移除，無法復原。`}
+                      className={BTN_DANGER}
+                    >
+                      解散
+                    </ConfirmSubmit>
+                  </form>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 商城商品
+// ============================================================
+
+async function ShopPanel() {
+  const rows = await db.select().from(shopItems).orderBy(shopItems.sortOrder);
+
+  return (
+    <PanelShell title="商城商品管理" icon="storefront" count={`${rows.length} 項`}>
+      <p className="text-xs text-secondary mb-md">
+        上下架以 sortOrder 正負表示（schema 無上架旗標欄位）：負值＝已下架，會排在最後。
+      </p>
+      {rows.length === 0 ? (
+        <EmptyState text="尚無商品。" />
+      ) : (
+        <div className="space-y-md">
+          {rows.map((it) => {
+            const offShelf = it.sortOrder < 0;
+            return (
+              <div key={it.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{it.icon}</span>
+                  <span className="font-bold text-sm text-on-surface">{it.name}</span>
+                  {it.grade && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-bold">{it.grade}</span>
+                  )}
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">{it.type}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                    offShelf
+                      ? "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                      : "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                  }`}>
+                    {offShelf ? "已下架" : "上架中"}
+                  </span>
+                  <code className="text-[10px] text-secondary">{it.id}</code>
+                </div>
+                <form action={updateShopItem} className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+                  <input type="hidden" name="itemId" value={it.id} />
+                  <label className="text-[10px] text-secondary col-span-2 md:col-span-2">
+                    名稱
+                    <input name="name" defaultValue={it.name} className={`${FIELD} w-full mt-0.5`} required />
+                  </label>
+                  <label className="text-[10px] text-secondary">
+                    價格
+                    <input type="number" name="price" defaultValue={it.price} className={`${FIELD} w-full mt-0.5`} />
+                  </label>
+                  <label className="text-[10px] text-secondary">
+                    回復HP
+                    <input type="number" name="hpRestore" defaultValue={it.hpRestore} className={`${FIELD} w-full mt-0.5`} />
+                  </label>
+                  <label className="text-[10px] text-secondary">
+                    經驗
+                    <input type="number" name="expGain" defaultValue={it.expGain} className={`${FIELD} w-full mt-0.5`} />
+                  </label>
+                  <label className="text-[10px] text-secondary">
+                    排序
+                    <input type="number" name="sortOrder" defaultValue={it.sortOrder} className={`${FIELD} w-full mt-0.5`} />
+                  </label>
+                  <label className="text-[10px] text-secondary col-span-2 md:col-span-5">
+                    描述
+                    <input name="description" defaultValue={it.description ?? ""} className={`${FIELD} w-full mt-0.5`} />
+                  </label>
+                  <button type="submit" className={`${BTN_PRIMARY} h-fit`}>儲存</button>
+                </form>
+                <div className="flex justify-end gap-1.5 mt-2">
+                  <form action={toggleShopItem}>
+                    <input type="hidden" name="itemId" value={it.id} />
+                    <button type="submit" className={BTN_NEUTRAL}>
+                      {offShelf ? "上架" : "下架"}
+                    </button>
+                  </form>
+                  <form action={deleteShopItem}>
+                    <input type="hidden" name="itemId" value={it.id} />
+                    <ConfirmSubmit
+                      message={`確定刪除商品「${it.name}」？所有玩家的此商品庫存將一併移除，無法復原。`}
+                      className={BTN_DANGER}
+                    >
+                      刪除
+                    </ConfirmSubmit>
+                  </form>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 使用者
+// ============================================================
+
+async function UsersPanel({ currentUserId }: { currentUserId?: string }) {
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      image: users.image,
+      role: users.role,
+      department: users.department,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .orderBy(desc(users.createdAt))
+    .limit(300);
+
+  return (
+    <PanelShell title="使用者管理" icon="group" count={`${rows.length} 位`}>
+      {rows.length === 0 ? (
+        <EmptyState text="尚無使用者。" />
+      ) : (
+        <div className="space-y-md max-h-[680px] overflow-y-auto pr-1 hide-scrollbar">
+          {rows.map((u) => {
+            const isSelf = u.id === currentUserId;
+            return (
+              <div key={u.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="size-10 rounded-full bg-surface-container shrink-0 overflow-hidden flex items-center justify-center text-secondary">
+                    {u.image ? (
+                      <img src={u.image} alt="" className="size-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-[20px]">person</span>
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-on-surface truncate">{u.name ?? "（未命名）"}</span>
+                      {isSelf && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">你</span>
+                      )}
+                      <RoleBadge role={u.role as Role} />
+                    </div>
+                    <p className="text-[10px] text-secondary truncate">{u.email ?? "（無 email）"}</p>
+                    <p className="text-[10px] text-secondary truncate">
+                      {u.department ?? "未指定科系"} • 註冊於 {formatDateTime(u.createdAt)}
+                    </p>
+                  </div>
+                </div>
+                <form action={setUserRole} className="flex items-center gap-1.5 shrink-0">
+                  <input type="hidden" name="userId" value={u.id} />
+                  <select name="role" defaultValue={u.role} className={FIELD}>
+                    {ROLE_OPTIONS.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={isSelf}
+                    className={`${BTN_PRIMARY} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    title={isSelf ? "不可變更自己的角色" : undefined}
+                  >
+                    套用
+                  </button>
+                </form>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+function RoleBadge({ role }: { role: Role }) {
+  const map: Record<Role, { label: string; cls: string }> = {
+    student: { label: "學生", cls: "bg-surface-container text-on-surface-variant" },
+    ta: { label: "助教", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300" },
+    professor: { label: "教授", cls: "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300" },
+    admin: { label: "管理員", cls: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300" },
+  };
+  const m = map[role] ?? map.student;
+  return <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${m.cls}`}>{m.label}</span>;
+}
+
+// ============================================================
+// 檢舉案件
+// ============================================================
+
+async function ReportsPanel() {
+  const allReports = await db.select().from(reports).orderBy(desc(reports.createdAt));
+  const pendingReports = allReports.filter((r) => r.status === "pending");
+  const resolvedReports = allReports.filter((r) => r.status !== "pending");
+
+  return (
+    <PanelShell title="檢舉案件與處理日誌" icon="report" count={`${pendingReports.length} 案待理`} accent="red">
+      <div className="space-y-md max-h-[420px] overflow-y-auto pr-1 hide-scrollbar mb-md">
+        {pendingReports.length === 0 ? (
+          <EmptyState text="目前沒有待處理的檢舉案件。" />
+        ) : (
+          pendingReports.map((r) => (
+            <div key={r.id} className="bg-surface-container-low dark:bg-surface p-md rounded-xl border border-outline-variant/30 space-y-sm">
+              <div className="flex items-center justify-between text-xs text-secondary">
+                <span className="bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-bold px-2 py-0.5 rounded">
+                  {r.targetType === "post" ? "檢舉文章" : "檢舉回覆"}
+                </span>
+                <span>{r.reporter ?? "匿名"} • {formatDateTime(r.createdAt)}</span>
+              </div>
+              <p className="text-xs text-on-surface font-bold">
+                理由：<span className="font-normal text-secondary">{r.reason ?? "未填寫"}</span>
+              </p>
+              <div className="bg-surface-container-high dark:bg-surface-container p-sm rounded text-xs text-secondary font-mono leading-normal border border-outline-variant/20 line-clamp-2 break-words">
+                {r.targetText ?? "（內容已不可用）"}
+              </div>
+              <div className="flex gap-sm justify-end">
+                <form action={blockReport}>
+                  <input type="hidden" name="reportId" value={r.id} />
+                  <button type="submit" className={BTN_DANGER}>屏蔽內容</button>
+                </form>
+                <form action={rejectReport}>
+                  <input type="hidden" name="reportId" value={r.id} />
+                  <button type="submit" className={BTN_NEUTRAL}>駁回案件</button>
+                </form>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <h4 className="font-bold text-xs text-on-surface mb-2 border-t border-outline-variant/20 pt-3">
+        📋 操作歷史日誌
+      </h4>
+      <div className="space-y-2 text-xs overflow-y-auto max-h-[360px] pr-1 hide-scrollbar">
+        {resolvedReports.length === 0 ? (
+          <div className="text-center text-secondary py-8">無歷史操作日誌。</div>
+        ) : (
+          resolvedReports.map((r) => {
+            const actionText = r.status === "blocked" ? "屏蔽隱藏" : "駁回免置";
+            return (
+              <div key={r.id} className="p-sm bg-surface-container-low dark:bg-surface rounded border border-outline-variant/10 leading-normal mb-1.5">
+                <span className="font-bold text-primary dark:text-primary-fixed-dim">[{actionText}]</span>{" "}
+                <span>
+                  管理員審查了 {r.reporter ?? "匿名"} 的{r.targetType === "post" ? "文章" : "回覆"}
+                  檢舉案，結果為 [{actionText}]。
+                </span>
+                <span className="block text-[9px] text-secondary text-right mt-1">
+                  {r.resolvedAt ? formatDateTime(r.resolvedAt) : "—"}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 共用版面元件
+// ============================================================
+
+function PanelShell({
+  title,
+  icon,
+  count,
+  accent = "default",
+  children,
+}: {
+  title: string;
+  icon: string;
+  count?: string;
+  accent?: "default" | "red";
+  children: React.ReactNode;
+}) {
+  const titleCls =
+    accent === "red" ? "text-red-600 dark:text-red-400" : "text-on-surface";
+  const countCls =
+    accent === "red"
+      ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+      : "bg-primary/10 text-primary";
+  return (
+    <div className={`${CARD} p-lg`}>
+      <div className="flex items-center justify-between gap-2 mb-md border-b border-outline-variant/20 pb-2">
+        <h3 className={`font-bold text-body-lg flex items-center gap-1 min-w-0 ${titleCls}`}>
+          <span className="material-symbols-outlined text-[20px] shrink-0">{icon}</span>
+          <span className="truncate">{title}</span>
+        </h3>
+        {count && (
+          <span className={`px-2 py-0.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap ${countCls}`}>
+            {count}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="text-center text-secondary text-xs py-10 border border-dashed border-outline-variant/40 rounded-xl">
+      {text}
+    </div>
   );
 }
