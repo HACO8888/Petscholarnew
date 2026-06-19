@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { posts, boards, comments } from "@/db/schema";
+import { posts, boards, comments, users } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
 import { toPlainPreview } from "@/lib/rich-content";
+import UserAvatarLink from "@/components/UserAvatarLink";
 
 const FILTERS = [
   { key: "all", label: "全部" },
@@ -105,7 +106,9 @@ export default async function DiscussionPage({
       id: posts.id,
       title: posts.title,
       content: posts.content,
+      authorId: posts.authorId,
       authorName: posts.authorName,
+      authorImage: users.image,
       department: posts.department,
       tags: posts.tags,
       bounty: posts.bounty,
@@ -116,6 +119,7 @@ export default async function DiscussionPage({
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
+    .leftJoin(users, eq(posts.authorId, users.id))
     .where(whereClause)
     .orderBy(...orderBy)
     .limit(PAGE_SIZE)
@@ -126,16 +130,15 @@ export default async function DiscussionPage({
       {/* Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-xl gap-md">
         <div>
-          <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">學術討論版</h1>
-          <p className="text-secondary font-body-lg text-body-lg">尋找解答，分享知識，賺取懸賞金幣。</p>
+          <h1 className="text-headline-lg font-semibold text-on-surface mb-xs">學術討論版</h1>
+          <p className="text-body-lg text-on-surface-variant">尋找解答，分享知識，賺取懸賞金幣。</p>
         </div>
         <Link
           href="/posts/new"
-          className="bg-primary text-on-primary px-lg py-md rounded-lg flex items-center justify-center gap-sm hover:bg-surface-tint shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          style={{ textDecoration: "none" }}
+          className="inline-flex shrink-0 items-center justify-center gap-1 self-start rounded-full bg-primary px-5 py-2.5 font-bold text-on-primary no-underline shadow-sm transition-all hover:bg-surface-tint focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
         >
-          <span className="material-symbols-outlined">edit_square</span>
-          <span className="font-label-md text-label-md text-[14px]">發問</span>
+          <span className="material-symbols-outlined text-[18px]" aria-hidden>edit_square</span>
+          <span className="text-label-md">發問</span>
         </Link>
       </div>
 
@@ -148,11 +151,10 @@ export default async function DiscussionPage({
             aria-current={active === f.key ? "page" : undefined}
             className={
               (active === f.key
-                ? "bg-primary-container text-on-primary-container border-transparent font-bold"
-                : "bg-surface text-secondary border-outline-variant hover:bg-surface-container") +
-              " px-md py-xs rounded-full border font-label-md text-label-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                ? "bg-primary-container text-on-primary-container border-transparent font-bold shadow-sm"
+                : "bg-surface-container-lowest text-secondary border-outline-variant/60 hover:bg-surface-container hover:text-on-surface dark:bg-surface-container") +
+              " rounded-full border px-md py-xs text-label-md no-underline transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             }
-            style={{ textDecoration: "none" }}
           >
             {f.label}
           </Link>
@@ -169,11 +171,11 @@ export default async function DiscussionPage({
             <input type="hidden" name="status" value={active} />
           )}
           <label className="flex items-center gap-xs">
-            <span className="text-secondary text-label-md font-label-md">學院:</span>
+            <span className="text-secondary text-label-md">學院:</span>
             <select
               name="board"
               defaultValue={activeBoard}
-              className="bg-surface border border-outline-variant text-on-surface text-body-md rounded-lg py-xs pl-sm pr-lg focus:ring-primary focus:border-primary cursor-pointer transition-colors"
+              className="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest py-xs pl-sm pr-lg text-body-md text-on-surface transition-colors focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-surface-container"
             >
               <option value="all">全部學院</option>
               {boardRows.map((b) => (
@@ -184,11 +186,11 @@ export default async function DiscussionPage({
             </select>
           </label>
           <label className="flex items-center gap-xs">
-            <span className="text-secondary text-label-md font-label-md">排序:</span>
+            <span className="text-secondary text-label-md">排序:</span>
             <select
               name="sort"
               defaultValue={activeSort}
-              className="bg-surface border border-outline-variant text-on-surface text-body-md rounded-lg py-xs pl-sm pr-lg focus:ring-primary focus:border-primary cursor-pointer transition-colors"
+              className="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest py-xs pl-sm pr-lg text-body-md text-on-surface transition-colors focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-surface-container"
             >
               {SORTS.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -199,7 +201,7 @@ export default async function DiscussionPage({
           </label>
           <button
             type="submit"
-            className="px-md py-xs rounded-full bg-surface text-secondary border border-outline-variant hover:bg-surface-container font-label-md text-label-md transition-colors"
+            className="rounded-full border border-outline-variant bg-surface-container-lowest px-md py-xs text-label-md text-secondary transition-colors hover:bg-surface-container hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface dark:bg-surface-container"
           >
             套用
           </button>
@@ -212,96 +214,104 @@ export default async function DiscussionPage({
           /* Empty State Placeholder */
           <div
             id="empty-state-placeholder"
-            className="flex flex-col items-center justify-center p-8 bg-surface-container-lowest dark:bg-surface-container border border-dashed border-outline-variant/50 rounded-xl text-center shadow-sm"
+            className="flex flex-col items-center justify-center rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-lowest p-8 text-center shadow-sm dark:bg-surface-container"
           >
-            <span className="material-symbols-outlined text-[64px] text-outline mb-md">
+            <span className="material-symbols-outlined mb-md text-[64px] text-outline" aria-hidden>
               forum
             </span>
-            <h3 className="font-headline-md text-headline-md text-on-surface mb-sm">
+            <h3 className="mb-sm text-headline-md font-semibold text-on-surface">
               {activeBoard !== "all" || active !== "all"
                 ? "找不到符合條件的提問"
                 : "目前還沒有任何使用者發問"}
             </h3>
-            <p className="font-body-md text-body-md text-secondary max-w-md mb-md">
+            <p className="mb-md max-w-md text-body-md text-secondary">
               {activeBoard !== "all" || active !== "all"
                 ? "試試調整上方的學院或狀態篩選，或直接發表一篇新的提問。"
                 : "這裡將會顯示大家討論的內容。點擊「發表第一篇發問」按鈕，即可開始發布您的第一篇學業交流問題！"}
             </p>
             <Link
               href="/posts/new"
-              className="bg-primary hover:bg-surface-tint text-on-primary px-lg py-md rounded-full font-label-md text-label-md flex items-center justify-center gap-xs shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              style={{ textDecoration: "none" }}
+              className="inline-flex items-center justify-center gap-1 rounded-full bg-primary px-lg py-md text-label-md font-bold text-on-primary no-underline shadow-sm transition-all hover:bg-surface-tint focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
-              <span className="material-symbols-outlined text-[18px]">edit_square</span>
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>edit_square</span>
               <span>發表第一篇發問</span>
             </Link>
           </div>
         ) : (
           rows.map((post) => (
-            <Link
+            <article
               key={post.id}
-              href={`/posts/${post.id}`}
-              className="bg-surface-container-lowest dark:bg-surface-container border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-primary/40 transition-all relative group block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              style={{ textDecoration: "none" }}
+              className="group relative rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-within:border-primary/50 dark:bg-surface-container"
             >
-              <div className="flex flex-col sm:flex-row gap-md">
-                <div className="flex sm:flex-col items-center sm:items-end justify-start sm:w-24 gap-sm sm:gap-xs text-secondary shrink-0 order-2 sm:order-1 mt-md sm:mt-0 pt-md sm:pt-0 border-t sm:border-t-0 border-surface-variant">
-                  <div className="flex items-center gap-xs">
-                    <span className="font-body-md text-body-md">{post.commentCount}</span>
-                    <span className="text-label-md font-label-md">回覆</span>
+              {/* 整卡可點：覆蓋連結讓內部頭像連結仍可獨立點擊 */}
+              <Link
+                href={`/posts/${post.id}`}
+                className="absolute inset-0 z-0 rounded-xl no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                aria-label={post.title}
+              />
+              <div className="pointer-events-none relative z-10 flex flex-col gap-md sm:flex-row">
+                <div className="order-2 mt-md flex shrink-0 items-stretch justify-start gap-sm border-t border-outline-variant/30 pt-md text-secondary sm:order-1 sm:mt-0 sm:w-20 sm:flex-col sm:items-stretch sm:gap-xs sm:border-t-0 sm:pt-0">
+                  <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-surface-container-high px-2 py-1.5 dark:bg-surface-variant">
+                    <span className="text-body-md font-bold text-on-surface">{post.commentCount}</span>
+                    <span className="text-label-md">回覆</span>
                   </div>
-                  <div className="flex items-center gap-xs bg-tertiary-container text-on-tertiary-container px-sm py-[2px] rounded-sm mt-xs">
-                    <span className="material-symbols-outlined text-[14px]">generating_tokens</span>
-                    <span className="font-label-md text-label-md">
-                      {post.solved ? "已結算" : post.bounty}
+                  <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-tertiary-container px-2 py-1.5 text-on-tertiary-container">
+                    <span className="inline-flex items-center gap-0.5 text-body-md font-bold">
+                      <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>paid</span>
+                      {post.solved ? "—" : post.bounty}
                     </span>
+                    <span className="text-label-md">{post.solved ? "已結算" : "懸賞"}</span>
                   </div>
                 </div>
-                <div className="flex-1 min-w-0 order-1 sm:order-2">
-                  <div className="flex flex-wrap items-center gap-x-sm gap-y-xs mb-sm text-secondary font-label-md text-label-md">
-                    <div className="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-on-secondary-container text-[14px]">person</span>
-                    </div>
-                    <span className="text-on-surface-variant">
-                      {post.authorName}
-                      {post.department ? `（${post.department}）` : ""}
+                <div className="order-1 min-w-0 flex-1 sm:order-2">
+                  <div className="mb-sm flex flex-wrap items-center gap-x-sm gap-y-xs text-label-md text-secondary">
+                    <span className="pointer-events-auto inline-flex">
+                      <UserAvatarLink
+                        userId={post.authorId}
+                        name={post.authorName}
+                        image={post.authorImage}
+                        showName
+                        nameClassName="text-label-md font-semibold text-on-surface-variant"
+                      />
                     </span>
+                    {post.department && <span>（{post.department}）</span>}
                     <span aria-hidden="true">•</span>
                     <span>{formatDateTime(post.createdAt)}</span>
                     {post.solved && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-container px-2 py-0.5 font-medium text-on-primary-container text-label-md">
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-container px-2 py-0.5 text-label-md font-medium text-on-primary-container">
                         <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>check_circle</span>
                         已解決
                       </span>
                     )}
                   </div>
-                  <h2 className="font-headline-md text-headline-md text-primary mb-xs group-hover:text-surface-tint transition-colors text-[20px] break-words">
+                  <h2 className="mb-xs break-words text-[20px] text-headline-md font-semibold text-on-surface transition-colors group-hover:text-primary">
                     {post.title}
                   </h2>
-                  <p className="text-on-surface-variant font-body-md text-body-md line-clamp-2 mb-md break-words">
+                  <p className="mb-md line-clamp-2 break-words text-body-md text-on-surface-variant">
                     {toPlainPreview(post.content)}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-secondary-container px-2 py-0.5 text-on-secondary-container font-label-md text-label-md">
+                    <span className="rounded-full bg-secondary-container px-2 py-0.5 text-label-md text-on-secondary-container">
                       #{post.boardName}
                     </span>
                     {post.tags.map((t) => (
                       <span
                         key={t}
-                        className="rounded-full bg-secondary-container px-2 py-0.5 text-on-secondary-container font-label-md text-label-md"
+                        className="rounded-full bg-secondary-container px-2 py-0.5 text-label-md text-on-secondary-container"
                       >
                         #{t}
                       </span>
                     ))}
                     {post.bounty > 0 && (
-                      <span className="rounded-full bg-secondary-container px-2 py-0.5 text-on-secondary-container font-label-md text-label-md">
-                        #懸賞{post.bounty}
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-tertiary-container px-2 py-0.5 text-label-md font-medium text-on-tertiary-container">
+                        <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>paid</span>
+                        懸賞 {post.bounty}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
-            </Link>
+            </article>
           ))
         )}
       </div>
