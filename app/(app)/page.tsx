@@ -47,7 +47,7 @@ export default async function HomePage({
       />
       <section>
           <div className="mb-lg">
-            <h1 className="font-semibold text-headline-lg text-on-background">看板</h1>
+            <h1 className="font-semibold text-headline-lg text-on-surface">看板</h1>
             <p className="text-secondary text-body-md mt-xs">探索各學院與科系的專業課業討論。</p>
           </div>
 
@@ -95,14 +95,14 @@ export default async function HomePage({
             </Link>
           </div>
 
-          <div className="space-y-md">
+          <div className="space-y-3">
             {postRows.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 bg-surface-container-lowest dark:bg-surface-container-high border border-dashed border-outline-variant/50 rounded-xl text-center py-12 px-4">
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-lowest px-4 py-12 text-center dark:bg-surface-container-high">
                 <span className="material-symbols-outlined text-[48px] text-outline" aria-hidden>forum</span>
                 <p className="text-body-md text-secondary">
                   {activeBoard ? `「${activeBoard.name}」目前尚無提問。` : "目前尚無課業提問。"}歡迎成為第一個發問的人！
                 </p>
-                <Link href="/posts/new" className="mt-1 inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 text-body-md font-bold text-on-primary no-underline shadow-sm transition-all hover:bg-surface-tint">
+                <Link href="/posts/new" className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-label-md font-bold text-on-primary no-underline shadow-sm transition-all hover:bg-surface-tint">
                   <span className="material-symbols-outlined text-[18px]" aria-hidden>add_circle</span> 發佈新提問
                 </Link>
               </div>
@@ -111,33 +111,46 @@ export default async function HomePage({
                 <Link
                   key={p.id}
                   href={`/posts/${p.id}`}
-                  className="block bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/20 rounded-xl p-md shadow-sm hover:shadow-md transition-all cursor-pointer relative no-underline"
+                  className="block rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 no-underline transition-all hover:border-primary/40 hover:shadow-sm dark:bg-surface-container-high focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                 >
-                  <div className="flex justify-between items-start mb-sm gap-2">
-                    <h3 className="font-bold text-body-lg text-primary dark:text-primary-fixed-dim min-w-0 break-words">{p.title}</h3>
-                    <span
-                      className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded ${
-                        p.solved
-                          ? "text-on-surface-variant bg-surface-container-high dark:bg-surface-variant"
-                          : "text-amber-700 dark:text-amber-300 bg-amber-500/10"
-                      }`}
-                    >
-                      🪙 {p.solved ? "已結算" : `懸賞 ${p.bounty}`}
-                    </span>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="min-w-0 break-words text-body-lg font-semibold text-on-background">{p.title}</h3>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {p.solved ? (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-container px-2 py-0.5 text-label-md font-medium text-on-primary-container">
+                          <span className="material-symbols-outlined text-[14px] icon-fill">check_circle</span>
+                          已解決
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-label-md text-secondary">
+                          待解答
+                        </span>
+                      )}
+                      {p.bounty > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-tertiary-container px-2 py-0.5 text-label-md font-medium text-on-tertiary-container">
+                          <span className="material-symbols-outlined text-[14px]">paid</span>
+                          {p.bounty}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary mb-2">
-                    <span className="bg-primary/5 text-primary border border-primary/10 px-1.5 py-0.5 rounded text-[10px]">{p.department ?? p.boardName}</span>
-                    <span>提問學生: <strong>{p.authorName}</strong></span>
-                    <span>•</span>
-                    <span>{formatDateTime(p.createdAt)}</span>
-                    <span>•</span>
-                    <span className={p.solved ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-amber-700 dark:text-amber-300 font-bold"}>{p.solved ? "已解決" : "未解決"}</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-label-md text-secondary">
+                    <span className="font-medium">{p.authorName}</span>
+                    <span>· {p.department ?? p.boardName}</span>
+                    <span>· {formatDateTime(p.createdAt)}</span>
                   </div>
-                  <div className="flex flex-wrap gap-sm">
-                    {p.tags.map((t) => (
-                      <span key={t} className="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] rounded">#{t}</span>
-                    ))}
-                  </div>
+                  {p.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {p.tags.map((t) => (
+                        <span
+                          key={t}
+                          className="rounded-full bg-secondary-container px-2 py-0.5 text-label-md text-on-secondary-container"
+                        >
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </Link>
               ))
             )}
