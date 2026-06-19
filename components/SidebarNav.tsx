@@ -20,6 +20,7 @@ export function SidebarHelpButton() {
 }
 
 const ITEMS = [
+  { href: "/", label: "首頁", icon: "home" },
   { href: "/boards", label: "看板", icon: "dashboard" },
   { href: "/discussion", label: "討論版", icon: "forum" },
   { href: "/study-rooms", label: "自習室", icon: "menu_book" },
