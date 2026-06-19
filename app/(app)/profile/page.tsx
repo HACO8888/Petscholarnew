@@ -136,18 +136,19 @@ export default async function ProfilePage() {
       <section className="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-md">
         {/* User Info Card */}
         <div className="md:col-span-2 bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col md:flex-row items-center md:items-start gap-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary-container rounded-full blur-3xl opacity-20 -mr-10 -mt-10"></div>
+          <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container rounded-full blur-3xl opacity-20 -mr-12 -mt-12" aria-hidden></div>
+          <div className="absolute bottom-0 left-0 w-28 h-28 bg-tertiary-container rounded-full blur-3xl opacity-20 -ml-10 -mb-10" aria-hidden></div>
           <div className="relative shrink-0 flex flex-col items-center gap-md z-10">
             {me.image ? (
 
               <img
                 alt={displayName}
-                className="w-32 h-32 rounded-full border-4 border-surface shadow-sm object-cover"
+                className="w-32 h-32 rounded-full border-4 border-surface shadow-md object-cover"
                 src={me.image}
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-32 h-32 rounded-full border-4 border-surface shadow-sm bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg select-none">
+              <div className="w-32 h-32 rounded-full border-4 border-surface shadow-md bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg select-none">
                 {avatarInitial || (
                   <span className="material-symbols-outlined text-[48px]" style={{ fontSize: "48px" }}>
                     person
@@ -158,8 +159,17 @@ export default async function ProfilePage() {
             <AvatarUpload />
           </div>
           <div className="flex-1 min-w-0 text-center md:text-left z-10">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface break-words">{displayName}</h1>
-            <p className="font-body-lg text-body-lg text-secondary mb-md break-words">{department}</p>
+            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight break-words">{displayName}</h1>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-sm mt-xs mb-md">
+              <span className="inline-flex items-center gap-1 font-label-md text-label-md text-secondary bg-surface-container px-2.5 py-1 rounded-full">
+                <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>school</span>
+                {department}
+              </span>
+              <span className="inline-flex items-center gap-1 font-label-md text-label-md text-on-tertiary-container bg-tertiary-container px-2.5 py-1 rounded-full font-bold">
+                <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>star</span>
+                Lv. {petLevel}・{petTitle(petLevel)}
+              </span>
+            </div>
             {bio ? (
               <p className="font-body-md text-body-md text-on-surface-variant max-w-md whitespace-pre-line break-words">
                 {bio}
@@ -345,98 +355,119 @@ export default async function ProfilePage() {
           action={updateProfile}
           className="max-w-xl bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm"
         >
-          <div className="space-y-md">
-            <div>
-              <label className="block text-sm font-bold text-on-surface mb-1">我的暱稱</label>
-              <input
-                name="displayName"
-                defaultValue={me.name ?? ""}
-                maxLength={100}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-                placeholder="請輸入姓名..."
-                type="text"
-              />
-            </div>
+          <div className="space-y-lg">
+            {/* 基本資料 */}
+            <fieldset className="space-y-md">
+              <legend className="flex items-center gap-sm font-label-md text-label-md font-bold text-secondary uppercase tracking-wide mb-sm">
+                <span className="material-symbols-outlined text-[18px] icon-fill text-primary" aria-hidden>badge</span>
+                基本資料
+              </legend>
+              <div>
+                <label htmlFor="displayName" className="block text-sm font-bold text-on-surface mb-1">我的暱稱</label>
+                <input
+                  id="displayName"
+                  name="displayName"
+                  defaultValue={me.name ?? ""}
+                  maxLength={100}
+                  className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                  placeholder="請輸入姓名..."
+                  type="text"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-bold text-on-surface mb-1">寵物暱稱</label>
-              <input
-                name="petName"
-                defaultValue={petName}
-                maxLength={40}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-                placeholder="替你的學習夥伴取個名字…"
-                type="text"
-              />
-            </div>
+              <div>
+                <label htmlFor="department" className="block text-sm font-bold text-on-surface mb-1">系所</label>
+                <select
+                  id="department"
+                  name="department"
+                  defaultValue={currentDepartment}
+                  className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                >
+                  <option value="">未指定科系</option>
+                  {/* 目前值已不在清單（例：科系被刪除）時，保留為選項以免儲存時遺失 */}
+                  {currentDepartment && !departmentNames.includes(currentDepartment) && (
+                    <option value={currentDepartment}>{currentDepartment}（已停用）</option>
+                  )}
+                  {departmentNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-bold text-on-surface mb-1">系所</label>
-              <select
-                name="department"
-                defaultValue={currentDepartment}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-              >
-                <option value="">未指定科系</option>
-                {/* 目前值已不在清單（例：科系被刪除）時，保留為選項以免儲存時遺失 */}
-                {currentDepartment && !departmentNames.includes(currentDepartment) && (
-                  <option value={currentDepartment}>{currentDepartment}（已停用）</option>
-                )}
-                {departmentNames.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label htmlFor="bio" className="block text-sm font-bold text-on-surface mb-1">自我介紹</label>
+                <textarea
+                  id="bio"
+                  name="bio"
+                  defaultValue={me.bio ?? ""}
+                  maxLength={500}
+                  rows={4}
+                  className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none resize-y"
+                  placeholder="介紹一下你的專長、興趣，或想分享給學弟妹的話..."
+                />
+                <p className="mt-1 text-label-md text-secondary">最多 500 字。</p>
+              </div>
 
-            <div>
-              <label className="block text-sm font-bold text-on-surface mb-1">自我介紹</label>
-              <textarea
-                name="bio"
-                defaultValue={me.bio ?? ""}
-                maxLength={500}
-                rows={4}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none resize-y"
-                placeholder="介紹一下你的專長、興趣，或想分享給學弟妹的話..."
-              />
-              <p className="mt-1 text-label-md text-secondary">最多 500 字。</p>
-            </div>
+              <div>
+                <label htmlFor="gender" className="block text-sm font-bold text-on-surface mb-1">性別</label>
+                <select
+                  id="gender"
+                  name="gender"
+                  defaultValue={me.gender ?? "female"}
+                  className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                >
+                  {GENDER_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </fieldset>
 
-            <div>
-              <label className="block text-sm font-bold text-on-surface mb-1">性別</label>
-              <select
-                name="gender"
-                defaultValue={me.gender ?? "female"}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-              >
-                {GENDER_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* 學習夥伴設定 */}
+            <fieldset className="space-y-md pt-lg border-t border-outline-variant/40">
+              <legend className="flex items-center gap-sm font-label-md text-label-md font-bold text-secondary uppercase tracking-wide mb-sm">
+                <span className="material-symbols-outlined text-[18px] icon-fill text-tertiary" aria-hidden>pets</span>
+                學習夥伴
+              </legend>
+              <div>
+                <label htmlFor="petName" className="block text-sm font-bold text-on-surface mb-1">寵物暱稱</label>
+                <input
+                  id="petName"
+                  name="petName"
+                  defaultValue={petName}
+                  maxLength={40}
+                  className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                  placeholder="替你的學習夥伴取個名字…"
+                  type="text"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-bold text-on-surface mb-2">變更寵物電子雞角色</label>
-              <select
-                name="petStyle"
-                defaultValue={me.petStyle ?? "classic"}
-                className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-              >
-                {PET_STYLE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.emoji} {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label htmlFor="petStyle" className="block text-sm font-bold text-on-surface mb-2">變更寵物電子雞角色</label>
+                <select
+                  id="petStyle"
+                  name="petStyle"
+                  defaultValue={me.petStyle ?? "classic"}
+                  className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                >
+                  {PET_STYLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.emoji} {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </fieldset>
 
             <button
               type="submit"
-              className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold py-2.5 rounded-lg mt-md shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              className="w-full inline-flex items-center justify-center gap-sm bg-primary text-on-primary hover:bg-surface-tint font-bold py-2.5 rounded-lg mt-md shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>save</span>
               儲存個人檔案修改
             </button>
           </div>

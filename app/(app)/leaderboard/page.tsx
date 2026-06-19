@@ -311,9 +311,14 @@ export default async function LeaderboardPage({
     <div className="w-full flex flex-col gap-xl">
       {/* Header Section */}
       <header className="flex flex-col gap-sm">
-        <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
-          累計榮譽榜
-        </h1>
+        <div className="flex items-center gap-md">
+          <div className="w-12 h-12 rounded-xl bg-tertiary-container text-on-tertiary-container flex items-center justify-center shrink-0 shadow-sm">
+            <span className="material-symbols-outlined text-2xl icon-fill" aria-hidden>emoji_events</span>
+          </div>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+            累計榮譽榜
+          </h1>
+        </div>
         <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">
           表彰在解答與探索領域展現卓越成就的學習者。展現你的實力，解鎖專屬成就勳章。
         </p>
@@ -356,9 +361,14 @@ export default async function LeaderboardPage({
         />
         <div className="flex items-end justify-center gap-sm md:gap-lg h-64 z-10 w-full max-w-3xl">
           {podium.length === 0 ? (
-            <p className="text-secondary text-body-md self-center">
-              尚無排行資料。
-            </p>
+            <div className="flex flex-col items-center justify-center text-center gap-sm self-center px-md">
+              <span className="material-symbols-outlined text-outline text-[48px]" style={{ fontSize: "48px" }} aria-hidden>
+                workspace_premium
+              </span>
+              <p className="text-secondary font-body-md text-body-md max-w-xs">
+                尚無排行資料。發表解答、加入自習室或提出問題，搶先登上頒獎台。
+              </p>
+            </div>
           ) : (
             // 顯示順序：第 2 名、第 1 名、第 3 名
             [podium[1], podium[0], podium[2]].map((member, slot) => {
@@ -514,8 +524,11 @@ export default async function LeaderboardPage({
           </div>
           <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-variant overflow-hidden">
             {listRows.length === 0 ? (
-              <div className="p-md text-secondary font-body-md text-body-md">
-                尚無更多排行資料。
+              <div className="p-lg flex flex-col items-center text-center gap-xs text-secondary">
+                <span className="material-symbols-outlined text-outline" style={{ fontSize: "40px" }} aria-hidden>
+                  format_list_numbered
+                </span>
+                <p className="font-body-md text-body-md">尚無更多排行資料。</p>
               </div>
             ) : (
               listRows.map((item, idx) => {
@@ -731,13 +744,16 @@ export default async function LeaderboardPage({
 
       {/* Student Welfare Coupon Shop */}
       <section className="flex flex-col gap-md">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-xs">
           <h2 className="font-headline-md text-headline-md text-on-surface flex items-center gap-sm">
             <span className="material-symbols-outlined text-tertiary icon-fill">
               local_activity
             </span>
             學生特約福利社
           </h2>
+          <p className="font-body-md text-body-md text-secondary">
+            提升寵物等級或解鎖成就徽章，免費兌換北科校園周邊特約優惠券。
+          </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
           {WELFARE_ITEMS.map((coupon) => {
