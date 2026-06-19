@@ -21,9 +21,10 @@ export function SidebarHelpButton() {
 
 const ITEMS = [
   { href: "/boards", label: "看板", icon: "dashboard" },
-  { href: "/shop", label: "寵物商城", icon: "storefront" },
-  { href: "/study-rooms", label: "自習室", icon: "menu_book" },
   { href: "/discussion", label: "討論版", icon: "forum" },
+  { href: "/study-rooms", label: "自習室", icon: "menu_book" },
+  { href: "/shop", label: "寵物商城", icon: "storefront" },
+  { href: "/pet/feed", label: "寵物餵食", icon: "restaurant" },
   { href: "/leaderboard", label: "排行榜", icon: "leaderboard" },
   { href: "/profile", label: "個人檔案", icon: "person" },
 ];

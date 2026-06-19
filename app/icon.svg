@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PetScholar">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a7c95"/>
+      <stop offset="1" stop-color="#3d5a70"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <!-- 學位帽板（mortarboard） -->
+  <path d="M32 17 L58 27.5 L32 38 L6 27.5 Z" fill="#ffffff"/>
+  <!-- 帽身 -->
+  <path d="M21 33 L21 41.5 C21 46 26.4 49 32 49 C37.6 49 43 46 43 41.5 L43 33 L32 37.4 Z" fill="#eaf1f6"/>
+  <!-- 流蘇 -->
+  <path d="M53 28 L53 42" stroke="#f6c453" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+  <circle cx="53" cy="45.5" r="3.4" fill="#f6c453"/>
+  <!-- 鈕扣中心 -->
+  <circle cx="32" cy="27.6" r="2.4" fill="#f6c453"/>
+</svg>

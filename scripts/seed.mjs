@@ -10,10 +10,9 @@ const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 const src = readFileSync("legacy/data/boardsData.js", "utf8");
 const BOARDS_DATA = Function(src + "; return BOARDS_DATA;")();
 
-// 從 legacy 的 userData.js 取出 SHOP_ITEMS 與 MOCK_REPORTS
+// 從 legacy 的 userData.js 取出 SHOP_ITEMS（商城商品目錄；不再匯入任何假檢舉資料）
 const userSrc = readFileSync("legacy/data/userData.js", "utf8");
 const SHOP_ITEMS = Function(userSrc + "; return SHOP_ITEMS;")();
-const MOCK_REPORTS = Function(userSrc + "; return MOCK_REPORTS;")();
 
 const STUDY_ROOMS = [
   { id: "room-calculus", name: "微積分衝刺房", subject: "微積分", description: "一起攻克期末微積分，互相督促進度！", capacity: 8 },
@@ -23,11 +22,6 @@ const STUDY_ROOMS = [
   { id: "room-english", name: "學術英文寫作房", subject: "學術英文", description: "論文與簡報英文寫作互助。", capacity: 5 },
 ];
 
-function parseDate(s) {
-  const d = s ? new Date(s) : null;
-  return d && !Number.isNaN(d.getTime()) ? d : new Date();
-}
-
 await sql`TRUNCATE "comment", "post", "board" RESTART IDENTITY CASCADE`;
 // shop_item 重置（會連帶清空 inventory FK）
 await sql`TRUNCATE "shop_item" RESTART IDENTITY CASCADE`;
@@ -36,17 +30,17 @@ let itemOrder = 0;
 let itemCount = 0;
 for (const it of SHOP_ITEMS) {
   await sql`
-    INSERT INTO "shop_item" (id, name, grade, price, hp_restore, exp_gain, icon, description, type, accessory_type, sort_order)
-    VALUES (${it.id}, ${it.name}, ${it.grade ?? null}, ${it.price ?? 0}, ${it.hpRestore ?? 0}, ${it.expGain ?? 0}, ${it.icon ?? null}, ${it.description ?? null}, ${it.type === "accessory" ? "accessory" : "food"}, ${it.accessoryType ?? null}, ${itemOrder++})
+    INSERT INTO "shop_item" (id, name, grade, price, hp_restore, exp_gain, icon, image, description, type, accessory_type, sort_order)
+    VALUES (${it.id}, ${it.name}, ${it.grade ?? null}, ${it.price ?? 0}, ${it.hpRestore ?? 0}, ${it.expGain ?? 0}, ${it.icon ?? null}, ${it.image ?? null}, ${it.description ?? null}, ${it.type === "accessory" ? "accessory" : "food"}, ${it.accessoryType ?? null}, ${itemOrder++})
   `;
   itemCount++;
 }
 
 let order = 0;
 let boardCount = 0;
-let postCount = 0;
-let commentCount = 0;
 
+// 只灌入「結構性」看板定義；不灌任何假貼文／假留言，避免假使用者活動污染
+// 討論版、看板提問數、排行榜、教授/管理後台。真實內容由使用者實際發問/回覆產生。
 for (const key of Object.keys(BOARDS_DATA)) {
   const b = BOARDS_DATA[key];
   await sql`
@@ -54,26 +48,6 @@ for (const key of Object.keys(BOARDS_DATA)) {
     VALUES (${b.id}, ${b.name}, ${b.icon ?? null}, ${b.color ?? null}, ${b.description ?? null}, ${sql.json(b.departments ?? [])}, ${order++})
   `;
   boardCount++;
-
-  for (const p of b.posts ?? []) {
-    await sql`
-      INSERT INTO "post" (id, board_id, author_id, author_name, title, content, department, tags, bounty, solved, created_at)
-      VALUES (${p.id}, ${b.id}, ${null}, ${p.author ?? "匿名"}, ${p.title}, ${p.content ?? ""}, ${p.department ?? null}, ${sql.json(p.tags ?? [])}, ${p.bounty ?? 0}, ${p.solved ?? false}, ${parseDate(p.timestamp)})
-    `;
-    postCount++;
-
-    const insertReplies = async (replies, parentId) => {
-      for (const r of replies ?? []) {
-        await sql`
-          INSERT INTO "comment" (id, post_id, parent_id, author_id, author_name, content, is_adopted, created_at)
-          VALUES (${r.id}, ${p.id}, ${parentId}, ${null}, ${r.author ?? "匿名"}, ${r.content ?? ""}, ${r.isAdopted ?? false}, ${parseDate(r.timestamp)})
-        `;
-        commentCount++;
-        await insertReplies(r.replies, r.id);
-      }
-    };
-    await insertReplies(p.replies, null);
-  }
 }
 
 // 自習室
@@ -86,18 +60,10 @@ for (const r of STUDY_ROOMS) {
   `;
 }
 
-// 檢舉案件（全部設為待處理 pending）
+// 檢舉案件：清空既有假檢舉，不再灌入任何示範資料（真實檢舉由使用者操作產生）
 await sql`TRUNCATE "report" RESTART IDENTITY CASCADE`;
-let reportCount = 0;
-for (const rep of MOCK_REPORTS) {
-  await sql`
-    INSERT INTO "report" (id, target_type, target_id, target_text, reason, reporter, status, created_at)
-    VALUES (${rep.id}, ${rep.type === "post" ? "post" : "comment"}, ${rep.targetId}, ${rep.targetText ?? null}, ${rep.reason ?? null}, ${rep.reporter ?? null}, ${"pending"}, ${parseDate(rep.timestamp)})
-  `;
-  reportCount++;
-}
 
 await sql.end();
 console.log(
-  `seeded: ${boardCount} boards, ${postCount} posts, ${commentCount} comments, ${itemCount} shop items, ${STUDY_ROOMS.length} rooms, ${reportCount} reports`,
+  `seeded: ${boardCount} boards, ${itemCount} shop items, ${STUDY_ROOMS.length} rooms（無假貼文/留言/檢舉）`,
 );

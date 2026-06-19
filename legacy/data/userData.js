@@ -38,66 +38,95 @@ const PET_DATA = {
 };
 
 const SHOP_ITEMS = [
-  // PRD 指定標準食物項目
+  // 補給品：對齊部署版商城（名稱／描述／圖片一致），每項自帶真實商品圖 image。
+  // hp/exp 依稀有度遞進（基礎→史詩），與描述的「微幅／中等／大幅／全方位」語氣一致。
   {
-    id: "item-riceball",
-    name: "學術飯糰 (基礎)",
+    id: "item-milk",
+    name: "牛奶 (基礎)",
     grade: "基礎",
     price: 10,
-    hpRestore: 100,      // 恢復 100 HP (1顆愛心)
+    hpRestore: 100,      // 微幅：1 顆愛心
     expGain: 10,
-    icon: "🍙",
-    description: "熱騰騰的三角海苔飯糰，花費 10 金幣，可恢復 1 顆愛心與 10 經驗值！"
+    icon: "🥛",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDBSZm0-7ujJMJXQO8YyOJkVr9UyuO_AExHK7LCmF77lew_9aOrVGaZ77Z18euG15wWszGRYxoPROjnUN8_1MgHurw159OLGxqabMWVYxSvRCSri7MQJgiUndbAe-xGb18GABhyFk2kdHoqE_QHx9J46EuQKMDtMWONambSGVCVkG8lgcjYzo3pGtMTG5CU72Nhwc4dO00VEWx3FtN9ATPd2_3TlJd1SZmsLtTnoXbsosjue_kGZas15xR6dug3frKg3JSjnfm-nncd",
+    description: "基礎飲品，微幅恢復體力。"
   },
   {
-    id: "item-sandwich",
-    name: "知識三明治 (基礎)",
+    id: "item-honey",
+    name: "蜂蜜罐 (基礎)",
     grade: "基礎",
     price: 15,
-    hpRestore: 200,      // 恢復 200 HP (2顆愛心)
-    expGain: 20,
-    icon: "🥪",
-    description: "營養均衡的三明治，花費 15 金幣，可恢復 2 顆愛心與 20 經驗值！"
+    hpRestore: 150,      // 微幅：1.5 顆愛心
+    expGain: 10,
+    icon: "🍯",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDAYRM9dbWl8datrcYD0aoItj7fFziw91cWgJZntsglPVtLrjQ_RBarjGjvTWNNDWDIDXIyjBkdyVQ6IHw2WveNoxiOztCpaFTa9fK1_8-gyt-2fw-CEODFrRcmNe8jGvicNPYtfRjCPwDUCgOAK3Shtoak-WBM1GaVQtV3d7TJMICFuzVsT7AhsDllgnaGksTvaXYfuHHVHosZVvaxho9worNVF_BO8m1J2sfSB1GIjiG-r68NpfyXOQtPh_wt2zehUNl07fHq3X9-",
+    description: "香甜蜂蜜，微幅增加飽食度。"
   },
   {
-    id: "item-chicken",
-    name: "學霸大雞排 (普通)",
+    id: "item-apple",
+    name: "蘋果 (普通)",
     grade: "普通",
     price: 25,
-    hpRestore: 150,      // 恢復 1.5 顆愛心
-    expGain: 15,
-    icon: "🍗",
-    description: "香脆美味的北科後門雞排，咬下一口能恢復 1.5 顆愛心與 15 經驗值！"
+    hpRestore: 200,      // 中等：2 顆愛心
+    expGain: 20,
+    icon: "🍎",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuB0STl3aP4dNiMiKUTNotuqNvJtL9g4JnecHrz9L7CHBtnvLVOd4fUfgwiCMTDDSqDFWqm4BrvMI_YzgShv85r2ZUgRG1aacK3TTBH7od1IhhRtRpWbh-Hm13jT8wa0bJ-3o6LEAcSU3IPKsGXDEgI_l-gmFYcMbD0zvKduXEdCcrzk4spqBct5rirrqv5TNY9cOYHe-K6hHPqsiao8NxnC-7fSOd-IcvITS27QCMyQXZF6i1tUyLwK_L9DjuMh5tm53KS__vM_n00i",
+    description: "健康水果，恢復中等飽食度。"
   },
   {
-    id: "item-coffee",
-    name: "爆肝手沖咖啡 (普通)",
+    id: "item-grape",
+    name: "葡萄 (普通)",
     grade: "普通",
     price: 30,
-    hpRestore: 225,      // 恢復 2.25 顆愛心
-    expGain: 25,
-    icon: "☕",
-    description: "期末熬夜讀書必備！高濃度咖啡因，能恢復 2.25 顆愛心與 25 經驗值。"
+    hpRestore: 250,      // 中等：2.5 顆愛心
+    expGain: 20,
+    icon: "🍇",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAZlRqXHjGqXvdF6risfFY9x6FFRQ4DMf_f13QQ4_7t4vgBJPK43REf8u6rUknDY0IKI9og1kgJ1QrTRurkruPozjQVos-HHF56HWFbAY0DgZXtcTSiGFwEmd_mTbt17cNTXTn0zpTRV8y8Jgxs39deWEFuNWZAm5r1lg68pwHYUbWxl1xo1aYsErD2oWk2cRvlUjTtr_5WA_ZSH2VTYFY-O9isk3D5a0bv--fvS5QWQirCUca_02WV5ZPHZT38vL35cgqUPy4EOXWk",
+    description: "新鮮葡萄，恢復中等體力。"
   },
   {
-    id: "item-bento",
-    name: "滿分歐趴便當 (稀有)",
+    id: "item-tuna-sandwich",
+    name: "鮪魚三明治 (稀有)",
     grade: "稀有",
     price: 50,
-    hpRestore: 500,     // 恢復 500 HP (5顆愛心)
-    expGain: 50,
-    icon: "🍱",
-    description: "豐盛的雙主菜歐趴便當，花費 50 金幣，直接補滿 5 顆愛心與 50 經驗值！"
+    hpRestore: 400,      // 大幅：4 顆愛心
+    expGain: 40,
+    icon: "🥪",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuCxZqKdh393mrmu3xRHnlDQIK6Bou4neKs24252VpTbuTn9TL9bYwNYLQJaMz3vCNC750D7dVSTy2ge5VbY0jCmMFsLPIbMGu1pc-ngBoMCS-gN8GxAoIN7dDTYYJQSk5BYLMIHY-SEIqQ1R2tIgmPqCdZGu9rOxvsbbq_5tnVL5r5RGVeg7jl2nvtvzElH39i7n8wHiIrclTB-9jXpikcKesYWpn3K_8W1EeWHQEp4hp6-yqrRD_8mc1auC2aOmpsvVokERqtglDIy",
+    description: "營養均衡，大幅恢復體力與飽食度。"
   },
   {
-    id: "item-candy",
-    name: "期末精緻歐趴糖 (史詩)",
+    id: "item-ramen",
+    name: "拉麵 (稀有)",
+    grade: "稀有",
+    price: 65,
+    hpRestore: 500,      // 大幅：補滿 5 顆愛心
+    expGain: 50,
+    icon: "🍜",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBpJqmC_0gs_kIfA95wCtB3mR3r-8dR9HTa8t20ZhRLTxUI9OG1eKBiXoiI-Rx7CfW0sud-7LpiRnmpFsrDQ51_2SqAjTHQWWcYQOpZEsoD-ZJZIjya0aEcXDExoAxadgMnywvw4AFs2yWu_p3ZhLudXfbJhv7PpRhcShvEuuxWeFxWkzlOXWyFKrxZwrFh_378SrMm00jErQy3sfaqRpyZgo8BWApfHxhp82z34XDRM-i06C4CuaR000nL14O6NiH062lCtuPrd6g6",
+    description: "熱騰騰的拉麵，大幅恢復體力。"
+  },
+  {
+    id: "item-steak",
+    name: "頂級牛排 (史詩)",
+    grade: "史詩",
+    price: 100,
+    hpRestore: 500,      // 全方位：補滿 5 顆愛心
+    expGain: 70,
+    icon: "🥩",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDbd4I9bmiLHOnYtLGOXCgR3kdDXRE1D6SudyHO7MFxGcGuJbGJxERhKvXMPX7Vo0TGD3jI-n9yB_w23BvXQ30w8m4a59WjBlJ0DrvNfSk-LQxjRZQ5qpCicxXSXljcErUqUfC7Vm0tt1Ajp12im40LoRjsq4gTRhnHK1GrogDc-a5LSqygpICaEsvEvHj6HryUKU8InFbxNNjws9NxTo9Qyuc8VxRHLeCZtk3mi0fdqCqIY63xTH21grKahZups29DCihFHatK4gu_",
+    description: "頂級食材，全方位提升狀態與經驗。"
+  },
+  {
+    id: "item-cake",
+    name: "草莓蛋糕 (史詩)",
     grade: "史詩",
     price: 120,
-    hpRestore: 500,     // 恢復 500 HP (5顆愛心)
+    hpRestore: 500,      // 全方位：補滿 5 顆愛心
     expGain: 80,
-    icon: "🍬",
-    description: "學長姐精心挑選的All-Pass糖！花費 120 金幣，直接補滿 5 顆愛心與 80 經驗值，光速升級！"
+    icon: "🍰",
+    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuC-5Y3-i1lX5qFNwzJkoCuS8jHNUViv1A6XrGXr2UOyCfJvGpaKAIxIAbm1O1iOtZfan4Agbfesds_OPhy-qYMqAWdys2LBlIR3oT9j_GVmBeKVGr0kiAjxqRmdK0gmSxK3LPUVGU9sqoTka3C0nzvDeDS_Fz9eCV8orxH83V-avq5T2ChZ1LGA5qMOWH3FrkH6mKuMNqIKLxeB5zqiLzDleenYIX2UIbLzjhZCmQZYUupsg9yLcgcN22hnoSbq-wAZ0Df_GB7oGfDx",
+    description: "精緻甜點，大幅提升心情與狀態。"
   },
   // 裝飾配件商品
   {

@@ -78,7 +78,7 @@ export default async function HomePage({
       .where(eq(users.id, session.user.id))
       .limit(1);
     const food = await db
-      .select({ itemId: inventory.itemId, name: shopItems.name, icon: shopItems.icon, quantity: inventory.quantity })
+      .select({ itemId: inventory.itemId, name: shopItems.name, icon: shopItems.icon, image: shopItems.image, quantity: inventory.quantity })
       .from(inventory)
       .innerJoin(shopItems, eq(inventory.itemId, shopItems.id))
       .where(and(eq(inventory.userId, session.user.id), eq(shopItems.type, "food"), gt(inventory.quantity, 0)))
@@ -108,8 +108,8 @@ export default async function HomePage({
   }
 
   return (
-    <div className="flex flex-col xl:flex-row relative max-w-7xl mx-auto w-full pt-20 pb-16 px-4 md:px-8 gap-lg">
-      <main className="flex-1 min-h-[calc(100vh-144px)] animate-fade-in-up">
+    <div className="flex flex-col xl:flex-row relative w-full gap-lg">
+      <div className="flex-1 min-w-0">
         <section>
           <div className="mb-lg">
             <h1 className="font-semibold text-headline-lg text-on-background">看板</h1>
@@ -198,7 +198,7 @@ export default async function HomePage({
             )}
           </div>
         </section>
-      </main>
+      </div>
 
       <HomeSidebar data={sidebar} />
     </div>

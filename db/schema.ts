@@ -169,6 +169,9 @@ export const shopItems = pgTable("shop_item", {
   hpRestore: integer("hp_restore").notNull().default(0),
   expGain: integer("exp_gain").notNull().default(0),
   icon: text("icon"),
+  // 食物的真實商品圖（Stitch 圖庫 URL）；商城與背包共用同一來源，避免圖文不符。
+  // 配件無實體圖時為 null，改用 icon emoji 呈現。
+  image: text("image"),
   description: text("description"),
   type: varchar("type", { length: 16 }).notNull().default("food"),
   accessoryType: varchar("accessory_type", { length: 16 }),

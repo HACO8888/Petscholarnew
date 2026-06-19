@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Header, { type HeaderUser } from "@/components/Header";
-import { auth } from "@/auth";
-import type { Role } from "@/db/schema";
 
 export const metadata: Metadata = {
   title: "PetScholar｜遊戲化校園學業交流區",
@@ -14,14 +11,6 @@ const themeInitScript = `(function(){try{var t=localStorage.getItem('petscholar-
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await auth();
-  const headerUser: HeaderUser | null = session?.user?.id
-    ? {
-        name: session.user.name,
-        role: (session.user.role ?? "student") as Role,
-      }
-    : null;
-
   return (
     <html lang="zh-TW" suppressHydrationWarning>
       <head>
@@ -38,7 +27,6 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-screen bg-background text-on-background antialiased transition-colors duration-300">
-        <Header user={headerUser} />
         {children}
       </body>
     </html>

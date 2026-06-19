@@ -2,6 +2,8 @@ import Link from "next/link";
 import { healPet } from "@/app/(app)/pet/actions";
 import { logout } from "@/app/actions/auth";
 import SidebarNav, { SidebarHelpButton } from "./SidebarNav";
+import SidebarShell from "./SidebarShell";
+import ThemeToggle from "./ThemeToggle";
 import type { Role } from "./nav-config";
 
 export interface SidebarData {
@@ -32,11 +34,22 @@ export default function Sidebar({ data }: { data: SidebarData }) {
   const emoji = STYLE_EMOJI[data.petStyle ?? "classic"] ?? STYLE_EMOJI.classic;
 
   return (
-    <aside className="hidden md:flex bg-surface-container dark:bg-surface-container-high font-label-md text-label-md shadow-md fixed right-0 top-16 h-[calc(100vh-64px)] w-64 flex-col p-md border-l border-outline-variant dark:border-outline">
+    <SidebarShell>
+      {/* 品牌列 + 深淺模式 */}
+      <div className="flex items-center justify-between gap-2 mb-md px-1 shrink-0">
+        <Link
+          href="/"
+          className="font-bold text-headline-md text-primary dark:text-primary-fixed tracking-tight no-underline whitespace-nowrap"
+        >
+          PetScholar
+        </Link>
+        <ThemeToggle />
+      </div>
+
       {/* Pet Status */}
-      <div className="flex flex-col items-center mb-xl p-md bg-surface rounded-xl shadow-sm border border-outline-variant text-center">
+      <div className="flex flex-col items-center mb-lg p-md bg-surface rounded-xl shadow-sm border border-outline-variant text-center shrink-0">
         <div
-          className={`relative w-24 h-24 rounded-full mb-sm border-2 shadow-sm flex items-center justify-center text-5xl ${
+          className={`relative w-20 h-20 rounded-full mb-sm border-2 shadow-sm flex items-center justify-center text-4xl ${
             data.loggedIn ? "" : "opacity-60 grayscale"
           } ${
             data.loggedIn && data.equippedBackground
@@ -53,14 +66,14 @@ export default function Sidebar({ data }: { data: SidebarData }) {
         </div>
         {data.loggedIn ? (
           <>
-            <h3 className="text-xl leading-tight text-primary mb-xs font-bold break-words max-w-full">{data.petName}</h3>
-            <div className="hearts-glow flex items-center justify-center gap-1 text-[22px] leading-none mb-2">{hearts}</div>
+            <h3 className="text-lg leading-tight text-primary mb-xs font-bold break-words max-w-full">{data.petName}</h3>
+            <div className="hearts-glow flex items-center justify-center gap-1 text-[20px] leading-none mb-2">{hearts}</div>
             <p className="text-[11px] text-secondary mb-0.5">生命值：{data.hp} / {data.maxHp}</p>
             <p className="text-[11px] text-secondary mb-md">金幣：{data.coins}</p>
           </>
         ) : (
           <>
-            <h3 className="text-xl leading-tight text-primary mb-xs font-bold">尚未領養寵物</h3>
+            <h3 className="text-lg leading-tight text-primary mb-xs font-bold">尚未領養寵物</h3>
             <p className="text-[11px] text-secondary mb-md px-1 leading-relaxed">登入後即可領養你的學習夥伴，透過答題與簽到一起成長。</p>
           </>
         )}
@@ -91,7 +104,7 @@ export default function Sidebar({ data }: { data: SidebarData }) {
       <SidebarNav role={data.role} />
 
       {/* Footer */}
-      <div className="mt-auto flex flex-col gap-sm pt-md border-t border-outline-variant">
+      <div className="mt-auto flex flex-col gap-sm pt-md border-t border-outline-variant shrink-0">
         <SidebarHelpButton />
         {data.loggedIn ? (
           <form action={logout}>
@@ -107,6 +120,6 @@ export default function Sidebar({ data }: { data: SidebarData }) {
           </Link>
         )}
       </div>
-    </aside>
+    </SidebarShell>
   );
 }

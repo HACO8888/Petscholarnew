@@ -26,6 +26,7 @@ export default async function PetFeedPage() {
       quantity: inventory.quantity,
       name: shopItems.name,
       icon: shopItems.icon,
+      image: shopItems.image,
       hpRestore: shopItems.hpRestore,
       expGain: shopItems.expGain,
     })
@@ -154,9 +155,18 @@ export default async function PetFeedPage() {
                 className="flex-shrink-0 w-32 md:w-40 bg-surface rounded-xl p-sm flex flex-col items-center justify-between shadow-sm border border-surface-container-low hover:shadow-md transition-shadow snap-center group"
               >
                 <div className="w-20 h-20 md:w-24 md:h-24 rounded-lg bg-surface-container-lowest flex items-center justify-center p-2 mb-sm overflow-hidden">
-                  <span className="text-4xl md:text-5xl group-hover:scale-110 transition-transform duration-300">
-                    {f.icon}
-                  </span>
+                  {f.image ? (
+                    // 與商城同一張商品圖：購買後在背包仍顯示圖片，不退回 emoji 文字
+                    <img
+                      alt={f.name}
+                      src={f.image}
+                      className="h-full w-full object-contain group-hover:scale-110 transition-transform duration-300"
+                    />
+                  ) : (
+                    <span className="text-4xl md:text-5xl group-hover:scale-110 transition-transform duration-300">
+                      {f.icon}
+                    </span>
+                  )}
                 </div>
                 <span className="font-label-md text-label-md text-on-surface text-center mb-1 line-clamp-1 w-full">
                   {f.name}

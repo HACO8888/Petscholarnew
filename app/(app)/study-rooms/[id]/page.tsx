@@ -38,11 +38,14 @@ export default async function StudyRoomDetailPage({
   const members = memberRows.map((m) => ({
     id: m.userId,
     name: m.name ?? "成員",
+    image: m.image ?? null,
     isSelf: m.userId === userId,
   }));
 
   const canManage =
     room.createdBy === userId || session?.user?.role === "admin";
+  const isMember = members.some((m) => m.isSelf);
+  const isFull = members.length >= room.capacity;
 
   return (
     <StudyRoomDetail
@@ -57,6 +60,8 @@ export default async function StudyRoomDetailPage({
       memberCount={members.length}
       meName={session?.user?.name ?? "你"}
       canManage={canManage}
+      isMember={isMember}
+      isFull={isFull}
     />
   );
 }

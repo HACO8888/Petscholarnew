@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { deleteRoom } from "@/app/(app)/study-rooms/actions";
+import { deleteRoom, joinRoom, leaveRoom } from "@/app/(app)/study-rooms/actions";
 
 interface RoomInfo {
   id: string;
@@ -16,6 +16,7 @@ interface RoomInfo {
 interface Member {
   id: string;
   name: string;
+  image: string | null;
   isSelf: boolean;
 }
 
@@ -40,6 +41,10 @@ interface StudyRoomDetailProps {
   meName: string;
   /** 是否可解散此自習室（建立者或系統管理員） */
   canManage: boolean;
+  /** 目前使用者是否已是成員 */
+  isMember: boolean;
+  /** 自習室是否已滿 */
+  isFull: boolean;
 }
 
 const POMO_SECONDS = 25 * 60;
@@ -58,6 +63,8 @@ export default function StudyRoomDetail({
   memberCount,
   meName,
   canManage,
+  isMember,
+  isFull,
 }: StudyRoomDetailProps) {
   // ---- 番茄鐘 ----
   const [timeLeft, setTimeLeft] = useState(POMO_SECONDS);
@@ -122,6 +129,10 @@ export default function StudyRoomDetail({
     }
   }, [goals, goalsKey, goalsLoaded]);
 
+  // 防連點/連按 Enter 重複送出：上鎖直到下一個動畫影格才釋放，
+  // 攔住同一輸入值在 state 清空前被第二個 Enter 事件再次送出。
+  const goalLockRef = useRef(false);
+
   function toggleGoal(id: string) {
     setGoals((gs) =>
       gs.map((g) => (g.id === id ? { ...g, completed: !g.completed } : g)),
@@ -129,12 +140,16 @@ export default function StudyRoomDetail({
   }
   function addGoal() {
     const text = newGoal.trim();
-    if (!text) return;
+    if (!text || goalLockRef.current) return;
+    goalLockRef.current = true;
     setGoals((gs) => [
       ...gs,
       { id: `goal-${Date.now()}`, text, completed: false },
     ]);
     setNewGoal("");
+    requestAnimationFrame(() => {
+      goalLockRef.current = false;
+    });
   }
 
   // ---- 聊天室（localStorage） ----
@@ -164,9 +179,11 @@ export default function StudyRoomDetail({
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [chat, chatKey, chatLoaded]);
 
+  const chatLockRef = useRef(false);
   function sendMessage() {
     const text = newMsg.trim();
-    if (!text) return;
+    if (!text || chatLockRef.current) return;
+    chatLockRef.current = true;
     setChat((c) => [
       ...c,
       {
@@ -178,6 +195,9 @@ export default function StudyRoomDetail({
       },
     ]);
     setNewMsg("");
+    requestAnimationFrame(() => {
+      chatLockRef.current = false;
+    });
   }
 
   const title = room.subject || room.name;
@@ -196,6 +216,35 @@ export default function StudyRoomDetail({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {isMember ? (
+            <form action={leaveRoom}>
+              <input type="hidden" name="roomId" value={room.id} />
+              <button
+                type="submit"
+                className="bg-surface-container-high hover:bg-surface-container-highest text-error font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span> 離開
+              </button>
+            </form>
+          ) : isFull ? (
+            <button
+              type="button"
+              disabled
+              className="bg-surface-variant text-on-surface-variant/60 font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 cursor-not-allowed flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[18px]">group_off</span> 已滿
+            </button>
+          ) : (
+            <form action={joinRoom}>
+              <input type="hidden" name="roomId" value={room.id} />
+              <button
+                type="submit"
+                className="bg-primary hover:bg-surface-tint text-on-primary font-bold text-body-md px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[18px]">group_add</span> 加入自習室
+              </button>
+            </form>
+          )}
           {canManage && (
             <form action={deleteRoom}>
               <input type="hidden" name="roomId" value={room.id} />
@@ -209,9 +258,9 @@ export default function StudyRoomDetail({
           )}
           <Link
             href="/study-rooms"
-            className="bg-surface-container-high hover:bg-surface-container-highest text-error font-bold text-body-md px-5 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1 no-underline"
+            className="bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1 no-underline"
           >
-            <span className="material-symbols-outlined">logout</span> 返回自習室
+            <span className="material-symbols-outlined">arrow_back</span> 返回列表
           </Link>
         </div>
       </div>
@@ -231,9 +280,18 @@ export default function StudyRoomDetail({
                 key={m.id}
                 className="aspect-square bg-surface-container-low dark:bg-surface rounded-lg border border-outline-variant/30 flex flex-col items-center justify-center p-2 relative overflow-hidden group"
               >
-                <span className="text-3xl mb-1">
-                  {AVATARS[i % AVATARS.length]}
-                </span>
+                {m.image ? (
+                  // 有 Google 頭像就顯示真實照片，沒有才退回 emoji 頭像
+                  <img
+                    alt=""
+                    src={m.image}
+                    className="w-10 h-10 mb-1 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-3xl mb-1">
+                    {AVATARS[i % AVATARS.length]}
+                  </span>
+                )}
                 <span className="text-[10px] font-bold text-on-surface truncate w-full text-center">
                   {m.name}
                 </span>
@@ -338,7 +396,11 @@ export default function StudyRoomDetail({
                 value={newGoal}
                 onChange={(e) => setNewGoal(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") addGoal();
+                  // 中文 IME 用 Enter 選字時不送出；連按(repeat)也擋掉
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && !e.repeat) {
+                    e.preventDefault();
+                    addGoal();
+                  }
                 }}
                 placeholder="新增目標..."
                 className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-1.5 pl-3 pr-8 text-xs focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
@@ -409,7 +471,10 @@ export default function StudyRoomDetail({
                 value={newMsg}
                 onChange={(e) => setNewMsg(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") sendMessage();
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && !e.repeat) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
                 }}
                 placeholder="輕聲輸入..."
                 className="flex-grow bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-primary focus:border-primary outline-none"

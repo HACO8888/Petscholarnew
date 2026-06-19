@@ -46,7 +46,7 @@ export interface HomeSidebarData {
   exp: number;
   coins: number;
   checkedIn: boolean;
-  quickFeed: { itemId: string; name: string; icon: string | null; quantity: number }[];
+  quickFeed: { itemId: string; name: string; icon: string | null; image: string | null; quantity: number }[];
 }
 
 const STYLE_EMOJI: Record<string, string> = {
@@ -224,7 +224,12 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
               <form key={f.itemId} action={homeFeedPet} className="flex items-center justify-between gap-1 rounded-lg bg-surface-container-low dark:bg-surface-container p-1.5">
                 <input type="hidden" name="itemId" value={f.itemId} />
                 <span className="flex items-center gap-1 text-[11px] text-on-surface truncate">
-                  <span className="text-base">{f.icon}</span>
+                  {f.image ? (
+                    // 與商城/背包同一張商品圖，避免快速餵食清單退回 emoji 文字
+                    <img alt="" src={f.image} className="h-5 w-5 shrink-0 object-contain" />
+                  ) : (
+                    <span className="text-base">{f.icon}</span>
+                  )}
                   <span className="truncate">{f.name}</span>
                   <span className="text-secondary">x{f.quantity}</span>
                 </span>

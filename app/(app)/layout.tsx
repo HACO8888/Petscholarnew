@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import Sidebar, { type SidebarData } from "@/components/Sidebar";
+import GuidedTour from "@/components/GuidedTour";
 import { auth } from "@/auth";
 import { getOrCreatePet } from "@/lib/pet";
 import { db } from "@/db";
@@ -49,9 +50,12 @@ export default async function AppLayout({
   return (
     <>
       <Sidebar data={sidebar} />
-      <main className="max-w-7xl mx-auto w-full pt-24 pb-24 md:pb-16 px-4 md:px-margin-desktop md:pr-[calc(256px+32px)] min-h-[calc(100vh-64px)] animate-fade-in-up">
-        {children}
+      <main className="min-h-screen pt-14 md:pt-0 md:pl-64">
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-6 md:py-8 animate-fade-in-up">
+          {children}
+        </div>
       </main>
+      <GuidedTour role={sidebar.role} />
     </>
   );
 }
