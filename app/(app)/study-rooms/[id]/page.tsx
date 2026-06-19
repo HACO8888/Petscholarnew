@@ -28,6 +28,7 @@ export default async function StudyRoomDetailPage({
       userId: studyRoomMembers.userId,
       name: users.name,
       image: users.image,
+      isModerator: studyRoomMembers.isModerator,
       joinedAt: studyRoomMembers.joinedAt,
     })
     .from(studyRoomMembers)
@@ -40,11 +41,30 @@ export default async function StudyRoomDetailPage({
     name: m.name ?? "成員",
     image: m.image ?? null,
     isSelf: m.userId === userId,
+    isModerator: m.isModerator,
+    isOwner: m.userId === room.createdBy,
   }));
 
-  const canManage =
-    room.createdBy === userId || session?.user?.role === "admin";
-  const isMember = members.some((m) => m.isSelf);
+  // 建立者顯示名稱（null = 系統房間）
+  let creatorName: string | null = null;
+  if (room.createdBy) {
+    const [creator] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, room.createdBy))
+      .limit(1);
+    creatorName = creator?.name ?? "成員";
+  }
+
+  const isAdmin = session?.user?.role === "admin";
+  const isOwner = room.createdBy === userId;
+  const myMembership = members.find((m) => m.isSelf);
+  const isModerator = Boolean(myMembership?.isModerator);
+
+  const canEdit = isOwner || isAdmin;
+  const canManage = isOwner || isAdmin; // 解散
+  const canModerate = isOwner || isModerator || isAdmin; // 禁麥/禁鏡/踢人
+  const isMember = Boolean(myMembership);
   const isFull = members.length >= room.capacity;
 
   return (
@@ -55,13 +75,18 @@ export default async function StudyRoomDetailPage({
         subject: room.subject,
         description: room.description,
         capacity: room.capacity,
+        // 只回傳布林旗標，不外洩密碼明碼
+        hasPassword: Boolean(room.password),
       }}
       members={members}
       memberCount={members.length}
       meId={userId}
       canManage={canManage}
+      canEdit={canEdit}
+      canModerate={canModerate}
       isMember={isMember}
       isFull={isFull}
+      creatorName={creatorName}
     />
   );
 }

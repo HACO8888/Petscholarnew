@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { alias } from "drizzle-orm/pg-core";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { studyRooms, studyRoomMembers, users, pets } from "@/db/schema";
-import { createRoom, joinRoom, leaveRoom } from "./actions";
+import StudyRoomCreateForm from "@/components/StudyRoomCreateForm";
 
 function initial(name: string | null | undefined): string {
   const trimmed = (name ?? "").trim();
@@ -25,6 +26,8 @@ export default async function StudyRoomsPage() {
     coins = pet?.coins ?? 0;
   }
 
+  // 別名 user 表用於 join 建立者名稱（不外洩密碼明碼，只取 hasPassword 旗標）
+  const creators = alias(users, "creators");
   const rooms = await db
     .select({
       id: studyRooms.id,
@@ -32,9 +35,12 @@ export default async function StudyRoomsPage() {
       subject: studyRooms.subject,
       description: studyRooms.description,
       capacity: studyRooms.capacity,
+      hasPassword: sql<boolean>`(${studyRooms.password} is not null)`,
+      creatorName: creators.name,
       members: sql<number>`(select count(*)::int from ${studyRoomMembers} where ${studyRoomMembers.roomId} = ${studyRooms.id})`,
     })
     .from(studyRooms)
+    .leftJoin(creators, eq(studyRooms.createdBy, creators.id))
     .orderBy(asc(studyRooms.sortOrder));
 
   // 各房成員（真實使用者），用於堆疊頭像
@@ -195,92 +201,7 @@ export default async function StudyRoomsPage() {
             </h2>
           </div>
           {userId ? (
-            <details className="relative">
-              <summary className="list-none cursor-pointer px-md py-xs bg-surface-container text-on-surface font-label-md text-label-md rounded-lg hover:bg-surface-variant transition-colors shadow-sm flex items-center gap-xs">
-                <span className="material-symbols-outlined text-[16px]">add</span>{" "}
-                建立房間
-              </summary>
-              <form
-                action={createRoom}
-                className="absolute right-0 z-10 mt-sm w-[min(20rem,calc(100vw-2rem))] bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/40 shadow-xl p-md space-y-md"
-              >
-                <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
-                  <span>📡</span> 發起課業共讀邀約
-                </h3>
-                <div>
-                  <label
-                    htmlFor="room-name"
-                    className="block text-xs font-bold text-secondary mb-1"
-                  >
-                    自習室名稱
-                  </label>
-                  <input
-                    id="room-name"
-                    name="name"
-                    type="text"
-                    required
-                    maxLength={80}
-                    placeholder="例：微積分期末衝刺營"
-                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="room-subject"
-                    className="block text-xs font-bold text-secondary mb-1"
-                  >
-                    科目 / 主題（選填）
-                  </label>
-                  <input
-                    id="room-subject"
-                    name="subject"
-                    type="text"
-                    maxLength={40}
-                    placeholder="例：微積分"
-                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="room-description"
-                    className="block text-xs font-bold text-secondary mb-1"
-                  >
-                    說明（選填）
-                  </label>
-                  <input
-                    id="room-description"
-                    name="description"
-                    type="text"
-                    maxLength={120}
-                    placeholder="例：專注模式，請勿開麥。"
-                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="room-capacity"
-                    className="block text-xs font-bold text-secondary mb-1"
-                  >
-                    人數上限
-                  </label>
-                  <input
-                    id="room-capacity"
-                    name="capacity"
-                    type="number"
-                    min={2}
-                    max={12}
-                    defaultValue={8}
-                    className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-0.5 transition-all shadow-sm"
-                >
-                  建立並加入
-                </button>
-              </form>
-            </details>
+            <StudyRoomCreateForm />
           ) : (
             <Link
               href="/login"
@@ -303,50 +224,73 @@ export default async function StudyRoomsPage() {
           >
             {rooms.map((room, idx) => {
               const isMember = joined.has(room.id);
-              const full = room.members >= room.capacity && !isMember;
               const isFull = room.members >= room.capacity;
               const roomMembers = membersByRoom.get(room.id) ?? [];
               const shownMembers = roomMembers.slice(0, 2);
               const extra = room.members - shownMembers.length;
               const isHot = idx === 0;
+              // 整張卡片可點擊進入詳情頁；未登入則導向登入
+              const href = userId ? `/study-rooms/${room.id}` : "/login";
               return (
-                <div
+                <Link
                   key={room.id}
                   id={`room-card-${room.id}`}
-                  className="bg-surface-bright rounded-xl p-md border border-outline-variant shadow-sm hover:shadow-md transition-shadow group flex items-start gap-md"
+                  href={href}
+                  className="bg-surface-bright rounded-xl p-md border border-outline-variant shadow-sm hover:shadow-md hover:border-primary/40 transition-all group flex items-start gap-md no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  <div className="w-16 h-16 rounded-lg bg-primary-container flex-shrink-0 flex items-center justify-center text-on-primary-container">
+                  <div className="w-16 h-16 rounded-lg bg-primary-container flex-shrink-0 flex items-center justify-center text-on-primary-container relative">
                     <span className="material-symbols-outlined text-[32px]">
                       menu_book
                     </span>
+                    {room.hasPassword && (
+                      <span
+                        title="此自習室需密碼"
+                        className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center shadow"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">lock</span>
+                      </span>
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start mb-xs">
-                      <h3 className="font-body-lg text-body-lg font-bold text-on-surface group-hover:text-primary transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start mb-xs gap-2">
+                      <h3 className="font-body-lg text-body-lg font-bold text-on-surface group-hover:text-primary transition-colors truncate">
                         {room.subject || room.name}
                       </h3>
-                      {isFull ? (
-                        <span className="bg-error-container text-on-error-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
-                          滿員
-                        </span>
-                      ) : isHot ? (
-                        <span className="bg-tertiary-container text-on-tertiary-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
-                          HOT
-                        </span>
-                      ) : null}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {isMember && (
+                          <span className="bg-primary-container text-on-primary-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
+                            已加入
+                          </span>
+                        )}
+                        {isFull ? (
+                          <span className="bg-error-container text-on-error-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
+                            滿員
+                          </span>
+                        ) : isHot ? (
+                          <span className="bg-tertiary-container text-on-tertiary-container px-2 py-0.5 rounded text-[10px] font-bold tracking-wide">
+                            HOT
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     <p className="font-body-md text-body-md text-secondary mb-xs line-clamp-1">
                       {room.description || room.name}
                     </p>
-                    <p className="mb-sm flex items-center gap-1 font-label-md text-label-md text-secondary">
-                      <span className="material-symbols-outlined text-[15px]" aria-hidden>group</span>
-                      {room.members}/{room.capacity} 人
+                    <p className="mb-xs flex flex-wrap items-center gap-x-3 gap-y-0.5 font-label-md text-label-md text-secondary">
+                      <span className="flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[15px]" aria-hidden>group</span>
+                        {room.members}/{room.capacity} 人
+                      </span>
+                      <span className="flex items-center gap-1 truncate">
+                        <span className="material-symbols-outlined text-[15px]" aria-hidden>person</span>
+                        {room.creatorName ?? "系統房間"}
+                      </span>
                     </p>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mt-sm">
                       <div className="flex -space-x-2">
                         {shownMembers.map((m, i) =>
                           m.image ? (
-                             
+
                             <img
                               key={i}
                               alt={m.name ?? "成員"}
@@ -372,46 +316,15 @@ export default async function StudyRoomsPage() {
                           <span className="text-[10px] text-secondary">尚無人加入，當第一個吧！</span>
                         )}
                       </div>
-                      {userId ? (
-                        <div className="flex items-center gap-sm">
-                          <form action={isMember ? leaveRoom : joinRoom}>
-                            <input
-                              type="hidden"
-                              name="roomId"
-                              value={room.id}
-                            />
-                            <button
-                              type="submit"
-                              disabled={full}
-                              className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
-                            >
-                              {isMember ? "離開" : full ? "滿員" : "加入"}
-                            </button>
-                          </form>
-                          <Link
-                            href={`/study-rooms/${room.id}`}
-                            className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs no-underline"
-                          >
-                            進入{" "}
-                            <span className="material-symbols-outlined text-[16px]">
-                              arrow_forward
-                            </span>
-                          </Link>
-                        </div>
-                      ) : (
-                        <Link
-                          href="/login"
-                          className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs no-underline"
-                        >
-                          登入以加入{" "}
-                          <span className="material-symbols-outlined text-[16px]">
-                            arrow_forward
-                          </span>
-                        </Link>
-                      )}
+                      <span className="text-primary font-label-md text-label-md flex items-center gap-xs group-hover:underline">
+                        {userId ? "進入" : "登入以加入"}{" "}
+                        <span className="material-symbols-outlined text-[16px]">
+                          arrow_forward
+                        </span>
+                      </span>
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
