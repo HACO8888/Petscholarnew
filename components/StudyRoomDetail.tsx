@@ -876,13 +876,13 @@ export default function StudyRoomDetail({
                         )}
                         {/* 角色徽章（左上）：加 ring-offset 與 z 讓徽章不被光環吃掉、不互相壓 */}
                         {m.isOwner ? (
-                          <span className="absolute -top-1 -left-1 z-10 bg-tertiary-container text-on-tertiary-container w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                          <span className="absolute top-0 left-0 z-10 bg-tertiary-container text-on-tertiary-container w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                             <span className="material-symbols-outlined text-[11px] leading-none">
                               star
                             </span>
                           </span>
                         ) : m.isModerator ? (
-                          <span className="absolute -top-1 -left-1 z-10 bg-secondary-container text-on-secondary-container w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                          <span className="absolute top-0 left-0 z-10 bg-secondary-container text-on-secondary-container w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                             <span className="material-symbols-outlined text-[11px] leading-none">
                               shield_person
                             </span>
@@ -890,7 +890,7 @@ export default function StudyRoomDetail({
                         ) : null}
                         {/* 在語音中 → 麥克風指示（右下） */}
                         {isInVoice && (
-                          <span className="absolute -bottom-1 -right-1 z-10 bg-primary text-on-primary w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                          <span className="absolute bottom-0 right-0 z-10 bg-primary text-on-primary w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                             <span className="material-symbols-outlined text-[11px] leading-none">
                               mic
                             </span>
@@ -1026,13 +1026,13 @@ export default function StudyRoomDetail({
                           </div>
                         )}
                         {showMuted ? (
-                          <span className="absolute -bottom-1 -right-1 z-10 bg-error text-on-error rounded-full w-4 h-4 grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                          <span className="absolute bottom-0 right-0 z-10 bg-error text-on-error rounded-full w-4 h-4 grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                             <span className="material-symbols-outlined text-[11px] leading-none">
                               mic_off
                             </span>
                           </span>
                         ) : p.hasVideo ? (
-                          <span className="absolute -bottom-1 -right-1 z-10 bg-primary text-on-primary rounded-full w-4 h-4 grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                          <span className="absolute bottom-0 right-0 z-10 bg-primary text-on-primary rounded-full w-4 h-4 grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                             <span className="material-symbols-outlined text-[11px] leading-none">
                               videocam
                             </span>

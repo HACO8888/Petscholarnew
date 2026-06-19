@@ -73,7 +73,7 @@ export default function FloatingVoiceWidget() {
           >
             <span className="text-base leading-none">🙂</span>
             {muted && (
-              <span className="absolute -bottom-1 -right-1 bg-error text-on-error w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+              <span className="absolute bottom-0 right-0 bg-error text-on-error w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                 <span className="material-symbols-outlined text-[11px] leading-none">
                   mic_off
                 </span>
@@ -94,7 +94,7 @@ export default function FloatingVoiceWidget() {
               >
                 <span className="text-base leading-none">🧑‍🎓</span>
                 {p.hasVideo && (
-                  <span className="absolute -bottom-1 -right-1 bg-primary text-on-primary w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                  <span className="absolute bottom-0 right-0 bg-primary text-on-primary w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
                     <span className="material-symbols-outlined text-[11px] leading-none">
                       videocam
                     </span>
