@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users, posts, pets, comments } from "@/db/schema";
+import { users, posts, pets, comments, departments } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
 import AvatarUpload from "@/components/AvatarUpload";
 import { updateProfile } from "./actions";
@@ -49,6 +49,14 @@ export default async function ProfilePage() {
   const petLevel = myPet?.level ?? 1;
   const petCoins = myPet?.coins ?? 0;
   const petName = myPet?.name ?? "未命名小精靈";
+
+  // 科系清單（選科系唯一來源）；含目前值但已不在清單時仍可保留顯示。
+  const departmentRows = await db
+    .select({ name: departments.name })
+    .from(departments)
+    .orderBy(departments.sortOrder, departments.name);
+  const departmentNames = departmentRows.map((d) => d.name);
+  const currentDepartment = me.department?.trim() || "";
 
   // 解答數量＝該使用者未隱藏的留言（真實資料）
   const myComments = await db
@@ -362,14 +370,22 @@ export default async function ProfilePage() {
 
             <div>
               <label className="block text-sm font-bold text-on-surface mb-1">系所</label>
-              <input
+              <select
                 name="department"
-                defaultValue={me.department ?? ""}
-                maxLength={60}
+                defaultValue={currentDepartment}
                 className="w-full bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-                placeholder="例如：資訊工程系"
-                type="text"
-              />
+              >
+                <option value="">未指定科系</option>
+                {/* 目前值已不在清單（例：科系被刪除）時，保留為選項以免儲存時遺失 */}
+                {currentDepartment && !departmentNames.includes(currentDepartment) && (
+                  <option value={currentDepartment}>{currentDepartment}（已停用）</option>
+                )}
+                {departmentNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

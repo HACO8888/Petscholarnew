@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { posts, comments, boards, pets, reports } from "@/db/schema";
+import { posts, comments, boards, pets, reports, departments } from "@/db/schema";
 import { getOrCreatePet, applyExp } from "@/lib/pet";
 
 const ADOPT_EXP = 20;
@@ -22,7 +22,17 @@ export async function createPost(formData: FormData) {
   const boardId = str(formData, "boardId");
   const title = str(formData, "title").slice(0, 200);
   const content = str(formData, "content").slice(0, 20000);
-  const department = str(formData, "department") || null;
+  // 科系：只接受 departments 清單內的值；其餘（含竄改表單）一律 null。
+  const departmentRaw = str(formData, "department").slice(0, 60);
+  let department: string | null = null;
+  if (departmentRaw) {
+    const [match] = await db
+      .select({ name: departments.name })
+      .from(departments)
+      .where(eq(departments.name, departmentRaw))
+      .limit(1);
+    department = match?.name ?? null;
+  }
   const tags = str(formData, "tags")
     .split(/[,，]/)
     .map((t) => t.trim())

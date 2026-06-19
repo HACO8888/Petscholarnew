@@ -14,6 +14,7 @@ import {
   users,
   chatMessages,
   voiceRecordings,
+  departments,
 } from "@/db/schema";
 import AccessDenied from "@/components/AccessDenied";
 import ConfirmSubmit from "@/components/admin/ConfirmSubmit";
@@ -42,12 +43,16 @@ import {
   hideRecording,
   unhideRecording,
   deleteRecording,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
 } from "./actions";
 
 /** 後台子面板：涵蓋所有可管理實體。 */
 const PANELS = [
   { id: "overview", label: "總覽", icon: "dashboard" },
   { id: "boards", label: "看板", icon: "dashboard_customize" },
+  { id: "departments", label: "科系", icon: "school" },
   { id: "posts", label: "貼文", icon: "forum" },
   { id: "comments", label: "留言", icon: "chat" },
   { id: "rooms", label: "自習室", icon: "meeting_room" },
@@ -158,6 +163,7 @@ export default async function AdminPage({
       <div className="space-y-lg">
         {panel === "overview" && <OverviewPanel />}
         {panel === "boards" && <BoardsPanel />}
+        {panel === "departments" && <DepartmentsPanel />}
         {panel === "posts" && (
           <PostsPanel
             boardFilter={boardFilter}
@@ -326,6 +332,123 @@ async function BoardsPanel() {
                     className={BTN_DANGER}
                   >
                     刪除看板
+                  </ConfirmSubmit>
+                </form>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ============================================================
+// 科系
+// ============================================================
+
+async function DepartmentsPanel() {
+  // 學院選項取自看板清單（board.id 即學院代碼），讓科系可掛在既有學院下。
+  const collegeRows = await db
+    .select({ id: boards.id, name: boards.name, icon: boards.icon })
+    .from(boards)
+    .orderBy(boards.sortOrder);
+
+  const rows = await db
+    .select()
+    .from(departments)
+    .orderBy(departments.sortOrder, departments.name);
+
+  const collegeName = (id: string | null) =>
+    collegeRows.find((c) => c.id === id)?.name ?? null;
+
+  const nextOrder =
+    rows.reduce((max, d) => Math.max(max, d.sortOrder), -1) + 1;
+
+  const collegeOptions = (
+    <>
+      <option value="">（不指定學院）</option>
+      {collegeRows.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.icon ? `${c.icon} ${c.name}` : c.name}（{c.id}）
+        </option>
+      ))}
+    </>
+  );
+
+  return (
+    <PanelShell title="科系管理" icon="school" count={`${rows.length} 個科系`}>
+      <p className="text-xs text-secondary mb-md">
+        此清單為「選科系」唯一來源：個人檔案、發問頁等所有選科系處只能從這裡選。代碼（id）作為主鍵不可事後變更，新增時留空會由系名自動產生英數 slug。
+      </p>
+
+      {/* 新增科系 */}
+      <form
+        action={createDepartment}
+        className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto_auto] gap-2 items-end p-md rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-low dark:bg-surface mb-lg"
+      >
+        <label className="text-[10px] text-secondary">
+          系名
+          <input name="name" className={`${FIELD} w-full mt-0.5`} placeholder="例：資訊工程系" required />
+        </label>
+        <label className="text-[10px] text-secondary">
+          代碼（選填）
+          <input name="id" className={`${FIELD} w-full mt-0.5`} placeholder="留空自動產生" />
+        </label>
+        <label className="text-[10px] text-secondary">
+          所屬學院
+          <select name="college" className={`${FIELD} w-full mt-0.5`} defaultValue="">
+            {collegeOptions}
+          </select>
+        </label>
+        <label className="text-[10px] text-secondary">
+          排序
+          <input type="number" name="sortOrder" defaultValue={nextOrder} className={`${FIELD} w-20 mt-0.5`} />
+        </label>
+        <button type="submit" className={BTN_PRIMARY}>新增科系</button>
+      </form>
+
+      {rows.length === 0 ? (
+        <EmptyState text="尚無科系。請先新增，或執行 npm run seed 灌入北科大科系。" />
+      ) : (
+        <div className="space-y-md">
+          {rows.map((d) => (
+            <div key={d.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="font-bold text-sm text-on-surface">{d.name}</span>
+                {collegeName(d.college) && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                    {collegeName(d.college)}
+                  </span>
+                )}
+                <code className="text-[10px] text-secondary">{d.id}</code>
+              </div>
+              <form action={updateDepartment} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
+                <input type="hidden" name="departmentId" value={d.id} />
+                <label className="text-[10px] text-secondary">
+                  系名
+                  <input name="name" defaultValue={d.name} className={`${FIELD} w-full mt-0.5`} required />
+                </label>
+                <label className="text-[10px] text-secondary">
+                  所屬學院
+                  <select key={d.college ?? "none"} name="college" defaultValue={d.college ?? ""} className={`${FIELD} w-full mt-0.5`}>
+                    {collegeOptions}
+                  </select>
+                </label>
+                <label className="text-[10px] text-secondary">
+                  排序
+                  <input type="number" name="sortOrder" defaultValue={d.sortOrder} className={`${FIELD} w-20 mt-0.5`} />
+                </label>
+                <button type="submit" className={BTN_PRIMARY}>儲存</button>
+              </form>
+              <div className="flex justify-end mt-2">
+                <form action={deleteDepartment}>
+                  <input type="hidden" name="departmentId" value={d.id} />
+                  <ConfirmSubmit
+                    message={`確定刪除科系「${d.name}」？此後選單將不再提供此項；既有使用者/貼文已填寫的科系文字不受影響。`}
+                    className={BTN_DANGER}
+                  >
+                    刪除
                   </ConfirmSubmit>
                 </form>
               </div>

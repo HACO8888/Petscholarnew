@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users, pets } from "@/db/schema";
+import { users, pets, departments } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
 
 const GENDERS = ["male", "female", "undisclosed"] as const;
@@ -26,9 +26,19 @@ export async function updateProfile(formData: FormData) {
     .slice(0, 40);
   const genderRaw = formData.get("gender") as string | null;
   const petStyleRaw = formData.get("petStyle") as string | null;
-  const department =
-    ((formData.get("department") as string | null) ?? "").trim().slice(0, 60) ||
-    null;
+  // 科系：只接受 departments 清單內的值（空字串＝未指定→null）；
+  // 不在清單內（竄改表單）一律設為 null，杜絕任意自由文字。
+  const departmentRaw =
+    ((formData.get("department") as string | null) ?? "").trim().slice(0, 60);
+  let department: string | null = null;
+  if (departmentRaw) {
+    const [match] = await db
+      .select({ name: departments.name })
+      .from(departments)
+      .where(eq(departments.name, departmentRaw))
+      .limit(1);
+    department = match?.name ?? null;
+  }
   const bio =
     ((formData.get("bio") as string | null) ?? "").trim().slice(0, 500) || null;
 

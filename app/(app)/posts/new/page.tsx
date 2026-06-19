@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { boards } from "@/db/schema";
+import { boards, departments } from "@/db/schema";
 import { auth } from "@/auth";
 import { createPost } from "@/app/(app)/posts/actions";
 
@@ -17,6 +17,10 @@ export default async function NewPostPage({
 
   const { board: preselect } = await searchParams;
   const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
+  const departmentRows = await db
+    .select({ name: departments.name })
+    .from(departments)
+    .orderBy(departments.sortOrder, departments.name);
 
   return (
     <section className="max-w-2xl min-w-0">
@@ -80,11 +84,18 @@ export default async function NewPostPage({
         <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
           <label className="block sm:col-span-1">
             <span className="mb-1 block text-label-md font-medium text-on-surface-variant">科系（選填）</span>
-            <input
-              type="text"
+            <select
               name="department"
+              defaultValue=""
               className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-            />
+            >
+              <option value="">不指定科系</option>
+              {departmentRows.map((d) => (
+                <option key={d.name} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="block sm:col-span-1">
             <span className="mb-1 block text-label-md font-medium text-on-surface-variant">標籤（逗號分隔）</span>
