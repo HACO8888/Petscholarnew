@@ -12,6 +12,7 @@ import {
   setRoomModerator,
 } from "@/app/(app)/study-rooms/actions";
 import StudyRoomEditDialog from "@/components/StudyRoomEditDialog";
+import EmojiPicker, { insertAtCursor } from "@/components/EmojiPicker";
 
 interface RoomInfo {
   id: string;
@@ -239,6 +240,7 @@ export default function StudyRoomDetail({
   >("connecting");
   const [chatError, setChatError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   // IME（中文／日文等組字）期間不送出
   const composingRef = useRef(false);
@@ -1357,10 +1359,17 @@ export default function StudyRoomDetail({
               })}
               <div ref={chatEndRef} />
             </div>
-            <div className="flex gap-1.5 mt-2">
-              <input
-                type="text"
+            <div className="flex items-end gap-1.5 mt-2">
+              <EmojiPicker
+                className="pb-1.5"
+                onSelect={(emoji) =>
+                  setNewMsg((c) => insertAtCursor(chatInputRef.current, c, emoji))
+                }
+              />
+              <textarea
+                ref={chatInputRef}
                 value={newMsg}
+                rows={1}
                 onChange={(e) => setNewMsg(e.target.value)}
                 onCompositionStart={() => {
                   composingRef.current = true;
@@ -1369,16 +1378,22 @@ export default function StudyRoomDetail({
                   composingRef.current = false;
                 }}
                 onKeyDown={(e) => {
-                  // IME 組字中的 Enter 不送出（避免吃掉選字）
-                  if (e.key === "Enter" && !composingRef.current && !e.nativeEvent.isComposing) {
+                  // Enter 送出；Shift+Enter 換行；IME 組字中的 Enter 不送出（避免吃掉選字）
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey &&
+                    !composingRef.current &&
+                    !e.nativeEvent.isComposing
+                  ) {
+                    e.preventDefault();
                     sendMessage();
                   }
                 }}
                 disabled={chatStatus !== "connected"}
                 placeholder={
-                  chatStatus === "connected" ? "輸入訊息…" : "連線中…"
+                  chatStatus === "connected" ? "輸入訊息…（Enter 送出、Shift+Enter 換行）" : "連線中…"
                 }
-                className="flex-grow bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-primary focus:border-primary outline-none disabled:opacity-60"
+                className="flex-grow resize-none bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-primary focus:border-primary outline-none disabled:opacity-60 max-h-24"
               />
               <button
                 type="button"

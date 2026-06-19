@@ -8,6 +8,8 @@ export interface CommentNode {
   hidden: boolean;
   time: string;
   contentHtml: string;
+  /** 附圖：本站服務 URL（/api/uploads/file?key=...）；無圖為 null */
+  image: string | null;
   children: CommentNode[];
 }
 
@@ -34,6 +36,7 @@ export function buildCommentTree(
       hidden: r.hidden,
       time: fmtTime(r.createdAt),
       contentHtml: renderHtml(r.content),
+      image: r.image ?? null,
       children: [],
     });
   }

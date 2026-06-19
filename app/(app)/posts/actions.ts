@@ -42,6 +42,9 @@ export async function createPost(formData: FormData) {
     0,
     Math.min(9999, Number.parseInt(str(formData, "bounty"), 10) || 0),
   );
+  // 附圖：只接受本站上傳服務 URL（前端先上傳 /api/uploads 取得），其餘一律忽略。
+  const imageRaw = str(formData, "image");
+  const image = imageRaw.startsWith("/api/uploads/file?") ? imageRaw : null;
 
   if (!boardId || !title || !content) {
     throw new Error("看板、標題與內容為必填");
@@ -75,6 +78,7 @@ export async function createPost(formData: FormData) {
       authorName: session.user.name ?? "使用者",
       title,
       content,
+      image,
       department,
       tags,
       bounty,
@@ -97,8 +101,10 @@ export async function addComment(formData: FormData) {
   const postId = str(formData, "postId");
   const parentId = str(formData, "parentId") || null;
   const content = str(formData, "content").slice(0, 20000);
+  const imageRaw = str(formData, "image");
+  const image = imageRaw.startsWith("/api/uploads/file?") ? imageRaw : null;
 
-  if (!postId || !content) throw new Error("回覆內容不可為空");
+  if (!postId || (!content && !image)) throw new Error("回覆內容不可為空");
 
   // 確認 post 存在；若指定 parent，需屬於同一篇 post
   const [post] = await db
@@ -123,6 +129,7 @@ export async function addComment(formData: FormData) {
     authorId: session.user.id,
     authorName: session.user.name ?? "使用者",
     content,
+    image,
   });
 
   revalidatePath(`/posts/${postId}`);

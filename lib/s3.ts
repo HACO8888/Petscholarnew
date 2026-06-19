@@ -88,3 +88,18 @@ export async function getObjectStream(key: string): Promise<{
 export async function deleteObject(key: string): Promise<void> {
   await getS3().send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
 }
+
+/** 影像 content-type → 副檔名對照（用於上傳留言/發問附圖時組 object key）。 */
+const IMAGE_EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/avif": "avif",
+};
+
+/** 由影像 content-type 取副檔名（未知者回 "bin"）。 */
+export function imageExtForContentType(contentType: string): string {
+  return IMAGE_EXT_BY_TYPE[contentType.toLowerCase()] ?? "bin";
+}

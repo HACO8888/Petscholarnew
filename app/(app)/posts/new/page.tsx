@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { boards, departments } from "@/db/schema";
 import { auth } from "@/auth";
 import { createPost } from "@/app/(app)/posts/actions";
+import PostImageField from "@/components/PostImageField";
 
 export default async function NewPostPage({
   searchParams,
@@ -80,6 +81,8 @@ export default async function NewPostPage({
             className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </label>
+
+        <PostImageField />
 
         <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
           <label className="block sm:col-span-1">
