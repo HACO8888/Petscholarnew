@@ -9,10 +9,10 @@
  * 皆為純前端、僅在瀏覽器執行（呼叫端確保在 client component / 事件中使用）。
  */
 
-import {
-  loadRnnoise,
-  RnnoiseWorkletNode,
-} from "@sapphi-red/web-noise-suppressor";
+// 注意：@sapphi-red/web-noise-suppressor 在模組頂層用 `class extends AudioWorkletNode`
+// 定義 WorkletNode，靜態 import 會讓 Next.js 在 SSR（伺服器端 evaluate 此模組）時
+// reference 不存在的 AudioWorkletNode 而拋 ReferenceError。改為在瀏覽器執行的函式內
+// 動態 import（且在 AudioWorkletNode guard 之後），確保只在 client 載入。
 
 // public/ 下的靜態資源路徑（worklet 與兩種 wasm）。
 const RNNOISE_WORKLET_URL = "/rnnoise/workletProcessor.js";
@@ -62,6 +62,10 @@ export async function createNoiseSuppressedTrack(
 
   try {
     if (typeof AudioWorkletNode === "undefined") return fallback();
+    // 動態載入：此時必為瀏覽器環境，套件頂層的 `extends AudioWorkletNode` 才安全。
+    const { loadRnnoise, RnnoiseWorkletNode } = await import(
+      "@sapphi-red/web-noise-suppressor"
+    );
     const ctx = getCtx();
     if (ctx.state === "suspended") {
       try {
