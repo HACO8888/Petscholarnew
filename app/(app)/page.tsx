@@ -5,7 +5,9 @@ import { boards, posts, users, shopItems, inventory } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
 import { auth } from "@/auth";
 import { getOrCreatePet, isCheckedInToday } from "@/lib/pet";
+import { readLevelUpSignal } from "@/lib/level-up-signal";
 import HomeSidebar, { type HomeSidebarData } from "@/components/HomeSidebar";
+import LevelUpToast from "@/components/LevelUpToast";
 import type { Role } from "@/db/schema";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -42,6 +44,7 @@ export default async function HomePage({
 }) {
   const { dept } = await searchParams;
   const session = await auth();
+  const levelUp = await readLevelUpSignal();
 
   const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
   const activeBoard = dept ? boardRows.find((b) => b.id === dept) : undefined;
@@ -109,6 +112,10 @@ export default async function HomePage({
 
   return (
     <div className="flex flex-col xl:flex-row relative w-full gap-lg">
+      <LevelUpToast
+        initialLevel={levelUp?.newLevel ?? null}
+        initialLevels={levelUp?.levels ?? null}
+      />
       <div className="flex-1 min-w-0">
 
         <section>

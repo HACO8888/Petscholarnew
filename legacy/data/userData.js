@@ -113,6 +113,7 @@ const SHOP_ITEMS = [
     price: 100,
     hpRestore: 500,      // 全方位：補滿 5 顆愛心
     expGain: 70,
+    minLevel: 3,         // 等級解鎖：寵物達 Lv.3 才能購買高階史詩食材
     icon: "🥩",
     image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDbd4I9bmiLHOnYtLGOXCgR3kdDXRE1D6SudyHO7MFxGcGuJbGJxERhKvXMPX7Vo0TGD3jI-n9yB_w23BvXQ30w8m4a59WjBlJ0DrvNfSk-LQxjRZQ5qpCicxXSXljcErUqUfC7Vm0tt1Ajp12im40LoRjsq4gTRhnHK1GrogDc-a5LSqygpICaEsvEvHj6HryUKU8InFbxNNjws9NxTo9Qyuc8VxRHLeCZtk3mi0fdqCqIY63xTH21grKahZups29DCihFHatK4gu_",
     description: "頂級食材，全方位提升狀態與經驗。"
@@ -124,6 +125,7 @@ const SHOP_ITEMS = [
     price: 120,
     hpRestore: 500,      // 全方位：補滿 5 顆愛心
     expGain: 80,
+    minLevel: 5,         // 等級解鎖：寵物達 Lv.5 才能購買頂級史詩甜點
     icon: "🍰",
     image: "https://lh3.googleusercontent.com/aida-public/AB6AXuC-5Y3-i1lX5qFNwzJkoCuS8jHNUViv1A6XrGXr2UOyCfJvGpaKAIxIAbm1O1iOtZfan4Agbfesds_OPhy-qYMqAWdys2LBlIR3oT9j_GVmBeKVGr0kiAjxqRmdK0gmSxK3LPUVGU9sqoTka3C0nzvDeDS_Fz9eCV8orxH83V-avq5T2ChZ1LGA5qMOWH3FrkH6mKuMNqIKLxeB5zqiLzDleenYIX2UIbLzjhZCmQZYUupsg9yLcgcN22hnoSbq-wAZ0Df_GB7oGfDx",
     description: "精緻甜點，大幅提升心情與狀態。"
@@ -157,6 +159,7 @@ const SHOP_ITEMS = [
     price: 100,
     hpRestore: 0,
     expGain: 50,
+    minLevel: 3,         // 等級解鎖：寵物達 Lv.3 才能購買傳奇黃金造型
     icon: "👑",
     type: "accessory",
     accessoryType: "rareStyle",

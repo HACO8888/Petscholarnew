@@ -15,9 +15,12 @@ export default async function ShopPage() {
   let equipped: Record<string, boolean> = {};
   // 未登入者不顯示假餘額，coins 為 null 代表「需登入」。
   let coins: number | null = null;
+  // 未登入者 petLevel 為 0，等級鎖一律顯示「需登入」狀態。
+  let petLevel = 0;
   if (session?.user?.id) {
     const pet = await getOrCreatePet(session.user.id);
     coins = pet.coins;
+    petLevel = pet.level;
     equipped = {
       hat: pet.equippedHat,
       background: pet.equippedBackground,
@@ -81,6 +84,8 @@ export default async function ShopPage() {
             const img = item.image;
             const ownedQty = owned.get(item.id) ?? 0;
             const cannotAfford = coins !== null && coins < item.price;
+            // 等級鎖：min_level 高於當前寵物等級則鎖定（登入後才比對真實等級）
+            const locked = isLoggedIn && item.minLevel > 0 && petLevel < item.minLevel;
 
             const cardClass = isEpic
               ? "bg-surface-bright rounded-xl p-md border border-tertiary-container shadow-sm hover:shadow-md transition-shadow flex flex-col bg-gradient-to-b from-surface-bright to-tertiary-fixed/10 relative overflow-hidden"
@@ -124,6 +129,14 @@ export default async function ShopPage() {
                     持有 {ownedQty}
                   </div>
                 )}
+                {item.minLevel > 0 && (
+                  <div className="absolute bottom-2 left-2 flex items-center gap-0.5 bg-surface-container-highest/90 text-on-surface-variant px-sm py-xs rounded-full font-label-md text-label-md z-20">
+                    <span className="material-symbols-outlined text-[14px]" aria-hidden>
+                      {locked ? "lock" : "lock_open"}
+                    </span>
+                    Lv.{item.minLevel}
+                  </div>
+                )}
                 <div className={imageWrapClass}>
                   {!isEpic && !isRare && !isCommon && (
                     <div className="absolute inset-0 bg-gradient-to-br from-secondary-container to-surface-container opacity-50"></div>
@@ -159,6 +172,18 @@ export default async function ShopPage() {
                     >
                       登入購買
                     </Link>
+                  ) : locked ? (
+                    <button
+                      type="button"
+                      disabled
+                      title={`寵物達到 Lv.${item.minLevel} 後解鎖`}
+                      className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[16px]" aria-hidden>
+                        lock
+                      </span>
+                      需 Lv.{item.minLevel}
+                    </button>
                   ) : cannotAfford ? (
                     <button
                       type="button"
@@ -248,6 +273,7 @@ export default async function ShopPage() {
             {accessories.map((item) => {
               const isOwned = (owned.get(item.id) ?? 0) > 0;
               const cannotAfford = coins !== null && coins < item.price;
+              const locked = isLoggedIn && item.minLevel > 0 && petLevel < item.minLevel;
               return (
                 <div
                   key={item.id}
@@ -258,6 +284,14 @@ export default async function ShopPage() {
                     {isOwned && (
                       <span className="absolute top-2 right-2 z-20 bg-tertiary text-on-tertiary px-sm py-xs rounded-full font-label-md text-label-md">
                         已擁有
+                      </span>
+                    )}
+                    {item.minLevel > 0 && (
+                      <span className="absolute bottom-2 left-2 z-20 flex items-center gap-0.5 bg-surface-container-highest/90 text-on-surface-variant px-sm py-xs rounded-full font-label-md text-label-md">
+                        <span className="material-symbols-outlined text-[14px]" aria-hidden>
+                          {locked ? "lock" : "lock_open"}
+                        </span>
+                        Lv.{item.minLevel}
                       </span>
                     )}
                     <span className="text-5xl relative z-10 group-hover:scale-110 transition-transform duration-300">
@@ -288,6 +322,18 @@ export default async function ShopPage() {
                       <span className="px-md py-xs border border-tertiary-container text-tertiary rounded-lg font-label-md text-label-md">
                         已擁有
                       </span>
+                    ) : locked ? (
+                      <button
+                        type="button"
+                        disabled
+                        title={`寵物達到 Lv.${item.minLevel} 後解鎖`}
+                        className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-[16px]" aria-hidden>
+                          lock
+                        </span>
+                        需 Lv.{item.minLevel}
+                      </button>
                     ) : cannotAfford ? (
                       <button
                         type="button"

@@ -30,8 +30,8 @@ let itemOrder = 0;
 let itemCount = 0;
 for (const it of SHOP_ITEMS) {
   await sql`
-    INSERT INTO "shop_item" (id, name, grade, price, hp_restore, exp_gain, icon, image, description, type, accessory_type, sort_order)
-    VALUES (${it.id}, ${it.name}, ${it.grade ?? null}, ${it.price ?? 0}, ${it.hpRestore ?? 0}, ${it.expGain ?? 0}, ${it.icon ?? null}, ${it.image ?? null}, ${it.description ?? null}, ${it.type === "accessory" ? "accessory" : "food"}, ${it.accessoryType ?? null}, ${itemOrder++})
+    INSERT INTO "shop_item" (id, name, grade, price, hp_restore, exp_gain, icon, image, description, type, accessory_type, min_level, sort_order)
+    VALUES (${it.id}, ${it.name}, ${it.grade ?? null}, ${it.price ?? 0}, ${it.hpRestore ?? 0}, ${it.expGain ?? 0}, ${it.icon ?? null}, ${it.image ?? null}, ${it.description ?? null}, ${it.type === "accessory" ? "accessory" : "food"}, ${it.accessoryType ?? null}, ${it.minLevel ?? 0}, ${itemOrder++})
   `;
   itemCount++;
 }
