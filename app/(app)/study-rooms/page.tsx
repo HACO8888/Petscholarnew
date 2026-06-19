@@ -202,7 +202,7 @@ export default async function StudyRoomsPage() {
               </summary>
               <form
                 action={createRoom}
-                className="absolute right-0 z-10 mt-sm w-80 bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/40 shadow-xl p-md space-y-md"
+                className="absolute right-0 z-10 mt-sm w-[min(20rem,calc(100vw-2rem))] bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/40 shadow-xl p-md space-y-md"
               >
                 <h3 className="font-bold text-body-lg text-on-surface flex items-center gap-1">
                   <span>📡</span> 發起課業共讀邀約
@@ -335,8 +335,12 @@ export default async function StudyRoomsPage() {
                         </span>
                       ) : null}
                     </div>
-                    <p className="font-body-md text-body-md text-secondary mb-sm line-clamp-1">
+                    <p className="font-body-md text-body-md text-secondary mb-xs line-clamp-1">
                       {room.description || room.name}
+                    </p>
+                    <p className="mb-sm flex items-center gap-1 font-label-md text-label-md text-secondary">
+                      <span className="material-symbols-outlined text-[15px]" aria-hidden>group</span>
+                      {room.members}/{room.capacity} 人
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex -space-x-2">
@@ -365,9 +369,7 @@ export default async function StudyRoomsPage() {
                           </div>
                         )}
                         {room.members === 0 && (
-                          <span className="text-[10px] text-secondary">
-                            尚無人加入 (0/{room.capacity})
-                          </span>
+                          <span className="text-[10px] text-secondary">尚無人加入，當第一個吧！</span>
                         )}
                       </div>
                       {userId ? (
@@ -381,7 +383,7 @@ export default async function StudyRoomsPage() {
                             <button
                               type="submit"
                               disabled={full}
-                              className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs disabled:opacity-50"
+                              className="text-primary font-label-md text-label-md hover:underline flex items-center gap-xs disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
                             >
                               {isMember ? "離開" : full ? "滿員" : "加入"}
                             </button>

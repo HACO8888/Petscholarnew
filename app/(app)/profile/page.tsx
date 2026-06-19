@@ -188,7 +188,8 @@ export default async function ProfilePage() {
             {achievements.map((a) => (
               <div
                 key={a.key}
-                className={`flex flex-col items-center group cursor-pointer ${a.unlocked ? "" : "opacity-50 grayscale"}`}
+                title={`${a.label}${a.unlocked ? "（已解鎖）" : "（尚未解鎖）"}`}
+                className={`flex flex-col items-center group ${a.unlocked ? "" : "opacity-50 grayscale"}`}
               >
                 <div
                   className={`w-16 h-16 rounded-full flex items-center justify-center mb-sm ${
@@ -229,7 +230,7 @@ export default async function ProfilePage() {
               <a
                 key={q.id}
                 href={`/posts/${q.id}`}
-                className="bg-surface rounded-xl p-md shadow-sm border border-surface-container-low hover:border-primary-fixed transition-colors cursor-pointer group block"
+                className="bg-surface rounded-xl p-md shadow-sm border border-surface-container-low hover:border-primary-fixed hover:shadow-md transition-all group block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 style={{ textDecoration: "none" }}
               >
                 <div className="flex items-center gap-sm mb-sm text-secondary font-label-md text-label-md">
@@ -278,8 +279,8 @@ export default async function ProfilePage() {
         </div>
         <div className="bg-surface-container-low rounded-xl p-lg shadow-sm">
           <div className="flex items-center justify-between text-secondary font-label-md text-label-md mb-sm">
-            <span>超過 3 筆時可在下方區塊上下捲動查看全部。</span>
-            <span>{questionCount > 3 ? `可捲動查看 ${questionCount} 筆` : `共 ${questionCount} 筆`}</span>
+            <span>{questionCount > 3 ? "於下方區塊內捲動可查看全部紀錄。" : "您的全部提問紀錄。"}</span>
+            <span>共 {questionCount} 筆</span>
           </div>
           <div className="flex flex-col gap-sm max-h-[430px] overflow-y-auto pr-sm scroll-smooth">
             {questionCount === 0 ? (
@@ -291,7 +292,7 @@ export default async function ProfilePage() {
                 <a
                   key={q.id}
                   href={`/posts/${q.id}`}
-                  className="block p-md rounded-lg bg-surface border border-outline-variant hover:shadow-sm transition-all"
+                  className="block p-md rounded-lg bg-surface border border-outline-variant hover:border-primary/40 hover:shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   style={{ textDecoration: "none" }}
                 >
                   <div className="flex items-center justify-between gap-sm mb-xs">
@@ -414,7 +415,7 @@ export default async function ProfilePage() {
 
             <button
               type="submit"
-              className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold py-2.5 rounded-lg mt-md shadow-sm transition-all"
+              className="w-full bg-primary text-on-primary hover:bg-surface-tint font-bold py-2.5 rounded-lg mt-md shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
               儲存個人檔案修改
             </button>

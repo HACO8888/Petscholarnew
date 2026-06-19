@@ -105,12 +105,22 @@ function CommentItem({
           : "border-outline-variant/30 bg-surface-container-low dark:bg-surface-container"
       }`}
     >
-      <div className="mb-1 flex items-center gap-2">
-        <span className="text-body-md font-semibold text-on-background">{node.authorName}</span>
+      <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          aria-hidden
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+            node.isAdopted
+              ? "bg-primary text-on-primary"
+              : "bg-secondary-container text-on-secondary-container"
+          }`}
+        >
+          {node.authorName.trim().charAt(0).toUpperCase() || "?"}
+        </span>
+        <span className="text-body-md font-semibold text-on-background break-words">{node.authorName}</span>
         <span className="text-label-md text-secondary">{node.time}</span>
         {node.isAdopted && (
           <span className="inline-flex items-center gap-0.5 rounded-full bg-primary px-2 py-0.5 text-label-md font-medium text-on-primary">
-            <span className="material-symbols-outlined text-[14px] icon-fill">verified</span>
+            <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>verified</span>
             已採納
           </span>
         )}
@@ -214,7 +224,7 @@ function CommentItem({
       )}
 
       {node.children.length > 0 && (
-        <div className="mt-3 space-y-3 border-l-2 border-outline-variant/30 pl-4">
+        <div className={`mt-3 space-y-3 border-l-2 pl-2.5 sm:pl-4 ${node.isAdopted ? "border-primary/40" : "border-outline-variant/30"}`}>
           {node.children.map((child) => (
             <CommentItem
               key={child.id}

@@ -73,7 +73,16 @@ export default async function BoardPage({
 
       <div className="space-y-3">
         {postRows.length === 0 ? (
-          <p className="text-body-md text-secondary">這個看板還沒有提問，來當第一個發問的人吧！</p>
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-outline-variant/50 bg-surface-container-lowest px-4 py-12 text-center dark:bg-surface-container">
+            <span className="material-symbols-outlined text-[48px] text-outline" aria-hidden>forum</span>
+            <p className="text-body-md text-secondary">這個看板還沒有提問，來當第一個發問的人吧！</p>
+            <Link
+              href={`/posts/new?board=${board.id}`}
+              className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-label-md font-bold text-on-primary no-underline shadow-sm transition-all hover:bg-surface-tint"
+            >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>edit_square</span> 發佈新提問
+            </Link>
+          </div>
         ) : (
           postRows.map((p) => <PostListItem key={p.id} post={p as PostListData} />)
         )}

@@ -18,10 +18,10 @@ export default function PostListItem({ post }: { post: PostListData }) {
   return (
     <Link
       href={`/posts/${post.id}`}
-      className="block rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 no-underline transition-all hover:border-primary/40 hover:shadow-sm dark:bg-surface-container"
+      className="block rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 no-underline transition-all hover:border-primary/40 hover:shadow-sm dark:bg-surface-container focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-body-lg font-semibold text-on-background">{post.title}</h3>
+        <h3 className="min-w-0 break-words text-body-lg font-semibold text-on-background">{post.title}</h3>
         <div className="flex shrink-0 items-center gap-2">
           {post.solved ? (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-container px-2 py-0.5 text-label-md font-medium text-on-primary-container">
