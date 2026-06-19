@@ -66,7 +66,7 @@ export default async function ShopPage() {
   };
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-6xl mx-auto space-y-xl">
+    <div className="space-y-xl">
       {/* Page Header */}
       <header className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
@@ -131,13 +131,17 @@ export default async function ShopPage() {
               ? "font-body-lg text-body-lg font-bold text-on-tertiary-container mb-xs"
               : "font-body-lg text-body-lg font-bold text-on-surface mb-xs";
 
-            const buyBtnClass = isEpic
-              ? "px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm"
-              : isRare
-                ? "px-md py-xs bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-surface-tint transition-colors"
-                : isCommon
-                  ? "px-md py-xs bg-primary/10 text-primary border border-primary/20 rounded-lg font-label-md text-label-md hover:bg-primary/20 transition-colors"
-                  : "px-md py-xs border border-secondary text-secondary rounded-lg font-label-md text-label-md hover:bg-surface-variant transition-colors";
+            const focusRing =
+              " focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-bright";
+            const buyBtnClass =
+              (isEpic
+                ? "px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm"
+                : isRare
+                  ? "px-md py-xs bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-surface-tint transition-colors"
+                  : isCommon
+                    ? "px-md py-xs bg-primary/10 text-primary border border-primary/20 rounded-lg font-label-md text-label-md hover:bg-primary/20 transition-colors"
+                    : "px-md py-xs border border-secondary text-secondary rounded-lg font-label-md text-label-md hover:bg-surface-variant transition-colors") +
+              focusRing;
 
             return (
               <div className={cardClass} key={item.id} id={`shop-item-${item.id}`}>
@@ -248,7 +252,7 @@ export default async function ShopPage() {
                     <button
                       type="submit"
                       disabled={!item.accessoryType}
-                      className={`w-full px-md py-xs rounded-lg font-label-md text-label-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      className={`w-full px-md py-xs rounded-lg font-label-md text-label-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-bright ${
                         isEquipped
                           ? "bg-tertiary text-on-tertiary hover:opacity-90"
                           : "border border-secondary text-secondary hover:bg-surface-variant"

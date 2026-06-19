@@ -44,9 +44,10 @@ export default async function PostPage({
       <div className="flex flex-wrap justify-between items-center gap-2 mb-md">
         <Link
           href={board ? `/boards/${board.id}` : "/boards"}
-          className="text-secondary hover:text-primary font-bold text-body-md flex items-center gap-1 py-1.5 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 transition-all no-underline"
+          className="text-secondary hover:text-primary font-bold text-body-md flex items-center gap-1 py-1.5 px-3 rounded-lg bg-surface-container-low border border-outline-variant/30 transition-all no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span> 返回看板列表
+          <span className="material-symbols-outlined text-[18px]" aria-hidden>arrow_back</span>
+          {board ? `返回${board.name}` : "返回看板列表"}
         </Link>
 
         <div className="bg-tertiary-container text-on-tertiary-container px-4 py-1.5 rounded-full font-bold text-body-md flex items-center gap-1 shadow-sm">
@@ -134,9 +135,9 @@ export default async function PostPage({
       {/* Comment tree visualizer */}
       <div className="mb-lg">
         <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1 mb-sm">
-          <span className="material-symbols-outlined">account_tree</span> 留言樹狀結構
+          <span className="material-symbols-outlined text-primary">account_tree</span> 留言樹狀結構
         </h3>
-        <p className="text-secondary text-xs mb-sm">點擊節點可跳至對應留言。</p>
+        <p className="text-secondary text-xs mb-sm">頂端為本提問，往下為各層回覆；點擊（或聚焦後按 Enter）任一節點即可跳至對應留言。</p>
         <CommentTreeSvg nodes={tree} rootLabel={post.title} />
       </div>
 

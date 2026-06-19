@@ -327,7 +327,8 @@ export default async function LeaderboardPage({
                   ? "/leaderboard"
                   : `/leaderboard?tab=${t.key}`
               }
-              className={`flex-1 py-2 px-2 sm:px-4 font-bold text-label-md sm:text-body-md rounded-full transition-all text-center whitespace-nowrap ${
+              aria-current={isActive ? "page" : undefined}
+              className={`flex-1 py-2 px-2 sm:px-4 font-bold text-label-md sm:text-body-md rounded-full transition-all text-center whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                 isActive
                   ? "bg-primary text-on-primary shadow-sm dark:bg-primary-fixed dark:text-on-primary-fixed"
                   : "text-secondary dark:text-secondary-fixed-dim hover:text-primary dark:hover:text-primary-fixed"
@@ -579,7 +580,7 @@ export default async function LeaderboardPage({
               成就展示館
             </h2>
             <span className="bg-primary-container text-on-primary-container px-sm py-1 rounded-full font-label-md text-label-md">
-              已解鎖 {unlockedCount}/6
+              已解鎖 {unlockedCount}/{achievements?.length ?? 6}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-sm md:gap-md auto-rows-[140px]">

@@ -46,7 +46,7 @@ export default async function PetFeedPage() {
   const isHungry = pet.hp <= Math.round(pet.maxHp * 0.35);
 
   return (
-    <main className="flex-1 px-margin-mobile md:px-margin-desktop py-lg md:py-xl flex flex-col min-h-[calc(100vh-64px)] relative overflow-x-hidden">
+    <div className="flex flex-col flex-1 min-h-[calc(100vh-220px)] relative overflow-x-hidden">
       {/* HP + Coins capsule */}
       <div className="flex flex-wrap items-center gap-sm sm:gap-lg mb-md bg-surface-container-low/80 backdrop-blur-sm py-sm px-md rounded-full border border-surface-container-high w-fit max-w-full shadow-sm animate-fade-in-up">
         <div className="flex items-center gap-sm">
@@ -179,6 +179,6 @@ export default async function PetFeedPage() {
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

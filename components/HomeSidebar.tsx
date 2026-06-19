@@ -155,7 +155,7 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
                 <button
                   type="submit"
                   disabled={data.checkedIn}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold text-[10.5px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all disabled:opacity-50"
+                  className="bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold text-[10.5px] px-2.5 py-1.5 rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {data.checkedIn ? "已簽到" : "每日簽到 (+20)"}
                 </button>
@@ -184,7 +184,8 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
                 <button
                   type="submit"
                   disabled={data.coins < 20 || data.hp >= data.maxHp}
-                  className="w-full mt-1.5 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                  title={data.hp >= data.maxHp ? "生命值已滿" : data.coins < 20 ? "金幣不足" : "花 20 金幣回復生命值"}
+                  className="w-full mt-1.5 bg-surface-container border border-outline-variant/30 hover:bg-surface-container-highest text-secondary hover:text-on-surface font-semibold text-[10.5px] py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>💊</span> 治療寵物 (-20 金幣)
                 </button>
@@ -216,8 +217,12 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
         <div className="space-y-1.5">
           {data.quickFeed.length === 0 ? (
             <div className="text-center py-3">
-              <p className="text-[11px] text-secondary mb-1">背包目前沒有食物喔！</p>
-              <Link href="/shop" className="text-[11px] font-bold text-primary hover:underline">前往商城購買 →</Link>
+              <p className="text-[11px] text-secondary mb-1">
+                {data.loggedIn ? "背包目前沒有食物喔！" : "登入後即可餵食你的學習夥伴。"}
+              </p>
+              <Link href={data.loggedIn ? "/shop" : "/login"} className="text-[11px] font-bold text-primary hover:underline">
+                {data.loggedIn ? "前往商城購買 →" : "前往登入 →"}
+              </Link>
             </div>
           ) : (
             data.quickFeed.map((f) => (

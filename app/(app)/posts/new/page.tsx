@@ -43,7 +43,7 @@ export default async function NewPostPage({
             name="boardId"
             required
             defaultValue={preselect ?? ""}
-            className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none focus:border-primary"
+            className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           >
             <option value="" disabled>請選擇看板</option>
             {boardRows.map((b) => (
@@ -61,7 +61,7 @@ export default async function NewPostPage({
             name="title"
             required
             maxLength={200}
-            className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none focus:border-primary"
+            className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </label>
 
@@ -73,7 +73,7 @@ export default async function NewPostPage({
             name="content"
             required
             rows={8}
-            className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none focus:border-primary"
+            className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </label>
 
@@ -83,7 +83,7 @@ export default async function NewPostPage({
             <input
               type="text"
               name="department"
-              className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none focus:border-primary"
+              className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </label>
           <label className="block sm:col-span-1">
@@ -92,7 +92,7 @@ export default async function NewPostPage({
               type="text"
               name="tags"
               placeholder="微積分, 大一必修"
-              className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none focus:border-primary"
+              className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </label>
           <label className="block sm:col-span-1">
@@ -103,14 +103,14 @@ export default async function NewPostPage({
               min={0}
               max={9999}
               defaultValue={0}
-              className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none focus:border-primary"
+              className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-md text-on-surface outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </label>
         </div>
 
         <button
           type="submit"
-          className="rounded-full bg-primary px-6 py-2 text-label-md font-bold text-on-primary transition-all hover:bg-surface-tint"
+          className="w-full rounded-full bg-primary px-6 py-2.5 text-label-md font-bold text-on-primary transition-all hover:bg-surface-tint focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:w-auto"
         >
           發佈提問
         </button>

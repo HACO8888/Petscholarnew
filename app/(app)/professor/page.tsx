@@ -71,7 +71,7 @@ export default async function ProfessorPage() {
   ];
 
   return (
-    <section className="tab-section active" id="sect-professor">
+    <section id="sect-professor">
       <div className="mb-lg border-b border-outline-variant/30 pb-3 bg-gradient-to-r from-primary/10 to-transparent p-md rounded-lg">
         <h1 className="font-semibold text-headline-lg text-on-surface flex items-center gap-2">
           <span className="material-symbols-outlined text-primary">school</span>
@@ -160,7 +160,7 @@ export default async function ProfessorPage() {
                 <Link
                   key={p.id}
                   href={`/posts/${p.id}`}
-                  className="block bg-surface-container-low dark:bg-surface p-md rounded-xl border-l-4 border-primary no-underline transition-colors hover:bg-surface-container"
+                  className="block bg-surface-container-low dark:bg-surface p-md rounded-xl border-l-4 border-primary no-underline transition-colors hover:bg-surface-container focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <h5 className="font-bold text-xs text-on-surface break-words">
                     <span className="text-primary">#{p.boardName}</span>　{p.title}

@@ -152,7 +152,7 @@ export default async function LoginPage() {
                 <form action={loginWithGoogle}>
                   <button
                     type="submit"
-                    className="flex w-full items-center justify-center gap-sm rounded-lg border border-primary bg-surface-container-lowest py-sm text-label-md font-medium text-on-surface shadow-sm transition-colors hover:bg-surface-container"
+                    className="flex w-full items-center justify-center gap-sm rounded-lg border border-primary bg-surface-container-lowest py-sm text-label-md font-medium text-on-surface shadow-sm transition-colors hover:bg-surface-container focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     <svg
                       aria-hidden="true"

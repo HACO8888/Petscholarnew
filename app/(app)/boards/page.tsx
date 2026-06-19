@@ -77,7 +77,7 @@ export default async function BoardsPage() {
               <Link
                 key={b.id}
                 href={`/boards/${b.id}`}
-                className="flex flex-col bg-surface rounded-xl shadow-sm border border-surface-container-highest overflow-hidden hover:shadow-md transition-shadow group cursor-pointer relative no-underline dark:bg-surface-container-low"
+                className="flex flex-col bg-surface rounded-xl shadow-sm border border-surface-container-highest overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all group relative no-underline dark:bg-surface-container-low focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 <div className="h-32 relative" style={{ backgroundColor: b.color ?? "#4b6172" }}>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />

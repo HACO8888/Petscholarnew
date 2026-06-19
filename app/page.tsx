@@ -108,39 +108,43 @@ export default async function HomePage({
   }
 
   return (
-    <div className="flex flex-col xl:flex-row relative max-w-7xl mx-auto w-full pt-20 pb-16 px-4 md:px-8 gap-lg">
-      <main className="flex-1 min-h-[calc(100vh-144px)] animate-fade-in-up">
+    <div className="flex flex-col xl:flex-row relative max-w-7xl mx-auto w-full pt-24 pb-24 md:pb-16 px-4 md:px-margin-desktop gap-lg">
+      <main className="flex-1 min-w-0 min-h-[calc(100vh-144px)] animate-fade-in-up">
         <section>
           <div className="mb-lg">
             <h1 className="font-semibold text-headline-lg text-on-background">看板</h1>
-            <p className="text-secondary text-body-md">探索各學院與科系的專業課業討論。</p>
+            <p className="text-secondary text-body-md mt-xs">探索各學院與科系的專業課業討論。</p>
           </div>
 
-          <div className="mb-lg bg-surface-container-low dark:bg-surface-container p-md rounded-xl border border-outline-variant/20">
-            <h3 className="font-bold text-body-md text-secondary mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">trending_up</span> 熱門標籤
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {topTags.map((t) => (
-                <span key={t} className="bg-primary-container/40 text-on-primary-container font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer hover:bg-primary-container transition-all">
-                  # {t}
-                </span>
-              ))}
+          {topTags.length > 0 && (
+            <div className="mb-lg bg-surface-container-low dark:bg-surface-container p-md rounded-xl border border-outline-variant/20">
+              <h2 className="font-bold text-label-md text-secondary mb-2 flex items-center gap-1">
+                <span className="material-symbols-outlined text-base" aria-hidden>trending_up</span> 熱門標籤
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {topTags.map((t) => (
+                  <span key={t} className="bg-primary-container/40 text-on-primary-container font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-sm">
+                    # {t}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-md mb-lg">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-sm sm:gap-md mb-lg">
             {boardRows.map((b) => {
               const isActive = activeBoard?.id === b.id;
               return (
                 <Link
                   key={b.id}
                   href={isActive ? "/" : `/?dept=${b.id}`}
-                  className={`rounded-xl border bg-surface-container-lowest dark:bg-surface-container-high p-md flex flex-col items-center justify-center text-center cursor-pointer transition-all no-underline ${isActive ? "scale-95 font-bold" : "border-outline-variant/30 hover:border-primary/40 hover:scale-[1.02]"}`}
-                  style={isActive && b.color ? { borderColor: b.color, backgroundColor: `${b.color}15`, boxShadow: `0 10px 15px -3px ${b.color}25`, borderWidth: "2px" } : undefined}
+                  aria-pressed={isActive}
+                  title={isActive ? `取消篩選：${b.name}` : `只看 ${b.name} 的提問`}
+                  className={`rounded-xl border bg-surface-container-lowest dark:bg-surface-container-high p-md flex flex-col items-center justify-center text-center transition-all no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isActive ? "border-2 font-bold shadow-md" : "border-outline-variant/30 hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-sm"}`}
+                  style={isActive && b.color ? { borderColor: b.color, backgroundColor: `${b.color}15`, boxShadow: `0 10px 15px -3px ${b.color}25` } : undefined}
                 >
-                  <span className="text-3xl mb-2">{b.icon}</span>
-                  <h4 className="font-bold text-body-lg text-on-surface mb-1">{b.name}</h4>
+                  <span className="text-3xl mb-2" aria-hidden>{b.icon}</span>
+                  <h3 className="font-bold text-body-md sm:text-body-lg text-on-surface leading-tight">{b.name}</h3>
                 </Link>
               );
             })}
@@ -158,8 +162,14 @@ export default async function HomePage({
 
           <div className="space-y-md">
             {postRows.length === 0 ? (
-              <div className="bg-surface-container-lowest dark:bg-surface-container-high border border-outline-variant/30 rounded-xl text-center text-secondary py-10 text-xs">
-                目前尚無課業提問。歡迎發表新問題！
+              <div className="flex flex-col items-center gap-2 bg-surface-container-lowest dark:bg-surface-container-high border border-dashed border-outline-variant/50 rounded-xl text-center py-12 px-4">
+                <span className="material-symbols-outlined text-[48px] text-outline" aria-hidden>forum</span>
+                <p className="text-body-md text-secondary">
+                  {activeBoard ? `「${activeBoard.name}」目前尚無提問。` : "目前尚無課業提問。"}歡迎成為第一個發問的人！
+                </p>
+                <Link href="/posts/new" className="mt-1 inline-flex items-center gap-1 rounded-lg bg-primary px-4 py-2 text-body-md font-bold text-on-primary no-underline shadow-sm transition-all hover:bg-surface-tint">
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden>add_circle</span> 發佈新提問
+                </Link>
               </div>
             ) : (
               postRows.map((p) => (

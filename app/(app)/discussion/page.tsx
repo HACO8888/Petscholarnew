@@ -145,10 +145,12 @@ export default async function DiscussionPage({
           <Link
             key={f.key}
             href={buildQuery({ status: f.key, sort: activeSort, board: activeBoard })}
+            aria-current={active === f.key ? "page" : undefined}
             className={
-              active === f.key
-                ? "px-md py-xs rounded-full bg-primary-container text-on-primary-container border border-transparent font-label-md text-label-md transition-colors"
-                : "px-md py-xs rounded-full bg-surface text-secondary border border-outline-variant hover:bg-surface-container font-label-md text-label-md transition-colors"
+              (active === f.key
+                ? "bg-primary-container text-on-primary-container border-transparent font-bold"
+                : "bg-surface text-secondary border-outline-variant hover:bg-surface-container") +
+              " px-md py-xs rounded-full border font-label-md text-label-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             }
             style={{ textDecoration: "none" }}
           >
@@ -239,7 +241,7 @@ export default async function DiscussionPage({
             <Link
               key={post.id}
               href={`/posts/${post.id}`}
-              className="bg-surface-container-lowest border border-surface-variant rounded-lg p-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer relative group block"
+              className="bg-surface-container-lowest border border-surface-variant rounded-lg p-lg shadow-sm hover:shadow-md hover:border-primary/40 transition-all relative group block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               style={{ textDecoration: "none" }}
             >
               <div className="flex flex-col sm:flex-row gap-md">
