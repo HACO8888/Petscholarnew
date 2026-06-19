@@ -9,7 +9,7 @@ import {
   studyRoomMembers,
   couponRedemptions,
 } from "@/db/schema";
-import { getOrCreatePet } from "@/lib/pet";
+import { getOrCreatePet, petTitle } from "@/lib/pet";
 import { redeemCoupon } from "./actions";
 import { WELFARE_ITEMS } from "./welfare-data";
 
@@ -396,15 +396,17 @@ export default async function LeaderboardPage({
                       </span>
                     </div>
                     <div className="relative mb-sm">
-                      <div
-                        className={`w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-tertiary-container shadow-lg overflow-hidden bg-primary-container ${
+                      <Link
+                        href={`/u/${member.userId}`}
+                        aria-label={`查看 ${member.name ?? "使用者"} 的公開檔案`}
+                        className={`block w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-tertiary-container shadow-lg overflow-hidden bg-primary-container transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                           isSelf
                             ? "border-primary-fixed ring-4 ring-primary-container/50"
                             : ""
                         }`}
                       >
                         {avatar}
-                      </div>
+                      </Link>
                       <div className="absolute -bottom-2 -right-2 bg-tertiary-container text-on-tertiary-container w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-md border border-tertiary-fixed font-headline-md text-lg">
                         1
                       </div>
@@ -430,15 +432,17 @@ export default async function LeaderboardPage({
                     className="flex flex-col items-center w-1/3"
                   >
                     <div className="relative mb-sm">
-                      <div
-                        className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-secondary-container ${
+                      <Link
+                        href={`/u/${member.userId}`}
+                        aria-label={`查看 ${member.name ?? "使用者"} 的公開檔案`}
+                        className={`block w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-secondary-container transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                           isSelf
                             ? "border-primary-fixed-dim ring-4 ring-primary-container/40"
                             : ""
                         }`}
                       >
                         {avatar}
-                      </div>
+                      </Link>
                       <div className="absolute -bottom-2 -right-2 bg-surface-container text-on-surface-variant w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border border-outline-variant font-label-md">
                         2
                       </div>
@@ -463,15 +467,17 @@ export default async function LeaderboardPage({
                   className="flex flex-col items-center w-1/3"
                 >
                   <div className="relative mb-sm">
-                    <div
-                      className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-tertiary-fixed-dim ${
+                    <Link
+                      href={`/u/${member.userId}`}
+                      aria-label={`查看 ${member.name ?? "使用者"} 的公開檔案`}
+                      className={`block w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-surface-container-lowest shadow-md overflow-hidden bg-tertiary-fixed-dim transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         isSelf
                           ? "border-primary-fixed-dim ring-4 ring-primary-container/40"
                           : ""
                       }`}
                     >
                       {avatar}
-                    </div>
+                    </Link>
                     <div className="absolute -bottom-2 -right-2 bg-surface-variant text-on-surface-variant w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border border-outline-variant font-label-md">
                       3
                     </div>
@@ -528,9 +534,13 @@ export default async function LeaderboardPage({
                       <div className="w-8 font-label-md text-label-md text-secondary font-bold text-center">
                         {rank}
                       </div>
-                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container">
+                      <Link
+                        href={`/u/${item.userId}`}
+                        aria-label={`查看 ${item.name ?? "使用者"} 的公開檔案`}
+                        className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container block transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
                         {item.image ? (
-                           
+
                           <img
                             src={item.image}
                             alt=""
@@ -541,7 +551,7 @@ export default async function LeaderboardPage({
                             {item.name?.[0] ?? "?"}
                           </div>
                         )}
-                      </div>
+                      </Link>
                       <div>
                         <div
                           className={`font-body-md text-body-md font-medium text-on-surface ${
@@ -573,13 +583,20 @@ export default async function LeaderboardPage({
 
         {/* Achievement Showcase (Bento Grid) */}
         <section className="flex flex-col gap-md">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-sm flex-wrap">
             <h2 className="font-headline-md text-headline-md text-on-surface">
               成就展示館
             </h2>
-            <span className="bg-primary-container text-on-primary-container px-sm py-1 rounded-full font-label-md text-label-md">
-              已解鎖 {unlockedCount}/{achievements?.length ?? 6}
-            </span>
+            <div className="flex items-center gap-sm">
+              {userId ? (
+                <span className="bg-tertiary-container text-on-tertiary-container px-sm py-1 rounded-full font-label-md text-label-md font-bold">
+                  🎖️ Lv.{petLevel}・{petTitle(petLevel)}
+                </span>
+              ) : null}
+              <span className="bg-primary-container text-on-primary-container px-sm py-1 rounded-full font-label-md text-label-md">
+                已解鎖 {unlockedCount}/{achievements?.length ?? 6}
+              </span>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-sm md:gap-md auto-rows-[140px]">
             {achievements ? (

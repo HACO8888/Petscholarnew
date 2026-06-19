@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, posts, pets, comments, departments } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
+import { petTitle } from "@/lib/pet";
 import AvatarUpload from "@/components/AvatarUpload";
 import { updateProfile } from "./actions";
 
@@ -175,6 +176,7 @@ export default async function ProfilePage() {
           <div className="bg-surface rounded-lg p-md flex flex-col justify-center items-center text-center border border-surface-container shadow-sm">
             <span className="material-symbols-outlined text-tertiary mb-xs" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
             <span className="font-headline-md text-headline-md text-on-surface">Lv. {petLevel}</span>
+            <span className="font-label-md text-label-md text-tertiary font-bold">{petTitle(petLevel)}</span>
             <span className="font-label-md text-label-md text-secondary">目前等級</span>
           </div>
           <div className="bg-surface rounded-lg p-md flex flex-col justify-center items-center text-center border border-surface-container shadow-sm">

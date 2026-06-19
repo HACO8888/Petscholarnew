@@ -219,7 +219,8 @@ export async function adoptAnswer(formData: FormData) {
         await tx
           .update(pets)
           .set({
-            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty)}`,
+            // 懸賞託管轉帳 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
+            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,
@@ -301,7 +302,8 @@ export async function verifyAnswerAsTA(formData: FormData) {
         await tx
           .update(pets)
           .set({
-            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty)}`,
+            // 懸賞託管轉帳 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
+            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,

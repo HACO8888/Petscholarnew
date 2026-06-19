@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { claimCheckin, feedPet, simulateTimePass, healPet } from "@/app/(app)/pet/actions";
+import { maxExpForLevel, petTitle } from "@/lib/pet";
 
 /**
  * 首頁側邊欄的互動會改動寵物狀態，但底層 action 只會 revalidate 寵物相關頁。
@@ -61,9 +62,10 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
   const maxHearts = Math.max(1, Math.round(data.maxHp / 100));
   const full = Math.max(0, Math.floor(data.hp / 100));
   const hearts = "❤️".repeat(Math.min(full, maxHearts)) + "🖤".repeat(Math.max(0, maxHearts - full));
-  const maxExp = data.level * 100;
+  const maxExp = maxExpForLevel(data.level);
   const hpPct = data.maxHp > 0 ? Math.round((data.hp / data.maxHp) * 100) : 0;
   const expPct = maxExp > 0 ? Math.round((data.exp / maxExp) * 100) : 0;
+  const title = petTitle(data.level);
 
   // 未登入：不顯示佔位的寵物/使用者視窗，只給一張精簡的登入卡（資訊登入才看得到）
   if (!data.loggedIn) {
@@ -135,9 +137,14 @@ export default function HomeSidebar({ data }: { data: HomeSidebarData }) {
           </div>
         </div>
 
-        <div className="flex justify-between items-center w-full mb-3 px-1">
-          <span className="font-bold text-body-md text-on-surface">{data.petName}</span>
-          <span className="text-xs font-bold text-primary dark:text-primary-fixed-dim">Lv.{data.level}</span>
+        <div className="flex justify-between items-center w-full mb-3 px-1 gap-2">
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-body-md text-on-surface truncate">{data.petName}</span>
+            <span className="text-[10px] font-semibold text-tertiary dark:text-tertiary-fixed-dim truncate">
+              🎖️ {title}
+            </span>
+          </div>
+          <span className="shrink-0 text-xs font-bold text-primary dark:text-primary-fixed-dim">Lv.{data.level}</span>
         </div>
 
         <div className="w-full space-y-2 text-xs">

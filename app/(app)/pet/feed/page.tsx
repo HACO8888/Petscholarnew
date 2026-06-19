@@ -5,8 +5,10 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { shopItems, inventory, users } from "@/db/schema";
 import { getOrCreatePet, statusFromHp } from "@/lib/pet";
+import { readLevelUpSignal } from "@/lib/level-up-signal";
 import { feedPet } from "@/app/(app)/pet/actions";
 import PetMascot from "@/components/PetMascot";
+import LevelUpToast from "@/components/LevelUpToast";
 
 export default async function PetFeedPage() {
   const session = await auth();
@@ -14,6 +16,7 @@ export default async function PetFeedPage() {
   const userId = session.user.id;
 
   const pet = await getOrCreatePet(userId);
+  const levelUp = await readLevelUpSignal();
   const [me] = await db
     .select({ petStyle: users.petStyle })
     .from(users)
@@ -48,6 +51,10 @@ export default async function PetFeedPage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-[calc(100vh-220px)] relative overflow-x-hidden">
+      <LevelUpToast
+        initialLevel={levelUp?.newLevel ?? null}
+        initialLevels={levelUp?.levels ?? null}
+      />
       {/* HP + Coins capsule */}
       <div className="flex flex-wrap items-center gap-sm sm:gap-lg mb-md bg-surface-container-low/80 backdrop-blur-sm py-sm px-md rounded-full border border-surface-container-high w-fit max-w-full shadow-sm animate-fade-in-up">
         <div className="flex items-center gap-sm">

@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { pets, shopItems, inventory } from "@/db/schema";
 import { getOrCreatePet, applyExp, CHECKIN_REWARD } from "@/lib/pet";
+import { setLevelUpSignal } from "@/lib/level-up-signal";
 
 function revalidatePetPages() {
   revalidatePath("/pet/feed");
@@ -32,7 +33,11 @@ export async function buyItem(formData: FormData) {
     .limit(1);
   if (!item) throw new Error("商品不存在");
 
-  await getOrCreatePet(userId); // 確保錢包存在
+  const pet = await getOrCreatePet(userId); // 確保錢包存在
+  // 等級解鎖：server 端把關，不信任 UI 隱藏鈕；未達門檻直接拒絕。
+  if (item.minLevel > 0 && pet.level < item.minLevel) {
+    throw new Error(`需寵物等級 Lv.${item.minLevel} 才能購買`);
+  }
 
   await db.transaction(async (tx) => {
     // 配件為一次性物品：已擁有則禁止重複購買（server 端把關，不信任 UI 隱藏鈕）
@@ -45,13 +50,19 @@ export async function buyItem(formData: FormData) {
       if (owned && owned.qty > 0) throw new Error("已擁有此配件");
     }
 
-    // 原子條件式扣款：唯有餘額足夠的列才會被更新，杜絕並發雙重消費 / 負餘額
+    // 原子條件式扣款：唯有餘額足夠且等級達標的列才會被更新，杜絕並發雙重消費 / 負餘額 / 繞過等級鎖
     const debited = await tx
       .update(pets)
       .set({ coins: sql`${pets.coins} - ${item.price}`, updatedAt: new Date() })
-      .where(and(eq(pets.userId, userId), gte(pets.coins, item.price)))
+      .where(
+        and(
+          eq(pets.userId, userId),
+          gte(pets.coins, item.price),
+          gte(pets.level, item.minLevel),
+        ),
+      )
       .returning({ coins: pets.coins });
-    if (debited.length === 0) throw new Error("金幣不足");
+    if (debited.length === 0) throw new Error("金幣不足或等級不足");
 
     await tx
       .insert(inventory)
@@ -79,7 +90,7 @@ export async function feedPet(formData: FormData) {
 
   await getOrCreatePet(userId); // 確保寵物存在
 
-  await db.transaction(async (tx) => {
+  const levelUp = await db.transaction(async (tx) => {
     // 原子扣除一份庫存
     const consumed = await tx
       .update(inventory)
@@ -113,11 +124,18 @@ export async function feedPet(formData: FormData) {
         exp: leveled.exp,
         level: leveled.level,
         maxHp: leveled.maxHp,
+        // 升級獎勵金幣：每升一級 +20×新等級（連升多級已逐級累加）
+        coins: sql`${pets.coins} + ${leveled.coinReward}`,
         updatedAt: new Date(),
       })
       .where(eq(pets.userId, userId));
+
+    return leveled.levelsGained > 0
+      ? { level: leveled.level, levels: leveled.levelsGained }
+      : null;
   });
 
+  if (levelUp) await setLevelUpSignal(levelUp.level, levelUp.levels);
   revalidatePetPages();
 }
 
