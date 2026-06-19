@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "legacy/**",
     // 並行 agent 的 git worktree 副本（含各自的 .next/legacy），不納入 lint
     ".claude/**",
+    // 第三方 RNNoise worklet/wasm 編譯產物（@sapphi-red/web-noise-suppressor），不納入 lint
+    "public/rnnoise/**",
   ]),
   {
     rules: {

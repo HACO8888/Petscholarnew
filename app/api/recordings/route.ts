@@ -11,7 +11,8 @@ import { putObject } from "@/lib/s3";
  */
 export const runtime = "nodejs";
 
-const MAX_BYTES = 25 * 1024 * 1024; // 25MB 上限
+// 強制錄製：含影像的錄影檔可能較大（每段 2–3 分鐘分段上傳），上限放寬到 100MB。
+const MAX_BYTES = 100 * 1024 * 1024; // 100MB 上限
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -40,9 +41,10 @@ export async function POST(req: Request) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) {
-    return NextResponse.json({ error: "檔案大小不符（需 1B–25MB）" }, { status: 400 });
+    return NextResponse.json({ error: "檔案大小不符（需 1B–100MB）" }, { status: 400 });
   }
 
+  // 含影像的錄影 contentType 會是 video/webm；純語音為 audio/webm。
   const contentType = file.type || "audio/webm";
   const ext = contentType.includes("ogg")
     ? "ogg"
