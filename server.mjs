@@ -69,6 +69,45 @@ async function isRoomMember(roomId, userId) {
   return rows.length > 0;
 }
 
+/**
+ * 判斷 userId 是否為該房的「房間管理員」：
+ *   建立者（study_room.created_by）/ 被指定的管理員（is_moderator）/ 系統 admin（user.role）。
+ * 任一成立即可進行禁麥/禁鏡/踢人等管理操作。
+ */
+async function canModerateRoom(roomId, userId) {
+  const rows = await sql`
+    SELECT
+      (r.created_by = ${userId}) AS "isOwner",
+      COALESCE(m.is_moderator, false) AS "isModerator",
+      (u.role = 'admin') AS "isAdmin"
+    FROM "study_room" r
+    LEFT JOIN "study_room_member" m
+      ON m.room_id = r.id AND m.user_id = ${userId}
+    LEFT JOIN "user" u ON u.id = ${userId}
+    WHERE r.id = ${roomId}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return false;
+  return Boolean(row.isOwner || row.isModerator || row.isAdmin);
+}
+
+/** 該房建立者 userId（用於避免踢出/降權建立者）。 */
+async function roomOwnerId(roomId) {
+  const rows = await sql`
+    SELECT created_by AS "createdBy" FROM "study_room" WHERE id = ${roomId} LIMIT 1
+  `;
+  return rows[0]?.createdBy ?? null;
+}
+
+/** 從房間移除某成員（踢出）。 */
+async function removeRoomMember(roomId, userId) {
+  await sql`
+    DELETE FROM "study_room_member"
+    WHERE room_id = ${roomId} AND user_id = ${userId}
+  `;
+}
+
 async function roomExists(roomId) {
   const rows = await sql`
     SELECT 1 FROM "study_room" WHERE id = ${roomId} LIMIT 1
@@ -271,12 +310,17 @@ io.on("connection", (socket) => {
       const sockets = await io.in(ch).fetchSockets();
       const peers = sockets
         .filter((s) => s.id !== socket.id)
-        .map((s) => ({ id: s.id, name: s.data?.userName ?? "成員" }));
+        .map((s) => ({
+          id: s.id,
+          name: s.data?.userName ?? "成員",
+          userId: s.data?.userId ?? null,
+        }));
       socket.join(ch);
       socket.data.inVoice = true;
       socket.to(ch).emit("voice:peer-joined", {
         id: socket.id,
         name: socket.data.userName,
+        userId: socket.data.userId,
       });
       if (typeof ack === "function") ack({ ok: true, peers });
     } catch (err) {
@@ -291,8 +335,94 @@ io.on("connection", (socket) => {
     io.to(to).emit("voice:signal", {
       from: socket.id,
       fromName: socket.data.userName,
+      fromUserId: socket.data.userId ?? null,
       data,
     });
+  });
+
+  // ---- 房間管理：禁麥 / 禁鏡 / 踢人（僅建立者/管理員/系統 admin） ----
+  // 取得某 userId 在本房（同 roomId）目前的所有 socket。
+  const socketsOfUserInRoom = async (rid, targetUserId) => {
+    const all = await io.in(roomChannel(rid)).fetchSockets();
+    return all.filter((s) => s.data?.userId === targetUserId);
+  };
+
+  // 共用授權檢查：回傳 { rid, targetUserId } 或在失敗時呼叫 ack 並回傳 null。
+  const authorizeModAction = async (payload, ack) => {
+    const rid = socket.data.roomId;
+    const targetUserId = payload?.userId;
+    if (!rid || typeof targetUserId !== "string" || !targetUserId) {
+      if (typeof ack === "function") ack({ ok: false, error: "缺少參數" });
+      return null;
+    }
+    if (!(await canModerateRoom(rid, socket.data.userId))) {
+      if (typeof ack === "function") ack({ ok: false, error: "沒有管理權限" });
+      return null;
+    }
+    return { rid, targetUserId };
+  };
+
+  // 強制靜音：通知目標所有 socket 停用自己的 audio track。
+  socket.on("voice:force-mute", async (payload, ack) => {
+    try {
+      const ctx = await authorizeModAction(payload, ack);
+      if (!ctx) return;
+      for (const s of await socketsOfUserInRoom(ctx.rid, ctx.targetUserId)) {
+        s.emit("voice:force-mute", { by: socket.data.userName });
+      }
+      if (typeof ack === "function") ack({ ok: true });
+    } catch (err) {
+      console.error("[voice] force-mute error:", err?.message);
+      if (typeof ack === "function") ack({ ok: false, error: "操作失敗" });
+    }
+  });
+
+  // 強制關鏡頭：通知目標所有 socket 停用自己的 video track。
+  socket.on("voice:force-camera-off", async (payload, ack) => {
+    try {
+      const ctx = await authorizeModAction(payload, ack);
+      if (!ctx) return;
+      for (const s of await socketsOfUserInRoom(ctx.rid, ctx.targetUserId)) {
+        s.emit("voice:force-camera-off", { by: socket.data.userName });
+      }
+      if (typeof ack === "function") ack({ ok: true });
+    } catch (err) {
+      console.error("[voice] force-camera-off error:", err?.message);
+      if (typeof ack === "function") ack({ ok: false, error: "操作失敗" });
+    }
+  });
+
+  // 踢出：刪除成員 + 通知該 user 所有 socket 斷線。
+  socket.on("voice:kick", async (payload, ack) => {
+    try {
+      const ctx = await authorizeModAction(payload, ack);
+      if (!ctx) return;
+      // 不可踢建立者；不可踢自己
+      const ownerId = await roomOwnerId(ctx.rid);
+      if (ctx.targetUserId === ownerId) {
+        if (typeof ack === "function") ack({ ok: false, error: "無法踢出建立者" });
+        return;
+      }
+      if (ctx.targetUserId === socket.data.userId) {
+        if (typeof ack === "function") ack({ ok: false, error: "無法踢出自己" });
+        return;
+      }
+      await removeRoomMember(ctx.rid, ctx.targetUserId);
+      for (const s of await socketsOfUserInRoom(ctx.rid, ctx.targetUserId)) {
+        // 先讓對方離開語音（廣播 peer-left），再通知被踢並斷線
+        if (s.data?.inVoice) {
+          s.to(voiceChannel(ctx.rid)).emit("voice:peer-left", { id: s.id });
+          s.leave(voiceChannel(ctx.rid));
+          s.data.inVoice = false;
+        }
+        s.emit("room:kicked", { by: socket.data.userName });
+        s.disconnect(true);
+      }
+      if (typeof ack === "function") ack({ ok: true });
+    } catch (err) {
+      console.error("[voice] kick error:", err?.message);
+      if (typeof ack === "function") ack({ ok: false, error: "操作失敗" });
+    }
   });
 
   const leaveVoice = () => {
