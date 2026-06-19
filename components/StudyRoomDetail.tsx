@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/study-rooms/actions";
 import StudyRoomEditDialog from "@/components/StudyRoomEditDialog";
 import EmojiPicker, { insertAtCursor } from "@/components/EmojiPicker";
+import PomodoroRing from "@/components/study-room/PomodoroRing";
 import {
   createNoiseSuppressedTrack,
   SpeakingDetector,
@@ -110,6 +111,8 @@ export default function StudyRoomDetail({
   const [timeLeft, setTimeLeft] = useState(POMO_SECONDS);
   const [running, setRunning] = useState(false);
   const [pomoLoaded, setPomoLoaded] = useState(false);
+  // 完成輪數（純顯示用；計時邏輯不變，僅在自然完成那一刻 +1）
+  const [pomoRound, setPomoRound] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 載入：還原計時狀態（執行中則扣掉離開期間經過的秒數）
@@ -121,7 +124,9 @@ export default function StudyRoomDetail({
           timeLeft: number;
           running: boolean;
           savedAt: number;
+          round?: number;
         };
+        if (typeof s.round === "number") setPomoRound(s.round);
         if (s.running) {
           const elapsed = Math.floor((Date.now() - s.savedAt) / 1000);
           const remain = Math.max(0, (s.timeLeft ?? POMO_SECONDS) - elapsed);
@@ -147,12 +152,17 @@ export default function StudyRoomDetail({
     try {
       localStorage.setItem(
         pomoKey,
-        JSON.stringify({ timeLeft, running, savedAt: Date.now() }),
+        JSON.stringify({
+          timeLeft,
+          running,
+          savedAt: Date.now(),
+          round: pomoRound,
+        }),
       );
     } catch {
       /* ignore */
     }
-  }, [timeLeft, running, pomoLoaded, pomoKey]);
+  }, [timeLeft, running, pomoLoaded, pomoKey, pomoRound]);
 
   useEffect(() => {
     if (!running) {
@@ -164,6 +174,7 @@ export default function StudyRoomDetail({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           setRunning(false);
+          setPomoRound((r) => r + 1);
           return POMO_SECONDS;
         }
         return prev - 1;
@@ -186,6 +197,8 @@ export default function StudyRoomDetail({
     .toString()
     .padStart(2, "0");
   const secs = (timeLeft % 60).toString().padStart(2, "0");
+  // 番茄鐘進度 0→1（已過去的比例），供「專注光環」填滿。
+  const pomoProgress = (POMO_SECONDS - timeLeft) / POMO_SECONDS;
 
   // ---- 讀書目標清單（localStorage） ----
   const goalsKey = `study-goals:${room.id}`;
@@ -884,187 +897,411 @@ export default function StudyRoomDetail({
     }),
   ];
 
-  const title = room.subject || room.name;
-  const remainingSlots = Math.max(0, room.capacity - members.length);
+  const subjectEyebrow = room.subject ?? "自習室";
+  const roomName = room.name;
 
   // 紅點指示文字：開鏡頭時是「錄音錄影中」，否則「錄音中」。
   const recordingLabel = recordingVideo ? "錄音錄影中" : "錄音中";
 
   return (
     <section id="sect-study-detail" className="pb-6">
-      {/* ===== 標題列 ===== */}
-      <div className="flex flex-col gap-3 mb-lg sm:flex-row sm:justify-between sm:items-start">
+      {/* ===== Header：科目 eyebrow + 房名 + 在線/建立者/私密/錄製 + 動作群組 ===== */}
+      <header className="flex flex-col gap-4 mb-lg lg:flex-row lg:justify-between lg:items-end">
         <div className="min-w-0">
-          <h1 className="font-bold text-headline-lg text-on-background">
-            {title}
+          <p className="text-label-md font-bold uppercase tracking-[0.16em] text-primary mb-1 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[16px]">
+              menu_book
+            </span>
+            {subjectEyebrow}
+          </p>
+          <h1 className="font-bold text-headline-lg text-on-background truncate">
+            {roomName}
           </h1>
-          <p className="text-secondary text-body-md mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">group</span>{" "}
-              {memberCount} 位成員
+          <p className="text-secondary text-body-md mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="flex items-center gap-1 font-bold text-on-surface-variant">
+              <span className="material-symbols-outlined text-[18px]">
+                group
+              </span>
+              {memberCount}/{room.capacity} 在線
+            </span>
+            <span className="text-outline-variant/60" aria-hidden>
+              ·
             </span>
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">person</span>{" "}
-              建立者：{creatorName ?? "系統房間"}
+              <span className="material-symbols-outlined text-[18px]">
+                person
+              </span>
+              {creatorName ?? "系統房間"}
             </span>
             {room.hasPassword && (
-              <span className="flex items-center gap-1 text-tertiary">
-                <span className="material-symbols-outlined text-sm">lock</span>{" "}
-                私密房
-              </span>
+              <>
+                <span className="text-outline-variant/60" aria-hidden>
+                  ·
+                </span>
+                <span className="flex items-center gap-1 text-tertiary">
+                  <span className="material-symbols-outlined text-[18px]">
+                    lock
+                  </span>
+                  私密房
+                </span>
+              </>
             )}
             {recording && (
-              <span className="flex items-center gap-1 font-bold text-error">
-                <span className="inline-block w-2 h-2 rounded-full bg-error animate-pulse" />
+              <span className="flex items-center gap-1.5 font-bold text-on-error-container bg-error-container px-2 py-0.5 rounded-full">
+                <span className="inline-block w-2 h-2 rounded-full bg-error animate-pulse motion-reduce:animate-none" />
                 {recordingLabel}
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:justify-end">
-          <button
-            type="button"
-            onClick={copyInviteLink}
-            className="bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              {copied ? "check" : "link"}
-            </span>{" "}
-            {copied ? "已複製" : "邀請連結"}
-          </button>
-          {canEdit && (
-            <StudyRoomEditDialog
-              room={{
-                id: room.id,
-                name: room.name,
-                subject: room.subject,
-                description: room.description,
-                capacity: room.capacity,
-                hasPassword: room.hasPassword,
-              }}
-              memberCount={memberCount}
-            />
-          )}
-          {isMember ? (
-            <form action={leaveRoom}>
-              <input type="hidden" name="roomId" value={room.id} />
+        <div className="flex items-center gap-2 shrink-0 flex-wrap lg:justify-end">
+          {!isMember &&
+            (isFull ? (
               <button
-                type="submit"
-                className="bg-surface-container-high hover:bg-surface-container-highest text-error font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1"
+                type="button"
+                disabled
+                className="bg-surface-variant text-on-surface-variant/60 font-bold text-body-md px-4 py-2 rounded-full cursor-not-allowed flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-[18px]">logout</span> 離開
+                <span className="material-symbols-outlined text-[18px]">
+                  group_off
+                </span>
+                已滿
               </button>
-            </form>
-          ) : isFull ? (
+            ) : (
+              <form action={joinRoom} className="flex items-center gap-2">
+                <input type="hidden" name="roomId" value={room.id} />
+                {room.hasPassword && (
+                  <input
+                    type="password"
+                    name="password"
+                    required
+                    maxLength={64}
+                    placeholder="房間密碼"
+                    className="w-32 bg-surface-container-low dark:bg-surface border border-outline-variant rounded-full py-2 px-4 text-xs outline-none focus:ring-2 focus:ring-primary"
+                  />
+                )}
+                <button
+                  type="submit"
+                  className="bg-primary hover:bg-surface-tint text-on-primary font-bold text-body-md px-5 py-2 rounded-full shadow-sm transition-all flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    group_add
+                  </span>
+                  加入自習室
+                </button>
+              </form>
+            ))}
+
+          {/* 次要動作：收斂成一致的灰底圓角群組 */}
+          <div className="flex items-center gap-1 p-1 rounded-full bg-surface-container-high border border-outline-variant/30">
             <button
               type="button"
-              disabled
-              className="bg-surface-variant text-on-surface-variant/60 font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 cursor-not-allowed flex items-center gap-1"
+              onClick={copyInviteLink}
+              title="複製邀請連結"
+              className="text-on-surface-variant font-bold text-body-md px-3 py-1.5 rounded-full hover:bg-surface-container-highest transition-all flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <span className="material-symbols-outlined text-[18px]">group_off</span> 已滿
-            </button>
-          ) : (
-            <form action={joinRoom} className="flex items-center gap-2">
-              <input type="hidden" name="roomId" value={room.id} />
-              {room.hasPassword && (
-                <input
-                  type="password"
-                  name="password"
-                  required
-                  maxLength={64}
-                  placeholder="房間密碼"
-                  className="w-32 bg-surface-container-low dark:bg-surface border border-outline-variant rounded-lg py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
-                />
-              )}
-              <button
-                type="submit"
-                className="bg-primary hover:bg-surface-tint text-on-primary font-bold text-body-md px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1"
-              >
-                <span className="material-symbols-outlined text-[18px]">group_add</span> 加入自習室
-              </button>
-            </form>
-          )}
-          {canManage && (
-            <form action={deleteRoom}>
-              <input type="hidden" name="roomId" value={room.id} />
-              <button
-                type="submit"
-                className="bg-error-container hover:opacity-90 text-on-error-container font-bold text-body-md px-4 py-2 rounded-lg border border-error/20 shadow-sm transition-all flex items-center gap-1"
-              >
-                <span className="material-symbols-outlined text-[18px]">delete</span> 解散
-              </button>
-            </form>
-          )}
-          <Link
-            href="/study-rooms"
-            className="bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-bold text-body-md px-4 py-2 rounded-lg border border-outline-variant/30 shadow-sm transition-all flex items-center gap-1 no-underline"
-          >
-            <span className="material-symbols-outlined">arrow_back</span> 返回列表
-          </Link>
-        </div>
-      </div>
-
-      {/* ===== 主版面：左欄(夥伴+語音) / 中央(視訊或番茄鐘) / 右欄(目標+聊天) ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-md items-start">
-        {/* ---------- 左欄：專注夥伴 + 語音成員 + 語音控制 ---------- */}
-        <div className="lg:col-span-3 flex flex-col gap-md">
-          {/* 專注夥伴 */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1">
-                <span className="material-symbols-outlined text-primary">
-                  grid_view
-                </span>{" "}
-                專注夥伴
-              </h3>
-              <span className="text-[10px] font-bold text-secondary bg-surface-container-high px-2 py-0.5 rounded-full">
-                {members.length}/{room.capacity}
+              <span className="material-symbols-outlined text-[18px]">
+                {copied ? "check" : "link"}
               </span>
+              <span className="hidden sm:inline">
+                {copied ? "已複製" : "邀請"}
+              </span>
+            </button>
+            {canEdit && (
+              <StudyRoomEditDialog
+                room={{
+                  id: room.id,
+                  name: room.name,
+                  subject: room.subject,
+                  description: room.description,
+                  capacity: room.capacity,
+                  hasPassword: room.hasPassword,
+                }}
+                memberCount={memberCount}
+              />
+            )}
+            {isMember && (
+              <form action={leaveRoom}>
+                <input type="hidden" name="roomId" value={room.id} />
+                <button
+                  type="submit"
+                  className="text-error font-bold text-body-md px-3 py-1.5 rounded-full hover:bg-error-container/50 transition-all flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    logout
+                  </span>
+                  <span className="hidden sm:inline">離開</span>
+                </button>
+              </form>
+            )}
+            {canManage && (
+              <form action={deleteRoom}>
+                <input type="hidden" name="roomId" value={room.id} />
+                <button
+                  type="submit"
+                  className="text-error font-bold text-body-md px-3 py-1.5 rounded-full hover:bg-error-container/50 transition-all flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    delete
+                  </span>
+                  <span className="hidden sm:inline">解散</span>
+                </button>
+              </form>
+            )}
+            <Link
+              href="/study-rooms"
+              title="返回列表"
+              className="text-on-surface-variant font-bold text-body-md px-3 py-1.5 rounded-full hover:bg-surface-container-highest transition-all flex items-center gap-1.5 no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                arrow_back
+              </span>
+              <span className="hidden sm:inline">返回</span>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* ===== 主版面：左=專注工作室（番茄鐘/視訊+夥伴+語音）｜右=目標+討論 ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-md items-start">
+        {/* ========== 專注工作室 ========== */}
+        <div className="lg:col-span-8 flex flex-col gap-md">
+          {/* ---- Hero：番茄鐘「專注光環」；運作中整區進入專注狀態 ---- */}
+          <div
+            className={`relative overflow-hidden rounded-2xl border shadow-sm transition-colors duration-700 ${
+              running
+                ? "border-tertiary/40 bg-gradient-to-b from-tertiary-container/30 to-surface-container-lowest dark:to-surface-container-high"
+                : "border-outline-variant/30 bg-surface-container-lowest dark:bg-surface-container-high"
+            }`}
+          >
+            {/* 環境暈光：運作中暖色脈動，閒置沉穩 */}
+            <div
+              aria-hidden
+              className={`pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl transition-opacity duration-700 ${
+                running
+                  ? "bg-tertiary/25 focus-pulse"
+                  : "bg-primary-container/20 opacity-40"
+              }`}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-28 -left-28 w-72 h-72 rounded-full bg-primary-container/15 blur-3xl opacity-40"
+            />
+
+            <div className="relative p-lg sm:p-xl flex flex-col items-center">
+              {/* 視訊格（grid）：通話且有任何鏡頭 → 明顯置於 hero 區頂部 */}
+              {showVideoGrid && (
+                <div className="w-full mb-lg">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="font-bold text-body-md text-on-surface flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-primary text-[20px]">
+                        videocam
+                      </span>
+                      視訊
+                    </h2>
+                    {recording && (
+                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-on-error-container bg-error-container px-2 py-0.5 rounded-full">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse motion-reduce:animate-none" />
+                        {recordingLabel}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* 本地預覽 */}
+                    {cameraOn && (
+                      <div
+                        className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                          speakingKeys.has("self")
+                            ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                            : "border-outline-variant/30"
+                        }`}
+                      >
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover -scale-x-100"
+                        />
+                        <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                          {voiceMuted && (
+                            <span className="material-symbols-outlined text-[12px]">
+                              mic_off
+                            </span>
+                          )}
+                          你
+                        </span>
+                      </div>
+                    )}
+                    {videoPeers.map((p) => {
+                      const mem = p.userId
+                        ? memberByUserId.get(p.userId)
+                        : null;
+                      const isSpeaking = speakingKeys.has(p.id);
+                      return (
+                        <div
+                          key={p.id}
+                          className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                            isSpeaking
+                              ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                              : "border-outline-variant/30"
+                          }`}
+                        >
+                          <video
+                            autoPlay
+                            playsInline
+                            ref={(el) => {
+                              if (el && el.srcObject !== p.stream)
+                                el.srcObject = p.stream;
+                            }}
+                            className="w-full h-full object-cover"
+                          />
+                          <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                            {mem?.name ?? p.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 簽名元件：圓形進度環包住時間 */}
+              <PomodoroRing
+                mins={mins}
+                secs={secs}
+                progress={pomoProgress}
+                running={running}
+                size={showVideoGrid ? 200 : 256}
+                stroke={showVideoGrid ? 12 : 14}
+              />
+
+              {/* 控制：開始/暫停、重置、第幾輪 */}
+              <div className="mt-lg flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={toggleTimer}
+                  className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-7 py-2.5 rounded-full shadow flex items-center gap-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {running ? "pause" : "play_arrow"}
+                  </span>
+                  {running ? "暫停" : "開始"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetTimer}
+                  className="bg-surface-container text-on-surface-variant hover:bg-surface-container-highest font-bold text-body-md w-11 h-11 rounded-full border border-outline-variant/30 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  aria-label="重置番茄鐘"
+                  title="重置"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    refresh
+                  </span>
+                </button>
+              </div>
+              <p className="mt-3 text-label-md font-bold uppercase tracking-[0.14em] text-secondary">
+                {pomoRound > 0
+                  ? `第 ${pomoRound + 1} 輪 · 已完成 ${pomoRound}`
+                  : "第 1 輪"}
+              </p>
             </div>
-            <div className="grid grid-cols-3 gap-sm">
+          </div>
+
+          {/* ---- 專注夥伴：頭像叢集（present 成員，語音中顯示綠光環） ---- */}
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold text-body-md text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-[20px]">
+                  diversity_3
+                </span>
+                專注夥伴
+                <span className="ml-1 text-label-md font-bold text-secondary bg-surface-container-high px-2 py-0.5 rounded-full">
+                  {members.length}/{room.capacity} 在線
+                </span>
+              </h2>
+              <button
+                type="button"
+                onClick={copyInviteLink}
+                className="text-primary hover:bg-primary-container/40 font-bold text-label-md px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {copied ? "check" : "person_add"}
+                </span>
+                {copied ? "已複製連結" : "邀請夥伴"}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
               {members.map((m, i) => {
-                const targetInVoice = voicePeers.find((p) => p.userId === m.id);
+                const peerInVoice = voicePeers.find((p) => p.userId === m.id);
+                const targetInVoice = peerInVoice;
+                // 語音中（自己或對方）且正在說話 → 綠色光環
+                const speakKey = m.isSelf ? "self" : peerInVoice?.id;
+                const isSpeaking = Boolean(
+                  speakKey && speakingKeys.has(speakKey),
+                );
+                const isInVoice = m.isSelf ? inVoice : Boolean(peerInVoice);
                 return (
                   <div
                     key={m.id}
-                    className="aspect-square bg-surface-container-low dark:bg-surface rounded-lg border border-outline-variant/30 flex flex-col items-center justify-center p-1.5 relative overflow-hidden group"
+                    className="group relative flex flex-col items-center gap-1 w-16"
                   >
                     <Link
                       href={`/u/${m.id}`}
-                      className="flex flex-col items-center justify-center no-underline min-w-0 w-full"
                       title={`查看 ${m.name} 的個人檔案`}
+                      className="no-underline flex flex-col items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
                     >
-                      {m.image ? (
-                        <img
-                          alt=""
-                          src={m.image}
-                          className="w-9 h-9 mb-1 rounded-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-2xl mb-1">
-                          {AVATARS[i % AVATARS.length]}
-                        </span>
-                      )}
-                      <span className="text-[9px] font-bold text-on-surface truncate w-full text-center group-hover:text-primary transition-colors">
-                        {m.name}
+                      <div
+                        className={`relative w-14 h-14 rounded-full grid place-items-center transition-all ${
+                          isSpeaking
+                            ? "ring-2 ring-green-500 shadow-[0_0_0_4px_rgba(34,197,94,0.30)]"
+                            : isInVoice
+                              ? "ring-2 ring-primary/50"
+                              : "ring-1 ring-outline-variant/40"
+                        }`}
+                      >
+                        {m.image ? (
+                          <img
+                            alt=""
+                            src={m.image}
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="w-full h-full rounded-full bg-surface-container-high grid place-items-center text-2xl">
+                            {AVATARS[i % AVATARS.length]}
+                          </span>
+                        )}
+                        {/* 角色徽章 */}
+                        {m.isOwner ? (
+                          <span className="absolute -top-0.5 -left-0.5 bg-tertiary-container text-on-tertiary-container w-4 h-4 rounded-full grid place-items-center">
+                            <span className="material-symbols-outlined text-[11px]">
+                              star
+                            </span>
+                          </span>
+                        ) : m.isModerator ? (
+                          <span className="absolute -top-0.5 -left-0.5 bg-secondary-container text-on-secondary-container w-4 h-4 rounded-full grid place-items-center">
+                            <span className="material-symbols-outlined text-[11px]">
+                              shield_person
+                            </span>
+                          </span>
+                        ) : null}
+                        {/* 在語音中 → 麥克風指示 */}
+                        {isInVoice && (
+                          <span className="absolute -bottom-0.5 -right-0.5 bg-primary text-on-primary w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
+                            <span className="material-symbols-outlined text-[11px]">
+                              mic
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-bold text-on-surface truncate w-full text-center group-hover:text-primary transition-colors">
+                        {m.isSelf ? "你" : m.name}
                       </span>
                     </Link>
-                    {m.isSelf && (
-                      <span className="absolute top-1 right-1 bg-primary text-on-primary text-[8px] font-bold px-1 rounded-full">你</span>
-                    )}
-                    {m.isOwner ? (
-                      <span className="absolute top-1 left-1 bg-tertiary-container text-on-tertiary-container text-[8px] font-bold px-1 rounded-full flex items-center">
-                        <span className="material-symbols-outlined text-[10px]">star</span>
-                      </span>
-                    ) : m.isModerator ? (
-                      <span className="absolute top-1 left-1 bg-secondary-container text-on-secondary-container text-[8px] font-bold px-1 rounded-full flex items-center">
-                        <span className="material-symbols-outlined text-[10px]">shield_person</span>
-                      </span>
-                    ) : null}
 
                     {/* 管理控制：建立者可指派/取消管理員；管理員可禁麥/禁鏡/踢人 */}
                     {!m.isSelf && (canModerate || canEdit) && (
-                      <div className="absolute inset-x-0 bottom-0 bg-surface-container-highest/95 px-1 py-1 flex flex-wrap items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full bg-surface-container-highest rounded-full shadow-md border border-outline-variant/30 px-1 py-0.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10">
                         {canEdit && !m.isOwner && (
                           <button
                             type="button"
@@ -1072,10 +1309,12 @@ export default function StudyRoomDetail({
                             onClick={() =>
                               setRoomModerator(room.id, m.id, !m.isModerator)
                             }
-                            className="p-0.5 rounded text-on-surface-variant hover:text-primary hover:bg-primary-container/40"
+                            className="p-1 rounded-full text-on-surface-variant hover:text-primary hover:bg-primary-container/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
-                            <span className="material-symbols-outlined text-[14px]">
-                              {m.isModerator ? "remove_moderator" : "add_moderator"}
+                            <span className="material-symbols-outlined text-[16px]">
+                              {m.isModerator
+                                ? "remove_moderator"
+                                : "add_moderator"}
                             </span>
                           </button>
                         )}
@@ -1085,10 +1324,14 @@ export default function StudyRoomDetail({
                               type="button"
                               title="強制靜音"
                               disabled={!targetInVoice}
-                              onClick={() => voiceApiRef.current?.forceMute(m.id)}
-                              className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                              onClick={() =>
+                                voiceApiRef.current?.forceMute(m.id)
+                              }
+                              className="p-1 rounded-full text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
                             >
-                              <span className="material-symbols-outlined text-[14px]">mic_off</span>
+                              <span className="material-symbols-outlined text-[16px]">
+                                mic_off
+                              </span>
                             </button>
                             <button
                               type="button"
@@ -1097,17 +1340,21 @@ export default function StudyRoomDetail({
                               onClick={() =>
                                 voiceApiRef.current?.forceCameraOff(m.id)
                               }
-                              className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-1 rounded-full text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
                             >
-                              <span className="material-symbols-outlined text-[14px]">videocam_off</span>
+                              <span className="material-symbols-outlined text-[16px]">
+                                videocam_off
+                              </span>
                             </button>
                             <button
                               type="button"
                               title="踢出"
                               onClick={() => kickMember(room.id, m.id)}
-                              className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40"
+                              className="p-1 rounded-full text-on-surface-variant hover:text-error hover:bg-error-container/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
                             >
-                              <span className="material-symbols-outlined text-[14px]">person_remove</span>
+                              <span className="material-symbols-outlined text-[16px]">
+                                person_remove
+                              </span>
                             </button>
                           </>
                         )}
@@ -1116,111 +1363,111 @@ export default function StudyRoomDetail({
                   </div>
                 );
               })}
-              {Array.from({ length: remainingSlots }).map((_, i) => (
-                <div
-                  key={`empty-${i}`}
-                  className="aspect-square bg-surface-container-lowest border border-dashed border-outline-variant/40 rounded-lg flex items-center justify-center text-outline/50"
-                >
-                  <span className="material-symbols-outlined text-[18px]">add</span>
-                </div>
-              ))}
             </div>
           </div>
 
-          {/* 語音 / 視訊通話 */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1">
-                <span className="material-symbols-outlined text-primary">groups</span>
+          {/* ---- 語音 / 視訊通話：整合控制 ---- */}
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col">
+            <div className="flex items-center justify-between mb-2.5 flex-wrap gap-2">
+              <h2 className="font-bold text-body-md text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-[20px]">
+                  graphic_eq
+                </span>
                 語音通話
-              </h3>
+                {inVoice && (
+                  <span className="ml-1 text-label-md font-bold text-secondary bg-surface-container-high px-2 py-0.5 rounded-full">
+                    {voiceParticipants.length} 人通話中
+                  </span>
+                )}
+              </h2>
               {recording && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-error bg-error-container/40 px-2 py-0.5 rounded-full">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-on-error-container bg-error-container px-2.5 py-1 rounded-full">
+                  <span className="inline-block w-2 h-2 rounded-full bg-error animate-pulse motion-reduce:animate-none" />
                   {recordingLabel}
                 </span>
               )}
             </div>
 
             {voiceError && (
-              <p className="text-[10px] text-error mb-1.5">{voiceError}</p>
+              <p className="text-[11px] text-error mb-2">{voiceError}</p>
             )}
             {voiceNotice && (
-              <p className="text-[10px] text-tertiary mb-1.5">{voiceNotice}</p>
+              <p className="text-[11px] text-tertiary mb-2">{voiceNotice}</p>
             )}
 
-            {/* 誰在語音中（頭像 + Discord 風 speaking 綠色光環） */}
+            {/* 通話中成員（speaking 綠光環） */}
             {inVoice && (
-              <div className="mb-2.5">
-                <p className="text-[10px] text-secondary mb-1.5">
-                  通話中（{voiceParticipants.length} 人）
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {voiceParticipants.map((p) => {
-                    const isSpeaking = speakingKeys.has(p.key);
-                    return (
+              <div className="mb-3 flex flex-wrap gap-3">
+                {voiceParticipants.map((p) => {
+                  const isSpeaking = speakingKeys.has(p.key);
+                  return (
+                    <div
+                      key={p.key}
+                      className="flex flex-col items-center gap-1 w-12"
+                      title={`${p.name}${isSpeaking ? "（說話中）" : ""}`}
+                    >
                       <div
-                        key={p.key}
-                        className="flex flex-col items-center gap-0.5 w-12"
-                        title={`${p.name}${isSpeaking ? "（說話中）" : ""}`}
+                        className={`relative w-10 h-10 rounded-full grid place-items-center transition-all ${
+                          isSpeaking
+                            ? "ring-2 ring-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                            : "ring-1 ring-outline-variant/40"
+                        }`}
                       >
-                        <div
-                          className={`relative w-10 h-10 rounded-full p-[2px] transition-all ${
-                            isSpeaking
-                              ? "ring-2 ring-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
-                              : "ring-1 ring-outline-variant/40"
-                          }`}
-                        >
-                          {p.image ? (
-                            <img
-                              src={p.image}
-                              alt=""
-                              className="w-full h-full rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full rounded-full bg-surface-container-high flex items-center justify-center text-base">
-                              {p.isSelf ? "🙂" : "🧑‍🎓"}
-                            </div>
-                          )}
-                          {p.hasVideo && (
-                            <span className="absolute -bottom-0.5 -right-0.5 bg-primary text-on-primary rounded-full w-3.5 h-3.5 flex items-center justify-center">
-                              <span className="material-symbols-outlined text-[10px]">videocam</span>
+                        {p.image ? (
+                          <img
+                            src={p.image}
+                            alt=""
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-full bg-surface-container-high grid place-items-center text-base">
+                            {p.isSelf ? "🙂" : "🧑‍🎓"}
+                          </div>
+                        )}
+                        {p.hasVideo && (
+                          <span className="absolute -bottom-0.5 -right-0.5 bg-primary text-on-primary rounded-full w-3.5 h-3.5 grid place-items-center">
+                            <span className="material-symbols-outlined text-[10px]">
+                              videocam
                             </span>
-                          )}
-                        </div>
-                        <span className="text-[9px] text-on-surface truncate w-full text-center">
-                          {p.isSelf ? "你" : p.name}
-                        </span>
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                      <span className="text-[10px] text-on-surface truncate w-full text-center">
+                        {p.isSelf ? "你" : p.name}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
             {!isMember ? (
-              <p className="text-[11px] text-secondary">加入此自習室後即可使用語音/視訊通話。</p>
+              <p className="text-[12px] text-secondary">
+                加入此自習室後即可使用語音/視訊通話。
+              </p>
             ) : !inVoice ? (
               <button
                 type="button"
                 onClick={() => setShowConsent(true)}
-                className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-2 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1"
+                className="self-start bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-5 py-2.5 rounded-full shadow-sm transition-all flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <span className="material-symbols-outlined text-[18px]">call</span>
+                <span className="material-symbols-outlined text-[20px]">
+                  call
+                </span>
                 加入語音
               </button>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => voiceApiRef.current?.toggleMute()}
-                  className={`font-bold text-[11px] px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${
+                  className={`font-bold text-body-md px-4 py-2 rounded-full border flex items-center gap-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     voiceMuted
                       ? "bg-error-container text-on-error-container border-error/30"
                       : "bg-surface-container hover:bg-surface-container-highest text-on-surface-variant border-outline-variant/30"
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[16px]">
+                  <span className="material-symbols-outlined text-[18px]">
                     {voiceMuted ? "mic_off" : "mic"}
                   </span>
                   {voiceMuted ? "已靜音" : "靜音"}
@@ -1228,13 +1475,13 @@ export default function StudyRoomDetail({
                 <button
                   type="button"
                   onClick={() => voiceApiRef.current?.toggleCamera()}
-                  className={`font-bold text-[11px] px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${
+                  className={`font-bold text-body-md px-4 py-2 rounded-full border flex items-center gap-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     cameraOn
                       ? "bg-primary-container text-on-primary-container border-primary/30"
                       : "bg-surface-container hover:bg-surface-container-highest text-on-surface-variant border-outline-variant/30"
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[16px]">
+                  <span className="material-symbols-outlined text-[18px]">
                     {cameraOn ? "videocam" : "videocam_off"}
                   </span>
                   {cameraOn ? "關鏡頭" : "開鏡頭"}
@@ -1242,21 +1489,20 @@ export default function StudyRoomDetail({
                 <button
                   type="button"
                   onClick={() => voiceApiRef.current?.leave()}
-                  className="bg-error-container text-on-error-container hover:opacity-90 font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-error/20 flex items-center gap-1"
+                  className="bg-error-container text-on-error-container hover:opacity-90 font-bold text-body-md px-4 py-2 rounded-full border border-error/20 flex items-center gap-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
                 >
-                  <span className="material-symbols-outlined text-[16px]">call_end</span>
+                  <span className="material-symbols-outlined text-[18px]">
+                    call_end
+                  </span>
                   離開
                 </button>
-              </div>
-            )}
-
-            {inVoice && (
-              <p className="mt-2 text-[9px] text-secondary flex items-center gap-1">
-                <span className="material-symbols-outlined text-[12px]">
-                  {rnnoiseActive ? "graphic_eq" : "noise_control_off"}
+                <span className="ml-auto text-[11px] text-secondary flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">
+                    {rnnoiseActive ? "graphic_eq" : "noise_control_off"}
+                  </span>
+                  {rnnoiseActive ? "AI 降噪（RNNoise）" : "瀏覽器內建降噪"}
                 </span>
-                {rnnoiseActive ? "AI 降噪已啟用（RNNoise）" : "使用瀏覽器內建降噪"}
-              </p>
+              </div>
             )}
 
             {/* 遠端音訊（隱藏播放） */}
@@ -1272,160 +1518,14 @@ export default function StudyRoomDetail({
           </div>
         </div>
 
-        {/* ---------- 中央：通話中→視訊格優先；否則→番茄鐘 ---------- */}
-        <div className="lg:col-span-6 flex flex-col gap-md">
-          {/* 視訊格（grid）：通話中且有任何鏡頭時，置於中央區並明顯放大 */}
-          {showVideoGrid && (
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border-2 border-primary/30 shadow-md ring-1 ring-primary/10">
-              <div className="flex items-center justify-between mb-2.5">
-                <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1">
-                  <span className="material-symbols-outlined text-primary">videocam</span>
-                  視訊
-                </h3>
-                {recording && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-error">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
-                    {recordingLabel}
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {/* 本地預覽 */}
-                {cameraOn && (
-                  <div
-                    className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
-                      speakingKeys.has("self")
-                        ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
-                        : "border-outline-variant/30"
-                    }`}
-                  >
-                    <video
-                      ref={localVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover -scale-x-100"
-                    />
-                    <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                      {voiceMuted && (
-                        <span className="material-symbols-outlined text-[12px]">mic_off</span>
-                      )}
-                      你
-                    </span>
-                  </div>
-                )}
-                {videoPeers.map((p) => {
-                  const mem = p.userId ? memberByUserId.get(p.userId) : null;
-                  const isSpeaking = speakingKeys.has(p.id);
-                  return (
-                    <div
-                      key={p.id}
-                      className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
-                        isSpeaking
-                          ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
-                          : "border-outline-variant/30"
-                      }`}
-                    >
-                      <video
-                        autoPlay
-                        playsInline
-                        ref={(el) => {
-                          if (el && el.srcObject !== p.stream)
-                            el.srcObject = p.stream;
-                        }}
-                        className="w-full h-full object-cover"
-                      />
-                      <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                        {mem?.name ?? p.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 番茄鐘：通話且有視訊時縮為精簡橫條，否則為大型主視覺 */}
-          {showVideoGrid ? (
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high px-md py-3 rounded-xl border border-outline-variant/30 shadow-sm flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="material-symbols-outlined text-primary">timer</span>
-                <span className="text-2xl font-bold tabular-nums text-on-background">
-                  {mins}:{secs}
-                </span>
-                <span className="text-[11px] text-secondary truncate">
-                  {running ? "番茄鐘運作中" : "已暫停"}
-                </span>
-              </div>
-              <div className="flex gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={toggleTimer}
-                  className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-1.5 rounded-lg shadow flex items-center gap-1 transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {running ? "pause" : "play_arrow"}
-                  </span>
-                  {running ? "暫停" : "開始"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetTimer}
-                  className="bg-surface-container text-on-surface-variant font-bold text-xs px-3 py-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest transition-all flex items-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[16px]">refresh</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-xl rounded-xl border border-outline-variant/30 shadow-sm flex flex-col items-center justify-center relative overflow-hidden min-h-[360px]">
-              <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl opacity-40" />
-              <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-tertiary-container/20 rounded-full blur-3xl opacity-40" />
-
-              <div className="text-center z-10">
-                <h2 className="font-bold text-body-lg text-primary dark:text-primary-fixed mb-1">
-                  專注鐘 (Pomodoro)
-                </h2>
-                <p className="text-secondary text-xs mb-6">
-                  {running ? "番茄鐘運作中" : "準備開始一個番茄鐘"}
-                </p>
-
-                <div className="text-[80px] font-bold tracking-tight text-on-background leading-none mb-8 tabular-nums">
-                  {mins}:{secs}
-                </div>
-
-                <div className="flex gap-4 justify-center">
-                  <button
-                    type="button"
-                    onClick={toggleTimer}
-                    className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-6 py-2.5 rounded-lg shadow flex items-center gap-1 transition-all"
-                  >
-                    <span className="material-symbols-outlined">
-                      {running ? "pause" : "play_arrow"}
-                    </span>
-                    <span>{running ? "暫停" : "開始"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetTimer}
-                    className="bg-surface-container text-on-surface-variant font-bold text-body-md px-5 py-2.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest transition-all flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined">refresh</span> 重置
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* ---------- 右欄：今日目標 + 即時討論 ---------- */}
-        <div className="lg:col-span-3 flex flex-col gap-md">
+        <div className="lg:col-span-4 flex flex-col gap-md">
           {/* 今日小組目標 */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
-            <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-tertiary">
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col">
+            <h3 className="font-bold text-body-md text-on-surface mb-2.5 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-tertiary text-[20px]">
                 playlist_add_check
-              </span>{" "}
+              </span>
               今日小組目標
             </h3>
 
@@ -1504,11 +1604,11 @@ export default function StudyRoomDetail({
           </div>
 
           {/* 即時文字討論區 */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[320px] flex-grow">
-            <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-secondary">
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[420px] flex-grow">
+            <h3 className="font-bold text-body-md text-on-surface mb-2.5 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-secondary text-[20px]">
                 forum
-              </span>{" "}
+              </span>
               即時討論
               <span
                 className={`ml-auto flex items-center gap-1 text-[10px] font-normal ${
@@ -1525,7 +1625,7 @@ export default function StudyRoomDetail({
                       ? "bg-primary"
                       : chatStatus === "error"
                         ? "bg-error"
-                        : "bg-secondary animate-pulse"
+                        : "bg-secondary animate-pulse motion-reduce:animate-none"
                   }`}
                 />
                 {chatStatus === "connected"
@@ -1535,7 +1635,7 @@ export default function StudyRoomDetail({
                     : "連線中…"}
               </span>
             </h3>
-            <div className="flex-grow overflow-y-auto text-xs space-y-2 max-h-[280px] pr-1 flex flex-col">
+            <div className="flex-grow overflow-y-auto text-xs space-y-2 max-h-[380px] pr-1 flex flex-col">
               {chatError && (
                 <div className="text-center text-[10px] text-error my-1.5">
                   {chatError}
