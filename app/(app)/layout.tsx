@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import Sidebar, { type SidebarData } from "@/components/Sidebar";
 import GuidedTour from "@/components/GuidedTour";
+import VoiceCallProvider from "@/components/voice/VoiceCallProvider";
+import FloatingVoiceWidget from "@/components/voice/FloatingVoiceWidget";
 import { auth } from "@/auth";
 import { getOrCreatePet, isCheckedInToday } from "@/lib/pet";
 import { db } from "@/db";
@@ -54,7 +56,7 @@ export default async function AppLayout({
   }
 
   return (
-    <>
+    <VoiceCallProvider>
       <Sidebar data={sidebar} />
       <main className="min-h-screen pt-14 md:pt-0 md:pl-64">
         <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-6 md:py-8 animate-fade-in-up">
@@ -62,6 +64,8 @@ export default async function AppLayout({
         </div>
       </main>
       <GuidedTour role={sidebar.role} />
-    </>
+      {/* 持久語音：右下角浮動小視窗（不在該房頁面且通話中時顯示） */}
+      <FloatingVoiceWidget />
+    </VoiceCallProvider>
   );
 }
