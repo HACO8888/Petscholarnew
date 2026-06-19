@@ -9,6 +9,11 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import type { Role } from "@/db/schema";
 
+// (app) 內所有頁面都是個人化／即時內容（側欄寵物狀態、最新貼文、自習室…），
+// 一律改為動態渲染：不在 build 時靜態預渲染，build 就不需連 DB（避免無 DB 環境 build 失敗），
+// 且使用者每次都看到最新資料。
+export const dynamic = "force-dynamic";
+
 const DEFAULT_SIDEBAR: SidebarData = {
   loggedIn: false,
   role: "student",
