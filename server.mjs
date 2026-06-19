@@ -176,6 +176,7 @@ io.use(async (socket, nextFn) => {
 });
 
 const roomChannel = (roomId) => `study-room:${roomId}`;
+const voiceChannel = (roomId) => `voice:${roomId}`;
 
 io.on("connection", (socket) => {
   // client 連線時帶上 ?roomId=...（在 handshake query），加入該房
@@ -253,6 +254,54 @@ io.on("connection", (socket) => {
       if (typeof ack === "function") ack({ ok: false, error: "送出失敗" });
     }
   });
+
+  // ---- WebRTC 語音通話信令（mesh）：本 server 只轉送 SDP/ICE，不碰媒體 ----
+  socket.on("voice:join", async (ack) => {
+    try {
+      const rid = socket.data.roomId;
+      if (!rid || !(await isRoomMember(rid, socket.data.userId))) {
+        if (typeof ack === "function") ack({ ok: false, error: "非自習室成員" });
+        return;
+      }
+      const ch = voiceChannel(rid);
+      // 目前已在語音中的 peers（排除自己）；新加入者會主動對每個既有 peer 發 offer
+      const sockets = await io.in(ch).fetchSockets();
+      const peers = sockets
+        .filter((s) => s.id !== socket.id)
+        .map((s) => ({ id: s.id, name: s.data?.userName ?? "成員" }));
+      socket.join(ch);
+      socket.data.inVoice = true;
+      socket.to(ch).emit("voice:peer-joined", {
+        id: socket.id,
+        name: socket.data.userName,
+      });
+      if (typeof ack === "function") ack({ ok: true, peers });
+    } catch (err) {
+      console.error("[voice] join error:", err?.message);
+      if (typeof ack === "function") ack({ ok: false, error: "加入語音失敗" });
+    }
+  });
+
+  // 點對點轉送 offer / answer / ICE candidate（targeted relay）
+  socket.on("voice:signal", ({ to, data } = {}) => {
+    if (!to || !socket.data.inVoice) return;
+    io.to(to).emit("voice:signal", {
+      from: socket.id,
+      fromName: socket.data.userName,
+      data,
+    });
+  });
+
+  const leaveVoice = () => {
+    const rid = socket.data.roomId;
+    if (rid && socket.data.inVoice) {
+      socket.to(voiceChannel(rid)).emit("voice:peer-left", { id: socket.id });
+      socket.leave(voiceChannel(rid));
+      socket.data.inVoice = false;
+    }
+  };
+  socket.on("voice:leave", leaveVoice);
+  socket.on("disconnect", leaveVoice);
 });
 
 httpServer.listen(port, hostname, () => {

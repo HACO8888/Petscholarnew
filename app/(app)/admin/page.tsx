@@ -13,10 +13,12 @@ import {
   shopItems,
   users,
   chatMessages,
+  voiceRecordings,
 } from "@/db/schema";
 import AccessDenied from "@/components/AccessDenied";
 import ConfirmSubmit from "@/components/admin/ConfirmSubmit";
 import { formatDateTime } from "@/lib/format";
+import { presignedGetUrl } from "@/lib/s3";
 import { ROLE_OPTIONS, type Role } from "@/components/nav-config";
 import {
   blockReport,
@@ -37,6 +39,9 @@ import {
   bootstrapAdmin,
   hideChatMessage,
   unhideChatMessage,
+  hideRecording,
+  unhideRecording,
+  deleteRecording,
 } from "./actions";
 
 /** 後台子面板：涵蓋所有可管理實體。 */
@@ -47,6 +52,7 @@ const PANELS = [
   { id: "comments", label: "留言", icon: "chat" },
   { id: "rooms", label: "自習室", icon: "meeting_room" },
   { id: "chat", label: "聊天訊息", icon: "chat_bubble" },
+  { id: "recordings", label: "語音錄音", icon: "graphic_eq" },
   { id: "shop", label: "商城商品", icon: "storefront" },
   { id: "users", label: "使用者", icon: "group" },
   { id: "reports", label: "檢舉案件", icon: "report" },
@@ -162,6 +168,7 @@ export default async function AdminPage({
         {panel === "comments" && <CommentsPanel />}
         {panel === "rooms" && <RoomsPanel />}
         {panel === "chat" && <ChatPanel />}
+        {panel === "recordings" && <RecordingsPanel />}
         {panel === "shop" && <ShopPanel />}
         {panel === "users" && <UsersPanel currentUserId={session.user.id} />}
         {panel === "reports" && <ReportsPanel />}
@@ -698,6 +705,98 @@ async function ChatPanel() {
                     </form>
                   )}
                 </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+async function RecordingsPanel() {
+  const rows = await db
+    .select({
+      id: voiceRecordings.id,
+      authorName: voiceRecordings.authorName,
+      objectKey: voiceRecordings.objectKey,
+      durationMs: voiceRecordings.durationMs,
+      sizeBytes: voiceRecordings.sizeBytes,
+      hidden: voiceRecordings.hidden,
+      createdAt: voiceRecordings.createdAt,
+      roomId: voiceRecordings.roomId,
+      roomName: studyRooms.name,
+    })
+    .from(voiceRecordings)
+    .leftJoin(studyRooms, eq(voiceRecordings.roomId, studyRooms.id))
+    .orderBy(desc(voiceRecordings.createdAt))
+    .limit(100);
+
+  // 每段錄音產生短效簽名播放 URL（簽名為本地運算，不發網路請求）
+  const withUrls = await Promise.all(
+    rows.map(async (r) => ({
+      ...r,
+      url: await presignedGetUrl(r.objectKey).catch(() => null),
+    })),
+  );
+
+  return (
+    <PanelShell title="語音通話錄音" icon="graphic_eq" count={`${withUrls.length} 段（最近 100）`}>
+      {withUrls.length === 0 ? (
+        <EmptyState text="目前沒有任何語音錄音。" />
+      ) : (
+        <div className="space-y-md max-h-[640px] overflow-y-auto pr-1 hide-scrollbar">
+          {withUrls.map((r) => (
+            <div key={r.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {r.hidden && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
+                    已隱藏
+                  </span>
+                )}
+                <span className="text-[10px] text-secondary">
+                  <strong className="text-on-surface">{r.authorName}</strong> 於{" "}
+                  <strong className="text-on-surface">{r.roomName ?? "（自習室已刪除）"}</strong>
+                </span>
+                <span className="text-[10px] text-secondary">{formatDateTime(r.createdAt)}</span>
+                {r.durationMs ? (
+                  <span className="text-[10px] text-secondary">{Math.round(r.durationMs / 1000)} 秒</span>
+                ) : null}
+                {r.sizeBytes ? (
+                  <span className="text-[10px] text-secondary">{(r.sizeBytes / 1024).toFixed(0)} KB</span>
+                ) : null}
+              </div>
+              {r.url ? (
+                <audio controls preload="none" src={r.url} className="w-full h-9" />
+              ) : (
+                <p className="text-[10px] text-error">無法產生播放連結（請檢查 S3 設定）</p>
+              )}
+              <div className="flex gap-1.5">
+                {r.roomId && (
+                  <Link href={`/study-rooms/${r.roomId}`} className={`${BTN_NEUTRAL} no-underline text-center`}>
+                    前往
+                  </Link>
+                )}
+                {r.hidden ? (
+                  <form action={unhideRecording}>
+                    <input type="hidden" name="recordingId" value={r.id} />
+                    <button type="submit" className={BTN_NEUTRAL}>取消隱藏</button>
+                  </form>
+                ) : (
+                  <form action={hideRecording}>
+                    <input type="hidden" name="recordingId" value={r.id} />
+                    <button type="submit" className={BTN_NEUTRAL}>隱藏</button>
+                  </form>
+                )}
+                <form action={deleteRecording}>
+                  <input type="hidden" name="recordingId" value={r.id} />
+                  <ConfirmSubmit
+                    message="永久刪除此錄音（含 MinIO 檔案）？此操作無法復原。"
+                    className={BTN_DANGER}
+                  >
+                    永久刪除
+                  </ConfirmSubmit>
+                </form>
               </div>
             </div>
           ))}

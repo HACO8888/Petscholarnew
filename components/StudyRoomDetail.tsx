@@ -169,6 +169,23 @@ export default function StudyRoomDetail({
   // 防連點重複送出
   const sendingRef = useRef(false);
 
+  // ---- 語音通話（WebRTC mesh + Cloudflare TURN）----
+  const [inVoice, setInVoice] = useState(false);
+  const [voiceMuted, setVoiceMuted] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voicePeers, setVoicePeers] = useState<
+    { id: string; name: string; stream: MediaStream }[]
+  >([]);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  // 由 socket effect 注入的語音操作 API（給按鈕呼叫，避免 socket 監聽重複註冊）
+  const voiceApiRef = useRef<{
+    join: () => void;
+    leave: () => void;
+    toggleMute: () => void;
+    startRec: () => void;
+    stopRec: () => void;
+  } | null>(null);
+
   useEffect(() => {
     // 連到 custom server 的 Socket.IO；session 由同源 cookie 驗證
     const socket = io({
@@ -205,7 +222,186 @@ export default function StudyRoomDetail({
       setChatError(e?.message ?? "聊天室發生錯誤");
     });
 
+    // ----- 語音通話：WebRTC mesh 信令 + 本地媒體/錄音 -----
+    const pcs = new Map<string, RTCPeerConnection>();
+    let localStream: MediaStream | null = null;
+    let iceServers: RTCIceServer[] = [];
+    let recorder: MediaRecorder | null = null;
+    let recChunks: Blob[] = [];
+    let recStart = 0;
+
+    const closePeer = (id: string) => {
+      const pc = pcs.get(id);
+      if (pc) {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.close();
+        pcs.delete(id);
+      }
+      setVoicePeers((ps) => ps.filter((p) => p.id !== id));
+    };
+
+    const makePeer = async (peerId: string, peerName: string, initiator: boolean) => {
+      let pc = pcs.get(peerId);
+      if (pc) return pc;
+      pc = new RTCPeerConnection({ iceServers });
+      pcs.set(peerId, pc);
+      if (localStream) {
+        for (const t of localStream.getTracks()) pc.addTrack(t, localStream);
+      }
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          socket.emit("voice:signal", { to: peerId, data: { candidate: e.candidate } });
+        }
+      };
+      pc.ontrack = (e) => {
+        const stream = e.streams[0];
+        setVoicePeers((ps) => [
+          ...ps.filter((p) => p.id !== peerId),
+          { id: peerId, name: peerName, stream },
+        ]);
+      };
+      pc.onconnectionstatechange = () => {
+        if (
+          pc &&
+          (pc.connectionState === "failed" ||
+            pc.connectionState === "closed" ||
+            pc.connectionState === "disconnected")
+        ) {
+          closePeer(peerId);
+        }
+      };
+      if (initiator) {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("voice:signal", { to: peerId, data: { sdp: pc.localDescription } });
+      }
+      return pc;
+    };
+
+    socket.on(
+      "voice:signal",
+      async ({
+        from,
+        fromName,
+        data,
+      }: {
+        from: string;
+        fromName: string;
+        data: { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+      }) => {
+        try {
+          if (data?.sdp) {
+            if (data.sdp.type === "offer") {
+              const pc = await makePeer(from, fromName, false);
+              await pc.setRemoteDescription(data.sdp);
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              socket.emit("voice:signal", { to: from, data: { sdp: pc.localDescription } });
+            } else if (data.sdp.type === "answer") {
+              await pcs.get(from)?.setRemoteDescription(data.sdp);
+            }
+          } else if (data?.candidate) {
+            await pcs.get(from)?.addIceCandidate(data.candidate);
+          }
+        } catch {
+          /* 忽略個別信令錯誤，不影響其他 peer */
+        }
+      },
+    );
+
+    socket.on("voice:peer-left", ({ id }: { id: string }) => closePeer(id));
+
+    const join = async () => {
+      try {
+        setVoiceError(null);
+        const res = await fetch("/api/turn");
+        const json = (await res.json()) as { iceServers?: RTCIceServer[] };
+        iceServers = json.iceServers ?? [];
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        setVoiceMuted(false);
+        socket.emit(
+          "voice:join",
+          (ack: { ok: boolean; peers?: { id: string; name: string }[]; error?: string }) => {
+            if (!ack?.ok) {
+              setVoiceError(ack?.error ?? "加入語音失敗");
+              localStream?.getTracks().forEach((t) => t.stop());
+              localStream = null;
+              return;
+            }
+            setInVoice(true);
+            for (const p of ack.peers ?? []) makePeer(p.id, p.name, true);
+          },
+        );
+      } catch {
+        setVoiceError("無法取得麥克風權限");
+      }
+    };
+
+    const leave = () => {
+      socket.emit("voice:leave");
+      for (const id of [...pcs.keys()]) closePeer(id);
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      localStream?.getTracks().forEach((t) => t.stop());
+      localStream = null;
+      setInVoice(false);
+      setRecording(false);
+      setVoicePeers([]);
+    };
+
+    const toggleMute = () => {
+      if (!localStream) return;
+      const enabled = localStream.getAudioTracks().every((t) => t.enabled);
+      localStream.getAudioTracks().forEach((t) => (t.enabled = !enabled));
+      setVoiceMuted(enabled);
+    };
+
+    const startRec = () => {
+      if (!localStream) return;
+      try {
+        recChunks = [];
+        recorder = new MediaRecorder(localStream);
+        recStart = performance.now();
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recChunks.push(e.data);
+        };
+        recorder.onstop = async () => {
+          const blob = new Blob(recChunks, { type: recorder?.mimeType || "audio/webm" });
+          recChunks = [];
+          if (blob.size === 0) return;
+          const fd = new FormData();
+          fd.append("audio", blob, "recording.webm");
+          fd.append("roomId", room.id);
+          fd.append("durationMs", String(Math.round(performance.now() - recStart)));
+          try {
+            await fetch("/api/recordings", { method: "POST", body: fd });
+          } catch {
+            /* 上傳失敗忽略 */
+          }
+        };
+        recorder.start();
+        setRecording(true);
+      } catch {
+        setVoiceError("此瀏覽器不支援錄音");
+      }
+    };
+
+    const stopRec = () => {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      setRecording(false);
+    };
+
+    voiceApiRef.current = { join, leave, toggleMute, startRec, stopRec };
+
     return () => {
+      // 清理語音
+      socket.emit("voice:leave");
+      for (const pc of pcs.values()) pc.close();
+      pcs.clear();
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      localStream?.getTracks().forEach((t) => t.stop());
+      voiceApiRef.current = null;
+      // 清理聊天 socket
       socket.off();
       socket.disconnect();
       socketRef.current = null;
@@ -384,8 +580,99 @@ export default function StudyRoomDetail({
           </div>
         </div>
 
-        {/* Right: 目標清單 + 聊天 */}
+        {/* Right: 語音 + 目標清單 + 聊天 */}
         <div className="lg:col-span-3 flex flex-col gap-md h-full">
+          {/* 語音通話（WebRTC + Cloudflare TURN） */}
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
+            <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
+              <span className="material-symbols-outlined text-primary">mic</span>
+              語音通話
+              {inVoice && (
+                <span className="ml-1 text-[10px] font-normal text-green-600 dark:text-green-400">
+                  ● 通話中（{voicePeers.length + 1} 人）
+                </span>
+              )}
+            </h3>
+            {voiceError && (
+              <p className="text-[10px] text-error mb-1.5">{voiceError}</p>
+            )}
+            {!isMember ? (
+              <p className="text-[11px] text-secondary">加入此自習室後即可使用語音通話。</p>
+            ) : !inVoice ? (
+              <button
+                type="button"
+                onClick={() => voiceApiRef.current?.join()}
+                className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-2 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[18px]">call</span>
+                加入語音
+              </button>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => voiceApiRef.current?.toggleMute()}
+                  className="bg-surface-container hover:bg-surface-container-highest text-on-surface-variant font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-outline-variant/30 flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {voiceMuted ? "mic_off" : "mic"}
+                  </span>
+                  {voiceMuted ? "已靜音" : "靜音"}
+                </button>
+                {recording ? (
+                  <button
+                    type="button"
+                    onClick={() => voiceApiRef.current?.stopRec()}
+                    className="bg-error text-on-error font-bold text-[11px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 animate-pulse"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">stop_circle</span>
+                    停止錄音
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => voiceApiRef.current?.startRec()}
+                    className="bg-surface-container hover:bg-surface-container-highest text-on-surface-variant font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-outline-variant/30 flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">fiber_manual_record</span>
+                    錄音
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => voiceApiRef.current?.leave()}
+                  className="bg-error-container text-on-error-container hover:opacity-90 font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-error/20 flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[16px]">call_end</span>
+                  離開
+                </button>
+              </div>
+            )}
+            {inVoice && voicePeers.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {voicePeers.map((p) => (
+                  <span
+                    key={p.id}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-primary-container/40 text-on-primary-container flex items-center gap-0.5"
+                  >
+                    <span className="material-symbols-outlined text-[12px]">graphic_eq</span>
+                    {p.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* 遠端音訊（隱藏播放） */}
+            {voicePeers.map((p) => (
+              <audio
+                key={p.id}
+                autoPlay
+                ref={(el) => {
+                  if (el && el.srcObject !== p.stream) el.srcObject = p.stream;
+                }}
+              />
+            ))}
+          </div>
+
           {/* 今日小組目標 */}
           <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[220px]">
             <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">

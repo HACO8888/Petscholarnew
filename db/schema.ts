@@ -278,10 +278,37 @@ export const chatMessages = pgTable(
   ],
 );
 
+// 自習室語音通話的錄音（WebRTC 通話時由前端 MediaRecorder 錄下，上傳 MinIO/S3）
+export const voiceRecordings = pgTable(
+  "voice_recording",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    roomId: varchar("room_id", { length: 48 })
+      .notNull()
+      .references(() => studyRooms.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    authorName: text("author_name").notNull(),
+    // MinIO 物件鍵（bucket 內路徑）
+    objectKey: text("object_key").notNull(),
+    contentType: varchar("content_type", { length: 64 }).notNull().default("audio/webm"),
+    durationMs: integer("duration_ms"),
+    sizeBytes: integer("size_bytes"),
+    hidden: boolean("hidden").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("voice_room_created_idx").on(t.roomId, t.createdAt),
+    index("voice_user_idx").on(t.userId),
+  ],
+);
+
 export type StudyRoom = typeof studyRooms.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
+export type VoiceRecording = typeof voiceRecordings.$inferSelect;
 
 // ---- 福利社優惠券兌換紀錄 ----
 export const couponRedemptions = pgTable(

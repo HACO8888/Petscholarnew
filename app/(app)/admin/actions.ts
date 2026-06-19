@@ -15,8 +15,10 @@ import {
   shopItems,
   users,
   chatMessages,
+  voiceRecordings,
 } from "@/db/schema";
 import type { Role } from "@/db/schema";
+import { deleteObject } from "@/lib/s3";
 
 /**
  * 嚴格的 server 端 admin 驗權：所有後台異動 action 都必須先呼叫。
@@ -54,6 +56,43 @@ export async function unhideChatMessage(formData: FormData) {
     .where(eq(chatMessages.id, id))
     .returning({ id: chatMessages.id });
   if (updated.length === 0) throw new Error("訊息不存在");
+  revalidatePath("/admin");
+}
+
+/** admin：隱藏一段語音錄音（hidden 後一般使用者不再看得到） */
+export async function hideRecording(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("recordingId") ?? "");
+  if (!id) throw new Error("缺少錄音");
+  await db.update(voiceRecordings).set({ hidden: true }).where(eq(voiceRecordings.id, id));
+  revalidatePath("/admin");
+}
+
+/** admin：取消隱藏一段語音錄音 */
+export async function unhideRecording(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("recordingId") ?? "");
+  if (!id) throw new Error("缺少錄音");
+  await db.update(voiceRecordings).set({ hidden: false }).where(eq(voiceRecordings.id, id));
+  revalidatePath("/admin");
+}
+
+/** admin：永久刪除一段語音錄音（同時刪除 MinIO 物件） */
+export async function deleteRecording(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("recordingId") ?? "");
+  if (!id) throw new Error("缺少錄音");
+  const [row] = await db
+    .delete(voiceRecordings)
+    .where(eq(voiceRecordings.id, id))
+    .returning({ objectKey: voiceRecordings.objectKey });
+  if (row?.objectKey) {
+    try {
+      await deleteObject(row.objectKey);
+    } catch {
+      /* 物件刪除失敗不阻擋 DB 刪除；孤兒物件可日後清理 */
+    }
+  }
   revalidatePath("/admin");
 }
 
