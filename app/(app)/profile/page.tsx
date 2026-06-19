@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { users, posts, pets, comments } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
+import AvatarUpload from "@/components/AvatarUpload";
 import { updateProfile } from "./actions";
 
 const GENDER_OPTIONS = [
@@ -127,9 +128,9 @@ export default async function ProfilePage() {
         {/* User Info Card */}
         <div className="md:col-span-2 bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col md:flex-row items-center md:items-start gap-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary-container rounded-full blur-3xl opacity-20 -mr-10 -mt-10"></div>
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 flex flex-col items-center gap-md z-10">
             {me.image ? (
-               
+
               <img
                 alt={displayName}
                 className="w-32 h-32 rounded-full border-4 border-surface shadow-sm object-cover"
@@ -145,6 +146,7 @@ export default async function ProfilePage() {
                 )}
               </div>
             )}
+            <AvatarUpload />
           </div>
           <div className="flex-1 min-w-0 text-center md:text-left z-10">
             <h1 className="font-headline-lg text-headline-lg text-on-surface break-words">{displayName}</h1>
