@@ -14,7 +14,7 @@ interface EditableRoom {
 
 /**
  * 「編輯房間」彈窗：建立者/系統管理員可改標題/科目/說明/人數上限/密碼。
- * 密碼欄留空 = 不變更；勾「移除密碼」= 改為公開房。
+ * 密碼欄留空 = 不變更。勾「移除密碼」= 改為公開房。
  * 不回傳明碼，僅以 hasPassword 旗標提示目前是否為私密房。
  */
 export default function StudyRoomEditDialog({
@@ -148,7 +148,7 @@ export default function StudyRoomEditDialog({
                 房間密碼{" "}
                 <span className="font-normal text-on-surface-variant">
                   {room.hasPassword
-                    ? "（目前為私密房；留空不變更）"
+                    ? "（目前為私密房。留空不變更）"
                     : "（留空 = 公開房）"}
                 </span>
               </label>

@@ -5,8 +5,8 @@ import { createRoom } from "@/app/(app)/study-rooms/actions";
 
 /**
  * 「發起課業共讀邀約」建立房間表單。
- * - 點按鈕展開浮層表單；送出成功後清空欄位並收合表單。
- * - 支援設定房間密碼（選填；有值即為私密房）。
+ * - 點按鈕展開浮層表單。送出成功後清空欄位並收合表單。
+ * - 支援設定房間密碼（選填。有值即為私密房）。
  */
 export default function StudyRoomCreateForm() {
   const [open, setOpen] = useState(false);

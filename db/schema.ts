@@ -173,7 +173,7 @@ export const shopItems = pgTable("shop_item", {
   hpRestore: integer("hp_restore").notNull().default(0),
   expGain: integer("exp_gain").notNull().default(0),
   icon: text("icon"),
-  // 食物的真實商品圖（Stitch 圖庫 URL）；商城與背包共用同一來源，避免圖文不符。
+  // 食物的真實商品圖（Stitch 圖庫 URL）。商城與背包共用同一來源，避免圖文不符。
   // 配件無實體圖時為 null，改用 icon emoji 呈現。
   image: text("image"),
   description: text("description"),
@@ -210,7 +210,7 @@ export const studyRooms = pgTable("study_room", {
   subject: text("subject"),
   description: text("description"),
   capacity: integer("capacity").notNull().default(8),
-  // 建立者（用於擁有權：限制建立數、允許建立者刪除）；舊種子房為 null
+  // 建立者（用於擁有權：限制建立數、允許建立者刪除）。舊種子房為 null
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
   }),
@@ -320,11 +320,11 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 export type NewChatMessage = typeof chatMessages.$inferInsert;
 export type VoiceRecording = typeof voiceRecordings.$inferSelect;
 
-// ---- 科系（由管理員維護的清單；所有選科系處只能從此清單選） ----
+// ---- 科系（由管理員維護的清單。所有選科系處只能從此清單選） ----
 export const departments = pgTable("department", {
   id: varchar("id", { length: 64 }).primaryKey(),
   name: text("name").notNull(),
-  // 所屬學院（對應 board.id，如 cmee/ceecs…；可為 null）
+  // 所屬學院（對應 board.id，如 cmee/ceecs…。可為 null）
   college: varchar("college", { length: 32 }),
   sortOrder: integer("sort_order").notNull().default(0),
 });

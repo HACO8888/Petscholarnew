@@ -36,7 +36,7 @@ export default function PomodoroRing({
       className="relative inline-grid place-items-center"
       style={{ width: size, height: size }}
     >
-      {/* 運作中的暖色發光底（柔和脈動，reduced-motion 下不動）；精簡模式不顯示 */}
+      {/* 運作中的暖色發光底（柔和脈動，reduced-motion 下不動）。精簡模式不顯示 */}
       {running && !compact && (
         <div
           aria-hidden

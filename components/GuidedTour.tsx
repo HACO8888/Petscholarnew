@@ -192,7 +192,7 @@ export default function GuidedTour({ role = "student" }: { role?: Role }) {
     router.push(step.href);
   }
 
-  // 卡片定位：若有指向目標，置於目標下方並對齊；否則畫面置中。
+  // 卡片定位：若有指向目標，置於目標下方並對齊。否則畫面置中。
   const cardStyle: React.CSSProperties = spot
     ? {
         position: "fixed",
@@ -214,7 +214,7 @@ export default function GuidedTour({ role = "student" }: { role?: Role }) {
 
   return (
     <div className="fixed inset-0 z-[100] pointer-events-none" role="dialog" aria-label="網站導覽">
-      {/* spotlight：box-shadow 鏤空目標並使周圍變暗；不攔截點擊，畫面其餘區域仍可正常操作（不卡畫面） */}
+      {/* spotlight：box-shadow 鏤空目標並使周圍變暗。不攔截點擊，畫面其餘區域仍可正常操作（不卡畫面） */}
       {spot ? (
         <div
           className="pointer-events-none absolute rounded-xl ring-2 ring-primary transition-all"

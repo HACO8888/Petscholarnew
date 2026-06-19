@@ -82,7 +82,7 @@ export default async function StudyRoomsPage() {
     })
     .from(studyRoomMembers);
 
-  // 雷達頭像：取自習室成員（真實使用者）；若無成員，改用最近註冊使用者作為夥伴
+  // 雷達頭像：取自習室成員（真實使用者）。若無成員，改用最近註冊使用者作為夥伴
   type RadarPin = {
     id: string;
     name: string | null;
@@ -230,7 +230,7 @@ export default async function StudyRoomsPage() {
               const shownMembers = roomMembers.slice(0, 2);
               const extra = room.members - shownMembers.length;
               const isHot = idx === 0;
-              // 整張卡片可點擊進入詳情頁；未登入則導向登入
+              // 整張卡片可點擊進入詳情頁。未登入則導向登入
               const href = userId ? `/study-rooms/${room.id}` : "/login";
               return (
                 <Link

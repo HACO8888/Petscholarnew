@@ -4,14 +4,14 @@
  * 為何要 custom server：
  *   Next.js App Router 沒有內建的長連線 WebSocket 伺服器。自習室聊天要「即時廣播 +
  *   DB 持久化」，因此用 Next 的 programmatic API 起 app，並在同一個 http server 掛上
- *   Socket.IO；多實例部署時用 Redis adapter 跨實例同步房間廣播。
+ *   Socket.IO。多實例部署時用 Redis adapter 跨實例同步房間廣播。
  *
  * 跑法：
  *   開發：  npm run dev      → NODE_ENV=development node server.mjs（Next dev + 即時）
  *   生產：  npm run build && npm run start → NODE_ENV=production node server.mjs
  *
  * 注意：
- *   - 本檔以「純 Node」執行，不經過 TS 編譯，故不 import 專案的 TS 模組；DB 存取改用
+ *   - 本檔以「純 Node」執行，不經過 TS 編譯，故不 import 專案的 TS 模組。DB 存取改用
  *     postgres.js 直接下 SQL（schema 與 db/schema.ts 的 chat_message 一致）。
  *   - `next build` 完全不受本檔影響（custom server 只在 runtime 生效）。
  *   - 機密一律讀 process.env（DATABASE_URL / REDIS_URL）。
@@ -36,7 +36,7 @@ const port = parseInt(process.env.PORT || "3000", 10);
 const MAX_MESSAGE_LENGTH = 1000;
 const HISTORY_LIMIT = 50;
 
-// ---- DB（postgres.js，直接下 SQL；與 db/index.ts 同一個連線字串）----
+// ---- DB（postgres.js，直接下 SQL。與 db/index.ts 同一個連線字串）----
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL is not set（custom server 需要它連 DB）。");
@@ -199,7 +199,7 @@ function parseCookies(cookieHeader) {
 
 function getSessionTokenFromCookies(cookieHeader) {
   const cookies = parseCookies(cookieHeader);
-  // dev：authjs.session-token；production（HTTPS）：__Secure-authjs.session-token
+  // dev：authjs.session-token。production（HTTPS）：__Secure-authjs.session-token
   return (
     cookies["__Secure-authjs.session-token"] ||
     cookies["authjs.session-token"] ||
@@ -302,7 +302,7 @@ io.on("connection", (socket) => {
           typeof payload?.parentId === "string" && payload.parentId
             ? payload.parentId
             : null;
-        // 內容可空但需有圖（純圖留言）；兩者皆空則拒絕
+        // 內容可空但需有圖（純圖留言）。兩者皆空則拒絕
         if (!content && !image) {
           if (typeof ack === "function") ack({ ok: false, error: "內容不可為空" });
           return;
@@ -339,7 +339,7 @@ io.on("connection", (socket) => {
     });
 
     // 採納即時廣播：採納/認證的 DB 寫入由 server action 負責（含金幣轉帳、授權）。
-    // 此事件僅在該寫入完成後，由發動者 client 觸發；server 重新確認 DB 狀態
+    // 此事件僅在該寫入完成後，由發動者 client 觸發。server 重新確認 DB 狀態
     // （該留言確為 is_adopted=true 且屬此文章、文章已解決）才廣播，故不可偽造。
     socket.on("comment:adopt-notify", async (payload, ack) => {
       try {
@@ -454,7 +454,7 @@ io.on("connection", (socket) => {
         return;
       }
       const ch = voiceChannel(rid);
-      // 目前已在語音中的 peers（排除自己）；新加入者會主動對每個既有 peer 發 offer
+      // 目前已在語音中的 peers（排除自己）。新加入者會主動對每個既有 peer 發 offer
       const sockets = await io.in(ch).fetchSockets();
       const peers = sockets
         .filter((s) => s.id !== socket.id)
@@ -545,7 +545,7 @@ io.on("connection", (socket) => {
     try {
       const ctx = await authorizeModAction(payload, ack);
       if (!ctx) return;
-      // 不可踢建立者；不可踢自己
+      // 不可踢建立者。不可踢自己
       const ownerId = await roomOwnerId(ctx.rid);
       if (ctx.targetUserId === ownerId) {
         if (typeof ack === "function") ack({ ok: false, error: "無法踢出建立者" });

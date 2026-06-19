@@ -166,7 +166,7 @@ export class SpeakingDetector {
       });
       this.start();
     } catch {
-      /* 某些串流可能無法建立 source；略過該 key */
+      /* 某些串流可能無法建立 source。略過該 key */
     }
   }
 

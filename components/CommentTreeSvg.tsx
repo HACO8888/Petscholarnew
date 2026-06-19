@@ -100,7 +100,7 @@ export default function CommentTreeSvg({
   subtreeWidth(root, widths);
 
   // Pass 2：以 [left, left+width) 的水平帶狀區間配置每個子樹，
-  // 節點置於其子節點群（子帶）的水平中點；葉節點置於自身帶的中點。
+  // 節點置於其子節點群（子帶）的水平中點。葉節點置於自身帶的中點。
   function place(node: TreeLike, depth: number, left: number): PlacedNode {
     maxDepth = Math.max(maxDepth, depth);
     const y = PAD_TOP + depth * LEVEL_H + NODE_H / 2;
@@ -223,7 +223,7 @@ export default function CommentTreeSvg({
           role="img"
           aria-label={`留言樹狀結構視覺化，共 ${placed.length - 1} 則留言`}
         >
-          {/* 連線（先畫，置於節點下方）；已採納路徑加粗高亮 */}
+          {/* 連線（先畫，置於節點下方）。已採納路徑加粗高亮 */}
           {edges.map((e, i) => (
             <path
               key={i}

@@ -108,7 +108,7 @@
 }
 
 /* ==== Material 3 深色配色：翻轉 token，讓全站內容自動支援 dark mode ====
-   （inverse-* 維持「反相」語意；surface 系列在深色下皆為深色，dark:bg-surface-container-*
+   （inverse-* 維持「反相」語意。surface 系列在深色下皆為深色，dark:bg-surface-container-*
    仍能取得不同深色層級。fixed 色不隨主題翻轉。） */
 :root.dark {
   --color-background: #111417;

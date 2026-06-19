@@ -156,7 +156,7 @@ export default async function LeaderboardPage({
   // 顯示前三名以外的全部名次（查詢已 limit 20），先前只切 3..7 會把第 8 名以後靜默丟棄
   const listRows = ranked.slice(3);
 
-  // 當前使用者成就（依真實資料計算，對齊 legacy 六項；門檻以真實 DB 來源定義）
+  // 當前使用者成就（依真實資料計算，對齊 legacy 六項。門檻以真實 DB 來源定義）
   let achievements:
     | {
         id: string;

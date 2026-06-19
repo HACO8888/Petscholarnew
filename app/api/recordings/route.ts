@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "檔案大小不符（需 1B–100MB）" }, { status: 400 });
   }
 
-  // 含影像的錄影 contentType 會是 video/webm；純語音為 audio/webm。
+  // 含影像的錄影 contentType 會是 video/webm。純語音為 audio/webm。
   const contentType = file.type || "audio/webm";
   const ext = contentType.includes("ogg")
     ? "ogg"

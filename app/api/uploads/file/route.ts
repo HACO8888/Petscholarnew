@@ -4,7 +4,7 @@ import { getObjectStream } from "@/lib/s3";
 
 /**
  * 從 MinIO 串流回傳留言／發問附圖物件。
- * GET ?key=comments/...；驗登入且 key 必須以 comments/ 開頭（防任意讀取）。
+ * GET ?key=comments/...。驗登入且 key 必須以 comments/ 開頭（防任意讀取）。
  * comments.image / posts.image 指向本路由，故 <img src={...}> 可直接顯示。
  */
 export const runtime = "nodejs";
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
 
   const headers = new Headers({
     "Content-Type": obj.contentType,
-    // 物件以 uuid 命名、內容不可變；私有快取一天即可
+    // 物件以 uuid 命名、內容不可變。私有快取一天即可
     "Cache-Control": "private, max-age=86400",
     // 防止 svg/HTML 內嵌腳本在本網域執行（XSS 緩解）
     "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'",

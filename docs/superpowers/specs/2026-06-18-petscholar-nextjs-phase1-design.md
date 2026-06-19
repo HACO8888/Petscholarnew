@@ -1,7 +1,7 @@
 # PetScholar → Next.js 遷移：Phase 1 地基設計
 
 日期：2026-06-18
-狀態：**歷史快照（已完成並大幅擴充）** —— 本文為 Phase 1 地基的設計記錄；專案此後已加入
+狀態：**歷史快照（已完成並大幅擴充）** —— 本文為 Phase 1 地基的設計記錄。專案此後已加入
 自訂 Socket.IO 伺服器、即時聊天/語音/視訊、Redis、MinIO、Cloudflare TURN、寵物等級制度、
 科系系統、公開檔案等。**最新狀態請見 [`AGENTS.md`](../../../AGENTS.md) 與 [`README.md`](../../../README.md)。**
 
@@ -63,7 +63,7 @@ PetScholar 原本是一個純前端靜態 demo（`index.html` + 212KB `script.js
 - 「3分鐘簡報導覽」鈕：**保留按鈕與位置**，Phase 1 接上骨架（點擊呼叫一個 stub），
   完整導覽流程後續階段再移植。
 - 「身分切換」下拉（學生/助教/教授/管理員）：Phase 1 以本機 state 控制角色限定 tabs 的顯示，
-  複製現有 demo 行為；Phase 2 接真認證後改由登入身分決定。
+  複製現有 demo 行為。Phase 2 接真認證後改由登入身分決定。
 - 登入鈕 → `/login`。
 
 Header 是 Client Component（需 `usePathname` + 深淺切換 + 角色 state）。
@@ -118,13 +118,13 @@ legacy/               # 舊靜態檔（index.html、script.js、14 個 code.html
 
 ### 7. 資料流
 
-- 頁面預設 Server Component；需要互動的（Header、ThemeToggle）為 Client Component。
+- 頁面預設 Server Component。需要互動的（Header、ThemeToggle）為 Client Component。
 - DB 僅在 server 端（Server Component / Route Handler）透過 Drizzle 存取。
 - 深淺模式：Client 端切換，class 套在 `<html>`，狀態存 localStorage。
 
 ## 錯誤處理
 
-- DB 連線失敗：`db/index.ts` 啟動時若缺 `DATABASE_URL` 給出明確錯誤訊息；Phase 1 頁面不直接依賴
+- DB 連線失敗：`db/index.ts` 啟動時若缺 `DATABASE_URL` 給出明確錯誤訊息。Phase 1 頁面不直接依賴
   DB 內容，故 DB 故障不影響路由殼可瀏覽。
 - 加 `app/not-found.tsx` 處理未知路由。
 
@@ -149,7 +149,7 @@ legacy/               # 舊靜態檔（index.html、script.js、14 個 code.html
   - 「全站提問紀錄」的分類篩選要**真的能依分類過濾**（非只是樣式）。
   - 「封鎖帳號及問題」清單要與「檢舉案件與處理日誌」**連動**：管理員一旦在檢舉案件按下
     「駁回案件」，該筆就立即從「封鎖帳號及問題」清單移除（共用同一份案件狀態資料來源）。
-  - 版面參考：使用者提到「下面那張圖」，但對話中未實際附上圖片；先以 legacy 既有 admin
+  - 版面參考：使用者提到「下面那張圖」，但對話中未實際附上圖片。先以 legacy 既有 admin
     mockup 為版面依據，待使用者補圖後再對齊。
 
 ## 不在 Phase 1 範圍（明確排除）

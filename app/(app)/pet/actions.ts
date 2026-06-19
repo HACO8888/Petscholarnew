@@ -34,7 +34,7 @@ export async function buyItem(formData: FormData) {
   if (!item) throw new Error("商品不存在");
 
   const pet = await getOrCreatePet(userId); // 確保錢包存在
-  // 等級解鎖：server 端把關，不信任 UI 隱藏鈕；未達門檻直接拒絕。
+  // 等級解鎖：server 端把關，不信任 UI 隱藏鈕。未達門檻直接拒絕。
   if (item.minLevel > 0 && pet.level < item.minLevel) {
     throw new Error(`需寵物等級 Lv.${item.minLevel} 才能購買`);
   }

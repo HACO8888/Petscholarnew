@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 /**
- * 側欄殼層：桌機(md+)固定於左側；行動版以漢堡鈕開啟左側滑入抽屜。
+ * 側欄殼層：桌機(md+)固定於左側。行動版以漢堡鈕開啟左側滑入抽屜。
  * 內容（品牌/寵物卡/導航/登入登出）由 server 端的 Sidebar 以 children 傳入。
  */
 export default function SidebarShell({ children }: { children: React.ReactNode }) {
@@ -55,7 +55,7 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
         />
       )}
 
-      {/* 側欄本體：桌機固定左側；行動版抽屜 */}
+      {/* 側欄本體：桌機固定左側。行動版抽屜 */}
       <aside
         className={`fixed left-0 top-0 z-50 h-screen w-72 max-w-[85vw] md:w-64 bg-surface-container dark:bg-surface-container-high font-label-md text-label-md shadow-xl md:shadow-md border-r border-outline-variant dark:border-outline flex flex-col p-md transition-transform duration-300 ease-out md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"

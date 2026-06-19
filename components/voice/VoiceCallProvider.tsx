@@ -5,16 +5,16 @@
  * 使導航到別頁時通話不中斷。
  *
  * 擁有：
- *  - 專屬 Socket.IO 連線（join 時建立、leave 時關閉；以 ?roomId= 帶房、由 cookie 驗身分）。
+ *  - 專屬 Socket.IO 連線（join 時建立、leave 時關閉。以 ?roomId= 帶房、由 cookie 驗身分）。
  *    注意：聊天文字仍由頁面元件 StudyRoomDetail 自己的 socket 處理，兩者各自獨立。
  *  - getUserMedia（echoCancellation/autoGainControl/noiseSuppression）+ RNNoise（AI 降噪）。
  *  - WebRTC mesh peer 連線 + voice 信令（perfect negotiation）。
- *  - 強制錄製（MediaRecorder：音訊一律錄、開鏡頭連影像；每段分段上傳 /api/recordings；離開上傳最後一段）。
- *  - 加入前同意彈窗（由消費端觸發 join；本 Provider 全程提供 recording 指示）。
+ *  - 強制錄製（MediaRecorder：音訊一律錄、開鏡頭連影像。每段分段上傳 /api/recordings。離開上傳最後一段）。
+ *  - 加入前同意彈窗（由消費端觸發 join。本 Provider 全程提供 recording 指示）。
  *  - 說話偵測（SpeakingDetector）、靜音/開鏡頭、moderation（forceMute/forceCameraOff/kick）。
  *
  * 以 useVoiceCall() 暴露狀態與操作給：房頁完整 UI（StudyRoomDetail）與右下角 FloatingVoiceWidget。
- * 單一通話限制：同時只會在一個房間語音；已在 A 房時對 B 房 join 會被拒絕並回傳訊息。
+ * 單一通話限制：同時只會在一個房間語音。已在 A 房時對 B 房 join 會被拒絕並回傳訊息。
  */
 
 import {
@@ -74,14 +74,14 @@ export interface VoiceCallContextValue {
   notice: string | null;
   /** 本地串流（降噪後音訊 + 可選「已套虛擬背景」video），給本地預覽 <video> 用。 */
   localStream: MediaStream | null;
-  /** 目前虛擬背景設定（無 / 模糊 / 圖片）；跨頁持續。 */
+  /** 目前虛擬背景設定（無 / 模糊 / 圖片）。跨頁持續。 */
   virtualBg: VirtualBgState;
   /**
    * 切換虛擬背景（模式 / 圖片）。鏡頭開啟時即時生效、不需重開鏡頭，
    * 處理後 track 持續相同 → 送 peer 與錄製來源不變、無縫切換。
    */
   setVirtualBg: (next: VirtualBgState) => void;
-  /** 加入指定房語音；roomName 供浮動視窗顯示。 */
+  /** 加入指定房語音。roomName 供浮動視窗顯示。 */
   join: (roomId: string, roomName: string) => void;
   /** 離開語音（上傳最後一段錄製）。 */
   leave: () => void;
@@ -124,12 +124,12 @@ export default function VoiceCallProvider({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  // 虛擬背景設定（跨頁持續；切換不需重開鏡頭）。
+  // 虛擬背景設定（跨頁持續。切換不需重開鏡頭）。
   const [virtualBg, setVirtualBgState] = useState<VirtualBgState>(
     DEFAULT_VIRTUAL_BG,
   );
 
-  // ---- 內部可變狀態（不觸發 render；以 ref 持有，跨 render 穩定）----
+  // ---- 內部可變狀態（不觸發 render。以 ref 持有，跨 render 穩定）----
   const socketRef = useRef<Socket | null>(null);
   const roomIdRef = useRef<string | null>(null);
   const pcsRef = useRef(new Map<string, RTCPeerConnection>());
@@ -140,7 +140,7 @@ export default function VoiceCallProvider({
   const rawMicTrackRef = useRef<MediaStreamTrack | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const noiseHandleRef = useRef<NoiseSuppressionHandle | null>(null);
-  // 鏡頭：原始 getUserMedia 視訊 track（送進虛擬背景管線的來源；非送 peer 的那條）。
+  // 鏡頭：原始 getUserMedia 視訊 track（送進虛擬背景管線的來源。非送 peer 的那條）。
   const rawCamTrackRef = useRef<MediaStreamTrack | null>(null);
   // 虛擬背景處理控制代碼（active 時其 .track 才是送 peer / 錄製的那條）。
   const videoHandleRef = useRef<ProcessedVideoHandle | null>(null);
@@ -153,7 +153,7 @@ export default function VoiceCallProvider({
   const recSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceActiveRef = useRef(false);
   const speakingRef = useRef<SpeakingDetector | null>(null);
-  // 分段錄音「續錄」需在 onstop 內呼叫自己；以 ref 持有最新 startSegment 以避開自我參照。
+  // 分段錄音「續錄」需在 onstop 內呼叫自己。以 ref 持有最新 startSegment 以避開自我參照。
   const startSegmentRef = useRef<() => void>(() => {});
   // Perfect negotiation 狀態。
   const makingOfferRef = useRef(new Map<string, boolean>());
@@ -415,7 +415,7 @@ export default function VoiceCallProvider({
       rawCamTrackRef.current = rawTrack;
 
       // 虛擬背景管線：原始 camera → 分割 → canvas 合成 → 處理後 track。
-      // 這條「處理後 track」才是要送 peer 與被 MediaRecorder 錄製的那條；
+      // 這條「處理後 track」才是要送 peer 與被 MediaRecorder 錄製的那條。
       // 失敗時 handle.active=false 且 track 沿用原始 camera（優雅退回）。
       const handle = await createProcessedVideoTrack(
         rawTrack,
@@ -659,7 +659,7 @@ export default function VoiceCallProvider({
           const rawMicTrack = micStream.getAudioTracks()[0] ?? null;
           rawMicTrackRef.current = rawMicTrack;
 
-          // RNNoise：送出前處理；失敗優雅退回原始 track。
+          // RNNoise：送出前處理。失敗優雅退回原始 track。
           let audioTrack = rawMicTrack;
           if (rawMicTrack) {
             const handle = await createNoiseSuppressedTrack(rawMicTrack);
@@ -765,7 +765,7 @@ export default function VoiceCallProvider({
     );
   }, []);
 
-  // 卸載（理論上 Provider 掛在 layout 不會卸載；保險起見釋放資源）。
+  // 卸載（理論上 Provider 掛在 layout 不會卸載。保險起見釋放資源）。
   useEffect(() => {
     return () => {
       if (voiceActiveRef.current) teardown();

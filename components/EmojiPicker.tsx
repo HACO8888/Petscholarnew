@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * 輕量 emoji 選擇器：一顆按鈕展開常用 emoji 面板，點擊把該 emoji 透過 onSelect 回傳。
- * 不引入任何外部套件，只用內建常用清單；插入游標處的邏輯由呼叫端負責。
+ * 不引入任何外部套件，只用內建常用清單。插入游標處的邏輯由呼叫端負責。
  */
 
 const EMOJIS = [
@@ -87,7 +87,7 @@ export default function EmojiPicker({
 
 /**
  * 把 emoji 插入 textarea 目前游標處（或末端），回傳新值並把游標移到插入後。
- * 呼叫端負責用回傳值 setState；focus/selection 需要 ref 指到該 textarea。
+ * 呼叫端負責用回傳值 setState。focus/selection 需要 ref 指到該 textarea。
  */
 export function insertAtCursor(
   el: HTMLTextAreaElement | null,

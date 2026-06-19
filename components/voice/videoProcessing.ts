@@ -40,7 +40,7 @@ export const BACKGROUND_IMAGES: readonly BackgroundImageOption[] = [
 /** 虛擬背景設定：模式 + 選定的背景圖片 id（image 模式時用）。 */
 export interface VirtualBgState {
   mode: VirtualBgMode;
-  /** image 模式所選圖片 id；對應 BACKGROUND_IMAGES。 */
+  /** image 模式所選圖片 id。對應 BACKGROUND_IMAGES。 */
   imageId: string;
 }
 
@@ -57,7 +57,7 @@ const MODEL_URL = "/mediapipe/selfie_segmenter.tflite";
 const MAX_PROCESS_EDGE = 640;
 // 背景模糊強度（canvas filter，單位 px）。
 const BLUR_PX = 12;
-// 合成幀率上限（毫秒）；segmentForVideo 需要嚴格遞增的 timestamp。
+// 合成幀率上限（毫秒）。segmentForVideo 需要嚴格遞增的 timestamp。
 const MIN_FRAME_INTERVAL_MS = 1000 / 30;
 
 let segmenterPromise: Promise<ImageSegmenter | null> | null = null;

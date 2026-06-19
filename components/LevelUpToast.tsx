@@ -7,7 +7,7 @@ import { LEVEL_UP_COOKIE } from "@/lib/level-up-cookie";
  * 升級慶祝提示：讀取由 server action 寫入的一次性 cookie（petLevelUp），
  * 顯示「升級到 Lv.X」的浮動慶祝卡片後自動消失，並立即清除 cookie 避免重播。
  *
- * 接收 server 端讀到的初值（initial）以利首屏即時顯示；client 端再做一次讀取與清除，
+ * 接收 server 端讀到的初值（initial）以利首屏即時顯示。client 端再做一次讀取與清除，
  * 確保 SPA 導覽與重新整理都不會重複觸發。
  */
 export default function LevelUpToast({
@@ -23,7 +23,7 @@ export default function LevelUpToast({
       : null,
   );
 
-  // 立即清除 cookie，避免下次渲染重播；並設定自動關閉計時。
+  // 立即清除 cookie，避免下次渲染重播。並設定自動關閉計時。
   useEffect(() => {
     if (!state) return;
     document.cookie = `${LEVEL_UP_COOKIE}=; path=/; max-age=0`;

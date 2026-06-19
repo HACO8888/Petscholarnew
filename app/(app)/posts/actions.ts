@@ -26,7 +26,7 @@ export async function createPost(formData: FormData) {
   const boardId = str(formData, "boardId");
   const title = str(formData, "title").slice(0, 200);
   const content = str(formData, "content").slice(0, 20000);
-  // 科系：只接受 departments 清單內的值；其餘（含竄改表單）一律 null。
+  // 科系：只接受 departments 清單內的值。其餘（含竄改表單）一律 null。
   const departmentRaw = str(formData, "department").slice(0, 60);
   let department: string | null = null;
   if (departmentRaw) {
@@ -110,7 +110,7 @@ export async function addComment(formData: FormData) {
 
   if (!postId || (!content && !image)) throw new Error("回覆內容不可為空");
 
-  // 確認 post 存在；若指定 parent，需屬於同一篇 post
+  // 確認 post 存在。若指定 parent，需屬於同一篇 post
   const [post] = await db
     .select({ id: posts.id })
     .from(posts)

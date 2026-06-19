@@ -6,7 +6,7 @@ import { LEVEL_UP_COOKIE as COOKIE_NAME } from "@/lib/level-up-cookie";
  * 由 LevelUpToast（client）在下一次渲染讀取並清除，顯示「升級了！」慶祝提示。
  *
  * 用 cookie 而非 server action 回傳值，是因為頁面上的互動都走 <form action={...}>，
- * 表單動作的回傳值不會回流到 server component；cookie 能跨 revalidate 後的重新渲染傳遞一次性訊號。
+ * 表單動作的回傳值不會回流到 server component。cookie 能跨 revalidate 後的重新渲染傳遞一次性訊號。
  */
 
 /** 在 server action 內呼叫：記錄「升到第 newLevel 級、共升 levels 級」的一次性訊號。 */
@@ -26,7 +26,7 @@ export interface LevelUpSignal {
   levels: number;
 }
 
-/** 在 server component 內呼叫：讀出升級訊號（不清除；清除交給 client 端避免破壞渲染快取）。 */
+/** 在 server component 內呼叫：讀出升級訊號（不清除。清除交給 client 端避免破壞渲染快取）。 */
 export async function readLevelUpSignal(): Promise<LevelUpSignal | null> {
   const store = await cookies();
   const raw = store.get(COOKIE_NAME)?.value;

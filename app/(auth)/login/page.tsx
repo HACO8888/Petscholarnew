@@ -62,7 +62,7 @@ export default async function LoginPage() {
             <p className="text-body-md text-on-surface-variant">使用 Google 帳號登入即可開始</p>
           </div>
 
-          {/* Tabs (登入 active; 註冊 disabled — Google 首次登入會自動建立帳號) */}
+          {/* Tabs (登入 active。註冊 disabled — Google 首次登入會自動建立帳號) */}
           <div className="relative mb-xl flex border-b border-outline-variant">
             <button
               type="button"
@@ -73,7 +73,7 @@ export default async function LoginPage() {
             <button
               type="button"
               disabled
-              title="目前僅支援 Google 登入；首次登入會自動建立帳號"
+              title="目前僅支援 Google 登入。首次登入會自動建立帳號"
               className="flex-1 cursor-not-allowed border-b-2 border-transparent pb-sm text-center text-label-md uppercase tracking-wider text-outline opacity-50"
             >
               註冊

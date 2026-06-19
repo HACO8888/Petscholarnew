@@ -23,7 +23,7 @@ import { deleteObject } from "@/lib/s3";
 
 /**
  * 嚴格的 server 端 admin 驗權：所有後台異動 action 都必須先呼叫。
- * 絕不信任前端傳來的角色／旗標；一律以資料庫 session 的 role 為準。
+ * 絕不信任前端傳來的角色／旗標。一律以資料庫 session 的 role 為準。
  */
 async function requireAdmin(): Promise<Session> {
   const session = await auth();
@@ -91,7 +91,7 @@ export async function deleteRecording(formData: FormData) {
     try {
       await deleteObject(row.objectKey);
     } catch {
-      /* 物件刪除失敗不阻擋 DB 刪除；孤兒物件可日後清理 */
+      /* 物件刪除失敗不阻擋 DB 刪除。孤兒物件可日後清理 */
     }
   }
   revalidatePath("/admin");
@@ -204,7 +204,7 @@ export async function rejectReport(formData: FormData) {
 
 /**
  * 隱藏提問：以 hidden=true 達成「下架」效果（軟刪除，資料保留供稽核）。
- * 註：users schema 無封鎖欄位且禁止改 schema，故僅實作隱藏；封鎖帳號功能不提供。
+ * 註：users schema 無封鎖欄位且禁止改 schema，故僅實作隱藏。封鎖帳號功能不提供。
  */
 export async function deletePost(formData: FormData) {
   await requireAdmin();
@@ -417,7 +417,7 @@ export async function updateShopItem(formData: FormData) {
 /**
  * 上下架商品：schema 無「上架旗標」欄位，故以 sortOrder 的正負作為上下架語意——
  * sortOrder < 0 視為「下架」（商城頁仍依 sortOrder 排序，但管理端可一眼分辨）。
- * 由於不可改 schema，這是現有欄位下最不侵入的折衷；若日後要嚴格隱藏需新增 active 欄位。
+ * 由於不可改 schema，這是現有欄位下最不侵入的折衷。若日後要嚴格隱藏需新增 active 欄位。
  */
 export async function toggleShopItem(formData: FormData) {
   await requireAdmin();
@@ -431,7 +431,7 @@ export async function toggleShopItem(formData: FormData) {
     .limit(1);
   if (!item) throw new Error("商品不存在");
 
-  // 下架 → 上架：取絕對值並 +1（避免 0 被視為已上架仍排在前面時無變化）；
+  // 下架 → 上架：取絕對值並 +1（避免 0 被視為已上架仍排在前面時無變化）。
   // 上架 → 下架：取負絕對值。以正負號表達狀態，數值大小維持原本排序意義。
   const abs = Math.abs(item.sortOrder);
   const next = item.sortOrder < 0 ? abs : -(abs + 1);
@@ -535,10 +535,10 @@ export async function updateUser(formData: FormData) {
 }
 
 // ============================================================
-// 科系 department（由管理員維護的清單；所有選科系處只能從此清單選）
+// 科系 department（由管理員維護的清單。所有選科系處只能從此清單選）
 // ============================================================
 
-/** 由系名產生英數 slug；非英數字元轉連字號，作為 id 備援。 */
+/** 由系名產生英數 slug。非英數字元轉連字號，作為 id 備援。 */
 function slugify(input: string): string {
   return input
     .trim()
@@ -548,7 +548,7 @@ function slugify(input: string): string {
     .slice(0, 64);
 }
 
-/** 新增科系：id 留空時由系名自動產生 slug；需唯一且不可為空。 */
+/** 新增科系：id 留空時由系名自動產生 slug。需唯一且不可為空。 */
 export async function createDepartment(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim().slice(0, 60);
@@ -596,7 +596,7 @@ export async function updateDepartment(formData: FormData) {
 
 /**
  * 刪除科系：僅從清單移除，不更動既有 users.department / posts.department 的文字快照
- * （那些欄位為純文字，無 FK；移除後新選單將不再提供此項，但歷史資料仍保留原值）。
+ * （那些欄位為純文字，無 FK。移除後新選單將不再提供此項，但歷史資料仍保留原值）。
  */
 export async function deleteDepartment(formData: FormData) {
   await requireAdmin();
@@ -631,7 +631,7 @@ export async function deleteDepartment(formData: FormData) {
  *   - 升級條件完全在 server 端、以環境變數為準，前端無法偽造。
  *   - 未設定 ADMIN_BOOTSTRAP_EMAIL 時此途徑停用（直接拋錯），不會有「人人可點」的後門。
  *   - 升級完成後，建議移除該環境變數，避免長期留存可自助升權的入口。
- *   - 注意：auth.ts 另有寫死的 ADMIN_EMAILS 清單也會在登入時自動賦予 admin；
+ *   - 注意：auth.ts 另有寫死的 ADMIN_EMAILS 清單也會在登入時自動賦予 admin。
  *     兩者互補——bootstrap 提供「不改程式碼、只設環境變數」的彈性途徑。
  */
 export async function bootstrapAdmin() {
@@ -653,7 +653,7 @@ export async function bootstrapAdmin() {
     .set({ role: "admin" })
     .where(eq(users.id, session.user.id));
 
-  // 角色寫進 DB 後需重新登入才會反映到 session（資料庫 session 策略）；
+  // 角色寫進 DB 後需重新登入才會反映到 session（資料庫 session 策略）。
   // 先導回 /admin，使用者下次請求（或重新整理）即取得新角色。
   revalidatePath("/admin");
   redirect("/admin");

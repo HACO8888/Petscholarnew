@@ -10,7 +10,7 @@ if (!connectionString) {
   );
 }
 
-// postgres.js client；prepare:false 對連線池/serverless 較友善
+// postgres.js client。prepare:false 對連線池/serverless 較友善
 const client = postgres(connectionString, { prepare: false });
 
 export const db = drizzle(client, { schema });

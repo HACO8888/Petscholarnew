@@ -112,7 +112,7 @@ export default function StudyRoomDetail({
   const [timeLeft, setTimeLeft] = useState(POMO_SECONDS);
   const [running, setRunning] = useState(false);
   const [pomoLoaded, setPomoLoaded] = useState(false);
-  // 完成輪數（純顯示用；計時邏輯不變，僅在自然完成那一刻 +1）
+  // 完成輪數（純顯示用。計時邏輯不變，僅在自然完成那一刻 +1）
   const [pomoRound, setPomoRound] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -269,7 +269,7 @@ export default function StudyRoomDetail({
   const sendingRef = useRef(false);
 
   // ---- 語音 / 視訊通話：狀態與邏輯住在全域 VoiceCallProvider（跨頁不中斷）----
-  // 本元件不再自己擁有語音狀態，改用 context 消費；導航離開時 Provider 仍掛在 layout，
+  // 本元件不再自己擁有語音狀態，改用 context 消費。導航離開時 Provider 仍掛在 layout，
   // 通話續存且右下角浮動視窗接手顯示。
   const voice = useVoiceCall();
   // 此房是否正在語音中（語音可能在「其他房」進行 → activeRoomId 不同）。
@@ -304,7 +304,7 @@ export default function StudyRoomDetail({
   }, [localStreamState, cameraOn, inVoice]);
 
   useEffect(() => {
-    // 連到 custom server 的 Socket.IO；session 由同源 cookie 驗證
+    // 連到 custom server 的 Socket.IO。session 由同源 cookie 驗證
     const socket = io({
       path: "/socket.io",
       query: { roomId: room.id },
@@ -435,7 +435,7 @@ export default function StudyRoomDetail({
   const recordingLabel = recordingVideo ? "錄音錄影中" : "錄音中";
 
   return (
-    // 桌機：貼齊視窗高度（扣掉 layout 的 md:py-8 上下各 2rem），整頁不長出捲動；
+    // 桌機：貼齊視窗高度（扣掉 layout 的 md:py-8 上下各 2rem），整頁不長出捲動。
     // 各面板於內部捲動。手機（< lg）維持自然堆疊可捲動。
     <section
       id="sect-study-detail"
@@ -896,7 +896,7 @@ export default function StudyRoomDetail({
                       </span>
                     </Link>
 
-                    {/* 管理控制：建立者可指派/取消管理員；管理員可禁麥/禁鏡/踢人 */}
+                    {/* 管理控制：建立者可指派/取消管理員。管理員可禁麥/禁鏡/踢人 */}
                     {!m.isSelf && (canModerate || canEdit) && (
                       <div className="absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full bg-surface-container-highest rounded-full shadow-md border border-outline-variant/30 px-1 py-0.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10">
                         {canEdit && !m.isOwner && (
@@ -1440,7 +1440,7 @@ export default function StudyRoomDetail({
               </h3>
             </div>
             <p className="text-sm text-on-surface-variant leading-relaxed mb-2">
-              為維護自習室秩序與內容審核，<strong className="text-error">本通話將被全程錄音；若你開啟鏡頭，影像也會一併錄影</strong>。錄製內容僅供管理員審核之用。
+              為維護自習室秩序與內容審核，<strong className="text-error">本通話將被全程錄音。若你開啟鏡頭，影像也會一併錄影</strong>。錄製內容僅供管理員審核之用。
             </p>
             <ul className="text-xs text-secondary leading-relaxed mb-4 list-disc pl-5 space-y-0.5">
               <li>加入語音後即自動開始錄製，無法關閉。</li>

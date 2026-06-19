@@ -116,7 +116,7 @@ export default async function AdminPage({
 
   const sp = await searchParams;
 
-  // 非 admin：若符合 bootstrap 條件，顯示「成為管理員」的安全入口；否則拒絕存取。
+  // 非 admin：若符合 bootstrap 條件，顯示「成為管理員」的安全入口。否則拒絕存取。
   if (session.user.role !== "admin") {
     const bootstrapEmail = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
     const canBootstrap =
@@ -459,7 +459,7 @@ async function DepartmentsPanel() {
                 <form action={deleteDepartment}>
                   <input type="hidden" name="departmentId" value={d.id} />
                   <ConfirmSubmit
-                    message={`確定刪除科系「${d.name}」？此後選單將不再提供此項；既有使用者/貼文已填寫的科系文字不受影響。`}
+                    message={`確定刪除科系「${d.name}」？此後選單將不再提供此項。既有使用者/貼文已填寫的科系文字不受影響。`}
                     className={BTN_DANGER}
                   >
                     刪除
@@ -911,7 +911,7 @@ async function RecordingsPanel() {
               </div>
               {r.url ? (
                 r.contentType?.startsWith("video/") ? (
-                  // 含影像的錄影用 <video>；純語音維持 <audio>
+                  // 含影像的錄影用 <video>。純語音維持 <audio>
                   <video
                     controls
                     preload="none"

@@ -396,7 +396,7 @@ export default function CommentThread({
   currentUserRole,
   postSolved,
 }: ThreadProps) {
-  // 以 SSR nodes 為初值；之後即時更新由 socket 維護（同一文章本元件不會重掛）。
+  // 以 SSR nodes 為初值。之後即時更新由 socket 維護（同一文章本元件不會重掛）。
   const [nodes, setNodes] = useState<CommentNode[]>(initialNodes);
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
@@ -428,7 +428,7 @@ export default function CommentThread({
     };
   }, [postId]);
 
-  // 透過 socket 送出留言；回傳是否成功（ack）。
+  // 透過 socket 送出留言。回傳是否成功（ack）。
   const sendComment = useCallback(
     (parentId: string | null, content: string, image: string | null) =>
       new Promise<boolean>((resolve) => {

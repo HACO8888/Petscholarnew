@@ -8,7 +8,7 @@ export interface CommentNode {
   hidden: boolean;
   time: string;
   contentHtml: string;
-  /** 附圖：本站服務 URL（/api/uploads/file?key=...）；無圖為 null */
+  /** 附圖：本站服務 URL（/api/uploads/file?key=...）。無圖為 null */
   image: string | null;
   children: CommentNode[];
 }
@@ -54,7 +54,7 @@ export function buildCommentTree(
 /**
  * 移除被隱藏（檢舉封鎖）的留言「整棵子樹」。
  * 直接以 hidden=false 過濾查詢會讓被隱藏父留言底下的可見回覆變成孤兒、被升級為頂層留言
- * （脫離脈絡、繞過審核）；故先以完整資料建樹，再連同子樹一起剪除被隱藏的節點。
+ * （脫離脈絡、繞過審核）。故先以完整資料建樹，再連同子樹一起剪除被隱藏的節點。
  */
 export function pruneHidden(nodes: CommentNode[]): CommentNode[] {
   return nodes

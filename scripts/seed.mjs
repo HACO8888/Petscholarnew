@@ -10,12 +10,12 @@ const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 const src = readFileSync("legacy/data/boardsData.js", "utf8");
 const BOARDS_DATA = Function(src + "; return BOARDS_DATA;")();
 
-// 從 legacy 的 userData.js 取出 SHOP_ITEMS（商城商品目錄；不再匯入任何假檢舉資料）
+// 從 legacy 的 userData.js 取出 SHOP_ITEMS（商城商品目錄。不再匯入任何假檢舉資料）
 const userSrc = readFileSync("legacy/data/userData.js", "utf8");
 const SHOP_ITEMS = Function(userSrc + "; return SHOP_ITEMS;")();
 
 // 國立臺北科技大學（NTUT / Taipei Tech）大學部所有科系，依 6 學院分組。
-// college 對應 board.id（cmee/ceecs/coe/com/cod/chss）；id 採英數 slug，作為 department PK。
+// college 對應 board.id（cmee/ceecs/coe/com/cod/chss）。id 採英數 slug，作為 department PK。
 // 來源核對：boardsData.js 既有清單 + NTUT 官方招生網站（六學院 25 系/學士班）。
 const DEPARTMENTS = [
   // 機電學院 cmee
@@ -74,7 +74,7 @@ for (const it of SHOP_ITEMS) {
 let order = 0;
 let boardCount = 0;
 
-// 只灌入「結構性」看板定義；不灌任何假貼文／假留言，避免假使用者活動污染
+// 只灌入「結構性」看板定義。不灌任何假貼文／假留言，避免假使用者活動污染
 // 討論版、看板提問數、排行榜、教授/管理後台。真實內容由使用者實際發問/回覆產生。
 for (const key of Object.keys(BOARDS_DATA)) {
   const b = BOARDS_DATA[key];
@@ -95,7 +95,7 @@ for (const r of STUDY_ROOMS) {
   `;
 }
 
-// 科系清單（由管理員維護；所有「選科系」處只能從此清單選）
+// 科系清單（由管理員維護。所有「選科系」處只能從此清單選）
 await sql`TRUNCATE "department" RESTART IDENTITY CASCADE`;
 let deptOrder = 0;
 for (const d of DEPARTMENTS) {

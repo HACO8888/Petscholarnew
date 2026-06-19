@@ -42,7 +42,7 @@ export default async function ProfessorPage() {
       rate: s.total > 0 ? Math.round((s.solved / s.total) * 100) : 0,
     }))
     .sort((a, b) => b.total - a.total);
-  // 熱門 Hashtags 取前 12 名；學習難點以「未解決最多」優先排序取前 6 名。
+  // 熱門 Hashtags 取前 12 名。學習難點以「未解決最多」優先排序取前 6 名。
   const topTags = tagList.slice(0, 12);
   const maxTagTotal = topTags.length > 0 ? topTags[0].total : 0;
   const difficulty = [...tagList]

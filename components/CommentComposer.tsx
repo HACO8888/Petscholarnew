@@ -105,7 +105,7 @@ export default function CommentComposer({
             composingRef.current = false;
           }}
           onKeyDown={(e) => {
-            // Enter 送出；Shift+Enter 換行；IME 組字中的 Enter 不送出
+            // Enter 送出。Shift+Enter 換行。IME 組字中的 Enter 不送出
             if (
               e.key === "Enter" &&
               !e.shiftKey &&

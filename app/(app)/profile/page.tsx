@@ -51,7 +51,7 @@ export default async function ProfilePage() {
   const petCoins = myPet?.coins ?? 0;
   const petName = myPet?.name ?? "未命名小精靈";
 
-  // 科系清單（選科系唯一來源）；含目前值但已不在清單時仍可保留顯示。
+  // 科系清單（選科系唯一來源）。含目前值但已不在清單時仍可保留顯示。
   const departmentRows = await db
     .select({ name: departments.name })
     .from(departments)
@@ -93,7 +93,7 @@ export default async function ProfilePage() {
       label: "連續登入30天",
       bg: "bg-tertiary-container",
       fg: "text-on-tertiary-container",
-      // 以「曾建立帳號」作為最基礎門檻；無連續登入資料故以發文活躍度近似
+      // 以「曾建立帳號」作為最基礎門檻。無連續登入資料故以發文活躍度近似
       unlocked: questionCount >= 1,
     },
     {

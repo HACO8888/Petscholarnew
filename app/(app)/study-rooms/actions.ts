@@ -190,7 +190,7 @@ export async function updateRoom(formData: FormData) {
       ? Math.min(Math.floor(capacityRaw), 12)
       : 8;
 
-  // 密碼處理：勾選「移除密碼」則清空；否則空字串保持原密碼不變，有值則更新。
+  // 密碼處理：勾選「移除密碼」則清空。否則空字串保持原密碼不變，有值則更新。
   const removePassword = String(formData.get("removePassword") ?? "") === "on";
   const passwordRaw = normalizePassword(formData.get("password"));
 
@@ -269,7 +269,7 @@ export async function setRoomModerator(
 
 /**
  * 踢出成員：房間管理員（建立者/管理員/系統 admin）可移除某成員。
- * 不可踢建立者；不可踢比自己權限高者（管理員不可踢建立者，已涵蓋）。
+ * 不可踢建立者。不可踢比自己權限高者（管理員不可踢建立者，已涵蓋）。
  * 實際的 socket 斷線通知由 server.mjs 的 voice:kick 事件處理（或下次連線即被擋）。
  */
 export async function kickMember(roomId: string, targetUserId: string) {

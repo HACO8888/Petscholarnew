@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   },
 };
 
-// 預設亮色；只有使用者曾手動切到深色（localStorage='dark'）才套深色，不跟隨系統偏好。
+// 預設亮色。只有使用者曾手動切到深色（localStorage='dark'）才套深色，不跟隨系統偏好。
 const themeInitScript = `(function(){try{if(localStorage.getItem('petscholar-theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();`;
 
 export default async function RootLayout({

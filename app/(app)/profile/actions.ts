@@ -26,7 +26,7 @@ export async function updateProfile(formData: FormData) {
     .slice(0, 40);
   const genderRaw = formData.get("gender") as string | null;
   const petStyleRaw = formData.get("petStyle") as string | null;
-  // 科系：只接受 departments 清單內的值（空字串＝未指定→null）；
+  // 科系：只接受 departments 清單內的值（空字串＝未指定→null）。
   // 不在清單內（竄改表單）一律設為 null，杜絕任意自由文字。
   const departmentRaw =
     ((formData.get("department") as string | null) ?? "").trim().slice(0, 60);
