@@ -50,7 +50,7 @@ export default function SidebarNav({
   }
 
   return (
-    <nav className="flex-1 flex flex-col gap-sm overflow-y-auto">
+    <nav className="flex-1 flex flex-col gap-sm overflow-y-auto hide-scrollbar">
       {items.map((it) => (
         <Link
           key={it.href}

@@ -210,6 +210,8 @@ export const studyRooms = pgTable("study_room", {
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
   }),
+  // 進房密碼（null = 公開房，免密碼）
+  password: text("password"),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
@@ -222,6 +224,8 @@ export const studyRoomMembers = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // 房間管理員（由創建者指定）：可禁麥/禁鏡/踢人/改房間資訊
+    isModerator: boolean("is_moderator").notNull().default(false),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
   (t) => [
