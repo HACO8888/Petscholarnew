@@ -28,31 +28,39 @@ const DEFAULT_SIDEBAR: SidebarData = {
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await auth();
+  // 側欄資料容錯：layout 自身拋錯不會被 (app)/error.tsx 接住，會直接冒泡成全域 500
+  // （線上偶發 DB 連線瞬斷時就會這樣，且 Cloudflare 會把舊頁當快取送出）。
+  // 因此這裡用 try/catch 保底——失敗就退回預設側欄並記 log，頁面照常渲染、不整頁 500。
   let sidebar: SidebarData = DEFAULT_SIDEBAR;
 
-  if (session?.user?.id) {
-    const pet = await getOrCreatePet(session.user.id);
-    const [me] = await db
-      .select({ petStyle: users.petStyle })
-      .from(users)
-      .where(eq(users.id, session.user.id))
-      .limit(1);
-    sidebar = {
-      loggedIn: true,
-      role: (session.user.role ?? "student") as Role,
-      petName: pet.name,
-      petStyle: me?.petStyle ?? "classic",
-      level: pet.level,
-      hp: pet.hp,
-      maxHp: pet.maxHp,
-      exp: pet.exp,
-      coins: pet.coins,
-      checkedIn: isCheckedInToday(pet.lastCheckIn),
-      equippedHat: pet.equippedHat,
-      equippedBackground: pet.equippedBackground,
-      equippedRareStyle: pet.equippedRareStyle,
-    };
+  try {
+    const session = await auth();
+    if (session?.user?.id) {
+      const pet = await getOrCreatePet(session.user.id);
+      const [me] = await db
+        .select({ petStyle: users.petStyle })
+        .from(users)
+        .where(eq(users.id, session.user.id))
+        .limit(1);
+      sidebar = {
+        loggedIn: true,
+        role: (session.user.role ?? "student") as Role,
+        petName: pet.name,
+        petStyle: me?.petStyle ?? "classic",
+        level: pet.level,
+        hp: pet.hp,
+        maxHp: pet.maxHp,
+        exp: pet.exp,
+        coins: pet.coins,
+        checkedIn: isCheckedInToday(pet.lastCheckIn),
+        equippedHat: pet.equippedHat,
+        equippedBackground: pet.equippedBackground,
+        equippedRareStyle: pet.equippedRareStyle,
+      };
+    }
+  } catch (e) {
+    console.error("[app layout] 側欄資料載入失敗，改用預設側欄保底：", e);
+    sidebar = DEFAULT_SIDEBAR;
   }
 
   return (
