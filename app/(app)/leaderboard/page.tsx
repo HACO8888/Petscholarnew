@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import {
@@ -41,17 +41,20 @@ type Badge = {
   owned: boolean;
 };
 
-/** 好奇探索者榜（explorer）：依作者名稱聚合留言（含種子資料），被採納 ×20 + 一般回覆 ×5 */
+/** 好奇探索者榜（explorer）：依作者 userId 聚合留言並 join users 取真實名稱／頭像，被採納 ×20 + 一般回覆 ×5 */
 async function loadWeekly(): Promise<RankRow[]> {
   const rows = await db
     .select({
-      name: comments.authorName,
+      userId: comments.authorId,
+      name: users.name,
+      image: users.image,
       adopted: sql<number>`sum(case when ${comments.isAdopted} then 1 else 0 end)::int`,
       answers: sql<number>`count(*)::int`,
     })
     .from(comments)
-    .where(eq(comments.hidden, false))
-    .groupBy(comments.authorName)
+    .innerJoin(users, eq(users.id, comments.authorId))
+    .where(and(eq(comments.hidden, false), isNotNull(comments.authorId)))
+    .groupBy(comments.authorId, users.name, users.image)
     .orderBy(
       desc(sql`sum(case when ${comments.isAdopted} then 1 else 0 end)`),
       desc(sql`count(*)`),
@@ -59,9 +62,9 @@ async function loadWeekly(): Promise<RankRow[]> {
     .limit(20);
 
   return rows.map((r) => ({
-    userId: r.name ?? "",
+    userId: r.userId ?? "",
     name: r.name,
-    image: null,
+    image: r.image,
     points: r.adopted * 20 + (r.answers - r.adopted) * 5,
     dept: null,
   }));
@@ -100,23 +103,26 @@ async function loadStudyTime(): Promise<RankRow[]> {
   }));
 }
 
-/** 學科貢獻榜（dept）：依作者名稱聚合貼文數（含種子資料） */
+/** 學科貢獻榜（dept）：依作者 userId 聚合貼文數並 join users 取真實名稱／頭像，貼文數 ×10 */
 async function loadDept(): Promise<RankRow[]> {
   const rows = await db
     .select({
-      name: posts.authorName,
+      userId: posts.authorId,
+      name: users.name,
+      image: users.image,
       postCount: sql<number>`count(*)::int`,
     })
     .from(posts)
-    .where(eq(posts.hidden, false))
-    .groupBy(posts.authorName)
+    .innerJoin(users, eq(users.id, posts.authorId))
+    .where(and(eq(posts.hidden, false), isNotNull(posts.authorId)))
+    .groupBy(posts.authorId, users.name, users.image)
     .orderBy(desc(sql`count(*)`))
     .limit(20);
 
   return rows.map((r) => ({
-    userId: r.name ?? "",
+    userId: r.userId ?? "",
     name: r.name,
-    image: null,
+    image: r.image,
     points: r.postCount * 10,
     dept: null,
   }));
@@ -129,9 +135,7 @@ export default async function LeaderboardPage({
 }) {
   const session = await auth();
   const userId = session?.user?.id ?? null;
-  // explorer/dept 榜以 authorName 聚合（保留種子資料），故自我高亮以顯示名稱比對；
-  // studytime 榜以真實 userId 聚合，故以 userId 比對。
-  const userName = session?.user?.name ?? null;
+  // 三個榜（explorer/dept/studytime）皆以真實 userId 聚合，故自我高亮一律以 userId 比對。
 
   const { tab } = await searchParams;
   const activeKey: TabKey = TAB_KEYS.includes(tab as TabKey)
@@ -360,10 +364,7 @@ export default async function LeaderboardPage({
             [podium[1], podium[0], podium[2]].map((member, slot) => {
               if (!member) return null;
               const rank = slot === 1 ? 1 : slot === 0 ? 2 : 3;
-              const isSelf =
-                activeKey === "studytime"
-                  ? userId != null && member.userId === userId
-                  : userName != null && member.name === userName;
+              const isSelf = userId != null && member.userId === userId;
               const nameSuffix = isSelf ? " (您)" : "";
               const avatar = member.image ? (
                  
@@ -513,10 +514,7 @@ export default async function LeaderboardPage({
             ) : (
               listRows.map((item, idx) => {
                 const rank = idx + 4;
-                const isSelf =
-                  activeKey === "studytime"
-                    ? userId != null && item.userId === userId
-                    : userName != null && item.name === userName;
+                const isSelf = userId != null && item.userId === userId;
                 return (
                   <div
                     key={item.userId}
