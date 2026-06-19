@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // 舊靜態站存檔，僅供移植參考，不納入 lint
     "legacy/**",
+    // 並行 agent 的 git worktree 副本（含各自的 .next/legacy），不納入 lint
+    ".claude/**",
   ]),
   {
     rules: {
