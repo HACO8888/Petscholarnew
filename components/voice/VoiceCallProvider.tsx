@@ -31,6 +31,12 @@ import {
   SpeakingDetector,
   type NoiseSuppressionHandle,
 } from "@/components/study-room/audioProcessing";
+import {
+  createProcessedVideoTrack,
+  DEFAULT_VIRTUAL_BG,
+  type ProcessedVideoHandle,
+  type VirtualBgState,
+} from "@/components/voice/videoProcessing";
 
 // 強制錄製：每段最長時長，到點先上傳再續錄（避免單檔過大 / 失聯時整段遺失）。
 const REC_SEGMENT_MS = 150_000; // 2.5 分鐘
@@ -66,8 +72,15 @@ export interface VoiceCallContextValue {
   rnnoiseActive: boolean;
   error: string | null;
   notice: string | null;
-  /** 本地串流（降噪後音訊 + 可選 video），給本地預覽 <video> 用。 */
+  /** 本地串流（降噪後音訊 + 可選「已套虛擬背景」video），給本地預覽 <video> 用。 */
   localStream: MediaStream | null;
+  /** 目前虛擬背景設定（無 / 模糊 / 圖片）；跨頁持續。 */
+  virtualBg: VirtualBgState;
+  /**
+   * 切換虛擬背景（模式 / 圖片）。鏡頭開啟時即時生效、不需重開鏡頭，
+   * 處理後 track 持續相同 → 送 peer 與錄製來源不變、無縫切換。
+   */
+  setVirtualBg: (next: VirtualBgState) => void;
   /** 加入指定房語音；roomName 供浮動視窗顯示。 */
   join: (roomId: string, roomName: string) => void;
   /** 離開語音（上傳最後一段錄製）。 */
@@ -111,6 +124,10 @@ export default function VoiceCallProvider({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  // 虛擬背景設定（跨頁持續；切換不需重開鏡頭）。
+  const [virtualBg, setVirtualBgState] = useState<VirtualBgState>(
+    DEFAULT_VIRTUAL_BG,
+  );
 
   // ---- 內部可變狀態（不觸發 render；以 ref 持有，跨 render 穩定）----
   const socketRef = useRef<Socket | null>(null);
@@ -123,6 +140,12 @@ export default function VoiceCallProvider({
   const rawMicTrackRef = useRef<MediaStreamTrack | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const noiseHandleRef = useRef<NoiseSuppressionHandle | null>(null);
+  // 鏡頭：原始 getUserMedia 視訊 track（送進虛擬背景管線的來源；非送 peer 的那條）。
+  const rawCamTrackRef = useRef<MediaStreamTrack | null>(null);
+  // 虛擬背景處理控制代碼（active 時其 .track 才是送 peer / 錄製的那條）。
+  const videoHandleRef = useRef<ProcessedVideoHandle | null>(null);
+  // 以 ref 同步最新虛擬背景設定，供開鏡頭時讀取（避免閉包過期）。
+  const virtualBgRef = useRef<VirtualBgState>(DEFAULT_VIRTUAL_BG);
   const iceServersRef = useRef<RTCIceServer[]>([]);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recChunksRef = useRef<Blob[]>([]);
@@ -354,10 +377,17 @@ export default function VoiceCallProvider({
         }
       }
     }
+    // 從 localStream 移除（送 peer / 錄製的）處理後 video track。
     for (const t of videoTracks) {
       t.stop();
       ls.removeTrack(t);
     }
+    // 釋放虛擬背景管線（segment loop、canvas、隱藏 video）。
+    videoHandleRef.current?.destroy();
+    videoHandleRef.current = null;
+    // 停止原始攝影機來源 track（虛擬背景管線的輸入）。
+    rawCamTrackRef.current?.stop();
+    rawCamTrackRef.current = null;
     setLocalStream(new MediaStream(ls.getTracks()));
     setCameraOn(false);
     if (hadVideo) restartRecording();
@@ -375,17 +405,50 @@ export default function VoiceCallProvider({
       const camStream = await navigator.mediaDevices.getUserMedia({
         video: true,
       });
-      const videoTrack = camStream.getVideoTracks()[0];
-      if (!videoTrack) return;
-      ls.addTrack(videoTrack);
+      // 取得相機期間可能已離開語音 → 釋放並中止。
+      if (!voiceActiveRef.current || localStreamRef.current !== ls) {
+        camStream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      const rawTrack = camStream.getVideoTracks()[0];
+      if (!rawTrack) return;
+      rawCamTrackRef.current = rawTrack;
+
+      // 虛擬背景管線：原始 camera → 分割 → canvas 合成 → 處理後 track。
+      // 這條「處理後 track」才是要送 peer 與被 MediaRecorder 錄製的那條；
+      // 失敗時 handle.active=false 且 track 沿用原始 camera（優雅退回）。
+      const handle = await createProcessedVideoTrack(
+        rawTrack,
+        virtualBgRef.current,
+        {
+          onFallback: (reason) => {
+            // 退回原始攝影機畫面：記一行 notice（不阻斷通話）。
+            console.warn("[virtualBg] " + reason);
+            showNotice(reason);
+          },
+        },
+      );
+      // 模型載入（可能耗時）期間若已離開語音 / 串流被換掉 → 釋放並中止。
+      if (!voiceActiveRef.current || localStreamRef.current !== ls) {
+        handle.destroy();
+        rawTrack.stop();
+        rawCamTrackRef.current = null;
+        return;
+      }
+      videoHandleRef.current = handle;
+      const outboundTrack = handle.track;
+
+      ls.addTrack(outboundTrack);
       setLocalStream(new MediaStream(ls.getTracks()));
       setCameraOn(true);
-      for (const pc of pcsRef.current.values()) pc.addTrack(videoTrack, ls);
+      // 送 peer 的是處理後 track。
+      for (const pc of pcsRef.current.values()) pc.addTrack(outboundTrack, ls);
+      // 以處理後 track 重啟錄製 → MediaRecorder 錄到套背景後畫面。
       restartRecording();
     } catch {
       setError("無法取得相機權限。");
     }
-  }, [restartRecording]);
+  }, [restartRecording, showNotice]);
 
   // ---- 完整關閉（離開語音）：釋放所有資源 ----
   const teardown = useCallback(() => {
@@ -405,6 +468,11 @@ export default function VoiceCallProvider({
     }
     noiseHandleRef.current?.destroy();
     noiseHandleRef.current = null;
+    // 虛擬背景管線：釋放 segment loop / canvas / 隱藏 video，並停掉原始攝影機來源。
+    videoHandleRef.current?.destroy();
+    videoHandleRef.current = null;
+    rawCamTrackRef.current?.stop();
+    rawCamTrackRef.current = null;
     rawMicTrackRef.current?.stop();
     rawMicTrackRef.current = null;
     micStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -659,6 +727,14 @@ export default function VoiceCallProvider({
     else void enableCamera();
   }, [disableCamera, enableCamera]);
 
+  // 切換虛擬背景：更新狀態並（鏡頭開啟時）即時套用到處理管線。
+  // 處理後 track 維持同一條 → 不需替換 sender / 重啟錄製，無縫生效。
+  const setVirtualBg = useCallback((next: VirtualBgState) => {
+    virtualBgRef.current = next;
+    setVirtualBgState(next);
+    videoHandleRef.current?.setBackground(next);
+  }, []);
+
   const forceMute = useCallback((userId: string) => {
     socketRef.current?.emit(
       "voice:force-mute",
@@ -712,6 +788,8 @@ export default function VoiceCallProvider({
     error,
     notice,
     localStream,
+    virtualBg,
+    setVirtualBg,
     join,
     leave,
     toggleMute,

@@ -222,6 +222,13 @@ body {
   .focus-pulse { animation: none; opacity: 0.7; }
 }
 
+/* ==== 視訊舞台 / 專注光環 模式切換的乾淨淡入（尊重 reduced-motion） ==== */
+.stage-fade { animation: stage-fade 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes stage-fade { 0% { opacity: 0; transform: translateY(6px) scale(0.99); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .stage-fade { animation: none; }
+}
+
 .hp-bar { background: linear-gradient(90deg, #34d399, #10b981); }
 .exp-bar { background: linear-gradient(90deg, #60a5fa, #4b6172); }
 

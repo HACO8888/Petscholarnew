@@ -13,6 +13,7 @@ export default function PomodoroRing({
   running,
   size = 256,
   stroke = 14,
+  compact = false,
 }: {
   mins: string;
   secs: string;
@@ -21,6 +22,8 @@ export default function PomodoroRing({
   running: boolean;
   size?: number;
   stroke?: number;
+  /** 精簡模式：縮小字級、去掉脈動發光底，供視訊舞台頂部計時 pill 使用。 */
+  compact?: boolean;
 }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -33,8 +36,8 @@ export default function PomodoroRing({
       className="relative inline-grid place-items-center"
       style={{ width: size, height: size }}
     >
-      {/* 運作中的暖色發光底（柔和脈動，reduced-motion 下不動） */}
-      {running && (
+      {/* 運作中的暖色發光底（柔和脈動，reduced-motion 下不動）；精簡模式不顯示 */}
+      {running && !compact && (
         <div
           aria-hidden
           className="focus-pulse absolute inset-2 rounded-full bg-tertiary/30 blur-2xl"
@@ -78,18 +81,24 @@ export default function PomodoroRing({
       {/* 中央時間數字 */}
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center">
-          <div className="font-bold leading-none tabular-nums tracking-tight text-on-background text-[56px] sm:text-[64px]">
+          <div
+            className={`font-bold leading-none tabular-nums tracking-tight text-on-background ${
+              compact ? "text-[22px]" : "text-[56px] sm:text-[64px]"
+            }`}
+          >
             {mins}
             <span className="text-tertiary">:</span>
             {secs}
           </div>
-          <div
-            className={`mt-2 text-label-md font-bold uppercase tracking-[0.18em] ${
-              running ? "text-tertiary" : "text-secondary"
-            }`}
-          >
-            {running ? "專注中" : "已就緒"}
-          </div>
+          {!compact && (
+            <div
+              className={`mt-2 text-label-md font-bold uppercase tracking-[0.18em] ${
+                running ? "text-tertiary" : "text-secondary"
+              }`}
+            >
+              {running ? "專注中" : "已就緒"}
+            </div>
+          )}
         </div>
       </div>
     </div>
