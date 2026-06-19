@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { updateRoom } from "@/app/(app)/study-rooms/actions";
 
 interface EditableRoom {
@@ -39,9 +40,9 @@ export default function StudyRoomEditDialog({
         <span className="hidden sm:inline">編輯</span>
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
           onClick={() => setOpen(false)}
         >
           <form
@@ -192,7 +193,8 @@ export default function StudyRoomEditDialog({
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

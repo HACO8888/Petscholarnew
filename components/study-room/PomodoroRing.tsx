@@ -69,7 +69,7 @@ export default function PomodoroRing({
           fill="none"
           stroke="currentColor"
           strokeWidth={stroke}
-          strokeLinecap="round"
+          strokeLinecap="butt"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
           className={`transition-[stroke-dashoffset,color] duration-1000 ease-linear motion-reduce:transition-none ${
@@ -78,19 +78,15 @@ export default function PomodoroRing({
         />
       </svg>
 
-      {/* 中央時間數字 */}
-      <div className="absolute inset-0 grid place-items-center">
-        <div className="text-center">
-          <div
-            className={`font-bold leading-none tabular-nums tracking-tight text-on-background ${
-              compact ? "text-[22px]" : "text-[56px] sm:text-[64px]"
-            }`}
-          >
-            {mins}
-            <span className="text-tertiary">:</span>
-            {secs}
-          </div>
-          {!compact && (
+      {/* 中央時間數字（精簡模式不在小環內顯示，改由外部 pill 呈現時間，避免擠壓溢出） */}
+      {!compact && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="text-center">
+            <div className="font-bold leading-none tabular-nums tracking-tight text-on-background text-[56px] sm:text-[64px]">
+              {mins}
+              <span className="text-tertiary">:</span>
+              {secs}
+            </div>
             <div
               className={`mt-2 text-label-md font-bold uppercase tracking-[0.18em] ${
                 running ? "text-tertiary" : "text-secondary"
@@ -98,9 +94,9 @@ export default function PomodoroRing({
             >
               {running ? "專注中" : "已就緒"}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

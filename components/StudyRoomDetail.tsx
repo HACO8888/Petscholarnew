@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { io, type Socket } from "socket.io-client";
 import {
   deleteRoom,
@@ -88,7 +89,7 @@ function formatTime(iso: string) {
  * 1 人大畫面、2 人並排、3–4 人 2×2、5+ 自動填列（可捲）。
  */
 function videoGridClass(count: number): string {
-  if (count <= 1) return "grid-cols-1";
+  if (count <= 1) return "grid-cols-1 max-w-xl mx-auto";
   if (count === 2) return "grid-cols-1 sm:grid-cols-2";
   if (count <= 4) return "grid-cols-1 sm:grid-cols-2";
   if (count <= 6) return "grid-cols-2 lg:grid-cols-3";
@@ -627,10 +628,15 @@ export default function StudyRoomDetail({
                     secs={secs}
                     progress={pomoProgress}
                     running={running}
-                    size={40}
+                    size={34}
                     stroke={4}
                     compact
                   />
+                  <span className="font-bold text-lg tabular-nums tracking-tight text-on-background leading-none px-0.5">
+                    {mins}
+                    <span className="text-tertiary">:</span>
+                    {secs}
+                  </span>
                   <button
                     type="button"
                     onClick={toggleTimer}
@@ -682,7 +688,7 @@ export default function StudyRoomDetail({
                   {/* 本地預覽（套虛擬背景後的畫面） */}
                   {cameraOn && (
                     <div
-                      className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                      className={`relative aspect-video max-h-[40vh] rounded-xl overflow-hidden bg-black border-2 transition-all ${
                         speakingKeys.has("self")
                           ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
                           : "border-outline-variant/30"
@@ -713,7 +719,7 @@ export default function StudyRoomDetail({
                     return (
                       <div
                         key={p.id}
-                        className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                        className={`relative aspect-video max-h-[40vh] rounded-xl overflow-hidden bg-black border-2 transition-all ${
                           isSpeaking
                             ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
                             : "border-outline-variant/30"
@@ -861,7 +867,7 @@ export default function StudyRoomDetail({
                           <img
                             alt=""
                             src={m.image}
-                            className="w-full h-full rounded-full object-cover"
+                            className="absolute inset-0 h-full w-full rounded-full object-cover"
                           />
                         ) : (
                           <span className="w-full h-full rounded-full bg-surface-container-high grid place-items-center text-2xl">
@@ -1012,7 +1018,7 @@ export default function StudyRoomDetail({
                           <img
                             src={p.image}
                             alt=""
-                            className="w-full h-full rounded-full object-cover"
+                            className="absolute inset-0 h-full w-full rounded-full object-cover"
                           />
                         ) : (
                           <div className="w-full h-full rounded-full bg-surface-container-high grid place-items-center text-base">
@@ -1427,9 +1433,10 @@ export default function StudyRoomDetail({
         </div>
       </div>
 
-      {/* ===== 加入語音前的隱私同意提示（務必：強制錄音/錄影告知） ===== */}
-      {showConsent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      {/* ===== 加入語音前的隱私同意提示（務必：強制錄音/錄影告知） =====
+          portal 到 body：避免被 transform 祖先（animate-fade-in-up / 側欄）困住，z-[70] 蓋過側欄 z-50。 */}
+      {showConsent && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/30 shadow-xl p-lg">
             <div className="flex items-center gap-2 mb-3">
               <span className="material-symbols-outlined text-error text-[28px]">
@@ -1468,7 +1475,8 @@ export default function StudyRoomDetail({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );
