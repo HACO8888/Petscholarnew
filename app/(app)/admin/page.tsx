@@ -857,6 +857,7 @@ async function RecordingsPanel() {
       id: voiceRecordings.id,
       authorName: voiceRecordings.authorName,
       objectKey: voiceRecordings.objectKey,
+      contentType: voiceRecordings.contentType,
       durationMs: voiceRecordings.durationMs,
       sizeBytes: voiceRecordings.sizeBytes,
       hidden: voiceRecordings.hidden,
@@ -902,9 +903,24 @@ async function RecordingsPanel() {
                 {r.sizeBytes ? (
                   <span className="text-[10px] text-secondary">{(r.sizeBytes / 1024).toFixed(0)} KB</span>
                 ) : null}
+                {r.contentType?.startsWith("video/") && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                    含影像
+                  </span>
+                )}
               </div>
               {r.url ? (
-                <audio controls preload="none" src={r.url} className="w-full h-9" />
+                r.contentType?.startsWith("video/") ? (
+                  // 含影像的錄影用 <video>；純語音維持 <audio>
+                  <video
+                    controls
+                    preload="none"
+                    src={r.url}
+                    className="w-full max-h-72 rounded-lg bg-black"
+                  />
+                ) : (
+                  <audio controls preload="none" src={r.url} className="w-full h-9" />
+                )
               ) : (
                 <p className="text-[10px] text-error">無法產生播放連結（請檢查 S3 設定）</p>
               )}

@@ -13,6 +13,11 @@ import {
 } from "@/app/(app)/study-rooms/actions";
 import StudyRoomEditDialog from "@/components/StudyRoomEditDialog";
 import EmojiPicker, { insertAtCursor } from "@/components/EmojiPicker";
+import {
+  createNoiseSuppressedTrack,
+  SpeakingDetector,
+  type NoiseSuppressionHandle,
+} from "@/components/study-room/audioProcessing";
 
 interface RoomInfo {
   id: string;
@@ -80,6 +85,8 @@ interface StudyRoomDetailProps {
 
 const POMO_SECONDS = 25 * 60;
 const AVATARS = ["👩‍🎓", "👨‍🎓", "🐱", "🐶", "🤖"];
+// 強制錄製：每段最長時長，到點先上傳再續錄（避免單檔過大 / 失聯時整段遺失）。
+const REC_SEGMENT_MS = 150_000; // 2.5 分鐘
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -251,10 +258,19 @@ export default function StudyRoomDetail({
   const [inVoice, setInVoice] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
+  // 強制錄製：加入語音即自動開始，使用者無法關閉；此旗標只用於顯示紅點指示。
   const [recording, setRecording] = useState(false);
+  // 錄影中是否含影像（鏡頭開啟時為 true），決定紅點文字「錄音中／錄音錄影中」。
+  const [recordingVideo, setRecordingVideo] = useState(false);
+  // 降噪是否成功套用 RNNoise（false = 退回瀏覽器內建降噪）。
+  const [rnnoiseActive, setRnnoiseActive] = useState(false);
   const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([]);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  // 說話者偵測：正在說話的 key 集合（"self" 或 peer socket id）。
+  const [speakingKeys, setSpeakingKeys] = useState<Set<string>>(new Set());
+  // 加入語音前的隱私同意提示是否顯示。
+  const [showConsent, setShowConsent] = useState(false);
   const [localStreamState, setLocalStreamState] = useState<MediaStream | null>(
     null,
   );
@@ -265,8 +281,6 @@ export default function StudyRoomDetail({
     leave: () => void;
     toggleMute: () => void;
     toggleCamera: () => void;
-    startRec: () => void;
-    stopRec: () => void;
     forceMute: (userId: string) => void;
     forceCameraOff: (userId: string) => void;
   } | null>(null);
@@ -328,14 +342,23 @@ export default function StudyRoomDetail({
     const pcs = new Map<string, RTCPeerConnection>();
     // socket id → { userId, name }；用於把 peer 對應回成員（管理操作要 userId）
     const peerInfo = new Map<string, { userId: string | null; name: string }>();
+    // localStream：送給 peer 的串流（降噪後的音訊 track + 可選 video track）。
     let localStream: MediaStream | null = null;
+    // 原始麥克風 track（RNNoise 的輸入）；靜音時停用這條讓音訊不再流入降噪鏈。
+    let rawMicTrack: MediaStreamTrack | null = null;
+    // RNNoise 處理控制代碼（離開時釋放）。
+    let noiseHandle: NoiseSuppressionHandle | null = null;
     let iceServers: RTCIceServer[] = [];
+    // 強制錄製：分段錄音器 + 計時器；每段 onstop 立即上傳。
     let recorder: MediaRecorder | null = null;
     let recChunks: Blob[] = [];
     let recStart = 0;
+    let recSegmentTimer: ReturnType<typeof setTimeout> | null = null;
+    // 是否仍在通話中（控制分段錄音是否續錄）。
+    let voiceActive = false;
+    // 說話偵測器（離開時 destroy）。
+    let speaking: SpeakingDetector | null = null;
     // ---- Perfect negotiation 狀態（支援開/關鏡頭時雙向重新協商且不卡 glare）----
-    // makingOffer：自己正在送 offer；polite：禮讓方（碰撞時回退自己的 offer）；
-    // ignoreOffer：禮讓判斷後決定忽略對方 offer。
     const makingOffer = new Map<string, boolean>();
     const politeMap = new Map<string, boolean>();
     const ignoreOffer = new Map<string, boolean>();
@@ -353,6 +376,7 @@ export default function StudyRoomDetail({
       makingOffer.delete(id);
       politeMap.delete(id);
       ignoreOffer.delete(id);
+      speaking?.remove(id);
       setVoicePeers((ps) => ps.filter((p) => p.id !== id));
     };
 
@@ -367,7 +391,6 @@ export default function StudyRoomDetail({
       pc = new RTCPeerConnection({ iceServers });
       pcs.set(peerId, pc);
       peerInfo.set(peerId, { userId: peerUserId, name: peerName });
-      // 禮讓方：以 socket id 字典序決定（兩端一致），碰撞時回退自己的 offer
       politeMap.set(peerId, (socket.id ?? "") < peerId);
       makingOffer.set(peerId, false);
       ignoreOffer.set(peerId, false);
@@ -386,6 +409,8 @@ export default function StudyRoomDetail({
         const stream = e.streams[0];
         const hasVideo = stream.getVideoTracks().length > 0;
         const info = peerInfo.get(peerId);
+        // 註冊到說話偵測器（同一 stream 多次呼叫會自動忽略）
+        speaking?.add(peerId, stream);
         setVoicePeers((ps) => [
           ...ps.filter((p) => p.id !== peerId),
           {
@@ -413,7 +438,6 @@ export default function StudyRoomDetail({
           track.onended = refresh;
         }
       };
-      // Perfect negotiation：任一端加/移除 track 都會觸發，安全送出 offer。
       pc.onnegotiationneeded = async () => {
         try {
           makingOffer.set(peerId, true);
@@ -438,8 +462,6 @@ export default function StudyRoomDetail({
           closePeer(peerId);
         }
       };
-      // initiator 仍負責建立首個連線：加完 track 後 onnegotiationneeded 會自動送 offer。
-      // 但若無 track 變動不一定觸發，故顯式戳一次（已在 setLocalDescription 守門，安全）。
       if (initiator && localStream) {
         try {
           makingOffer.set(peerId, true);
@@ -471,7 +493,6 @@ export default function StudyRoomDetail({
         data: { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
       }) => {
         try {
-          // 確保此 peer 的 pc 已存在（首次收到對方訊息時建立，作為 answerer）
           const pc =
             pcs.get(from) ??
             (await makePeer(from, fromName, fromUserId ?? null, false));
@@ -483,11 +504,10 @@ export default function StudyRoomDetail({
               (makingOffer.get(from) || pc.signalingState !== "stable");
             const ignore = !polite && offerCollision;
             ignoreOffer.set(from, ignore);
-            if (ignore) return; // impolite 端碰撞：忽略對方 offer，保留自己的
+            if (ignore) return;
 
             await pc.setRemoteDescription(data.sdp);
             if (data.sdp.type === "offer") {
-              // 收到 offer（含重新協商）→ 回 answer
               await pc.setLocalDescription();
               socket.emit("voice:signal", {
                 to: from,
@@ -498,7 +518,6 @@ export default function StudyRoomDetail({
             try {
               await pc.addIceCandidate(data.candidate);
             } catch (err) {
-              // 忽略剛忽略 offer 後到來的 candidate
               if (!ignoreOffer.get(from)) throw err;
             }
           }
@@ -510,12 +529,10 @@ export default function StudyRoomDetail({
 
     socket.on("voice:peer-left", ({ id }: { id: string }) => closePeer(id));
 
-    // 被管理員強制靜音：停用本地音訊 track
+    // 被管理員強制靜音：停用本地原始麥克風 track
     socket.on("voice:force-mute", ({ by }: { by?: string }) => {
-      if (localStream) {
-        localStream.getAudioTracks().forEach((t) => (t.enabled = false));
-        setVoiceMuted(true);
-      }
+      if (rawMicTrack) rawMicTrack.enabled = false;
+      setVoiceMuted(true);
       setVoiceNotice(`${by ? by : "管理員"}已將你靜音`);
       window.setTimeout(() => setVoiceNotice(null), 3500);
     });
@@ -527,10 +544,72 @@ export default function StudyRoomDetail({
       window.setTimeout(() => setVoiceNotice(null), 3500);
     });
 
+    // ---- 強制錄製：以目前 localStream 啟動一段分段錄音 ----
+    const startSegment = () => {
+      if (!localStream || !voiceActive) return;
+      try {
+        recChunks = [];
+        recorder = new MediaRecorder(localStream);
+        recStart = performance.now();
+        const hasVideo = localStream.getVideoTracks().length > 0;
+        setRecording(true);
+        setRecordingVideo(hasVideo);
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recChunks.push(e.data);
+        };
+        recorder.onstop = async () => {
+          const chunks = recChunks;
+          recChunks = [];
+          const durMs = Math.round(performance.now() - recStart);
+          // 續錄：只要還在通話中就立即開下一段（以最新 localStream）
+          if (voiceActive) startSegment();
+          else {
+            setRecording(false);
+            setRecordingVideo(false);
+          }
+          if (chunks.length === 0) return;
+          const type = recorder?.mimeType || "audio/webm";
+          const blob = new Blob(chunks, { type });
+          if (blob.size === 0) return;
+          const fd = new FormData();
+          // 檔名副檔名僅作辨識；contentType 才是 server 端判斷影片/語音的依據
+          fd.append("audio", blob, "recording.webm");
+          fd.append("roomId", room.id);
+          fd.append("durationMs", String(durMs));
+          try {
+            await fetch("/api/recordings", { method: "POST", body: fd });
+          } catch {
+            /* 上傳失敗忽略，不阻斷通話 */
+          }
+        };
+        recorder.start();
+        // 到時間先 stop（onstop 會上傳並自動續錄下一段）
+        recSegmentTimer = setTimeout(() => {
+          if (recorder && recorder.state !== "inactive") recorder.stop();
+        }, REC_SEGMENT_MS);
+      } catch {
+        // 瀏覽器不支援錄音：仍可通話，但提示無法錄製（隱私上應極少發生）
+        setVoiceError("此瀏覽器不支援錄製，無法符合錄音規範");
+        setRecording(false);
+      }
+    };
+
+    // 重啟錄製：鏡頭開/關後 track 變動，需用新的 localStream 重新錄一段。
+    const restartRecording = () => {
+      if (recSegmentTimer) {
+        clearTimeout(recSegmentTimer);
+        recSegmentTimer = null;
+      }
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop(); // onstop 會上傳本段並（因 voiceActive）自動以新串流續錄
+      } else {
+        startSegment();
+      }
+    };
+
     const join = async () => {
       try {
         setVoiceError(null);
-        // 瀏覽器只在安全來源（HTTPS 或 localhost）才允許麥克風/相機
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
           setVoiceError("需在 HTTPS（安全來源）下才能使用語音，請改用正式網域。");
           return;
@@ -538,13 +617,34 @@ export default function StudyRoomDetail({
         const res = await fetch("/api/turn");
         const json = (await res.json()) as { iceServers?: RTCIceServer[] };
         iceServers = json.iceServers ?? [];
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+        // 瀏覽器內建降噪約束（echo / agc / noise suppression）
+        const micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            autoGainControl: true,
+            noiseSuppression: true,
+          },
           video: false,
         });
+        rawMicTrack = micStream.getAudioTracks()[0] ?? null;
+        // RNNoise（AI 降噪）：在送出前處理麥克風；失敗時優雅退回原始 track
+        let audioTrack = rawMicTrack;
+        if (rawMicTrack) {
+          noiseHandle = await createNoiseSuppressedTrack(rawMicTrack);
+          audioTrack = noiseHandle.track;
+          setRnnoiseActive(noiseHandle.active);
+        }
+        // 送給 peer / 錄音的本地串流：降噪後音訊 track（之後可加 video）
+        localStream = new MediaStream();
+        if (audioTrack) localStream.addTrack(audioTrack);
         setLocalStreamState(localStream);
         setVoiceMuted(false);
         setCameraOn(false);
+
+        // 說話偵測：本地用原始麥克風串流（降噪後 RMS 較弱，原始更靈敏）
+        speaking = new SpeakingDetector((set) => setSpeakingKeys(set));
+        speaking.add("self", micStream);
+
         socket.emit(
           "voice:join",
           (ack: {
@@ -554,12 +654,20 @@ export default function StudyRoomDetail({
           }) => {
             if (!ack?.ok) {
               setVoiceError(ack?.error ?? "加入語音失敗");
-              localStream?.getTracks().forEach((t) => t.stop());
+              micStream.getTracks().forEach((t) => t.stop());
+              noiseHandle?.destroy();
+              noiseHandle = null;
               localStream = null;
+              rawMicTrack = null;
+              speaking?.destroy();
+              speaking = null;
               setLocalStreamState(null);
               return;
             }
             setInVoice(true);
+            voiceActive = true;
+            // 強制錄製：加入即自動開始（含影像時連 video 一起錄）
+            startSegment();
             for (const p of ack.peers ?? [])
               makePeer(p.id, p.name, p.userId ?? null, true);
           },
@@ -569,7 +677,7 @@ export default function StudyRoomDetail({
       }
     };
 
-    // 開啟鏡頭：取得 video track，加到本地 stream 與所有 peer，並重新協商
+    // 開啟鏡頭：取得 video track，加到本地 stream 與所有 peer，重新協商並重啟錄製
     const enableCamera = async () => {
       if (!localStream) return;
       if (localStream.getVideoTracks().length > 0) {
@@ -585,20 +693,22 @@ export default function StudyRoomDetail({
         localStream.addTrack(videoTrack);
         setLocalStreamState(localStream);
         setCameraOn(true);
-        // 加到每個 peer；onnegotiationneeded 會自動帶起重新協商
         for (const [, pc] of pcs) pc.addTrack(videoTrack, localStream);
+        // 鏡頭開啟後，後續錄製要連影像一起錄 → 重啟錄製段
+        restartRecording();
       } catch {
         setVoiceError("無法取得相機權限");
       }
     };
 
-    // 關閉鏡頭：停止並移除 video track，從 peer 移除 sender 後重新協商
+    // 關閉鏡頭：停止並移除 video track，從 peer 移除 sender 後重新協商並重啟錄製
     const disableCamera = async () => {
       if (!localStream) {
         setCameraOn(false);
         return;
       }
       const videoTracks = localStream.getVideoTracks();
+      const hadVideo = videoTracks.length > 0;
       for (const [, pc] of pcs) {
         for (const sender of pc.getSenders()) {
           if (sender.track && sender.track.kind === "video") {
@@ -612,73 +722,51 @@ export default function StudyRoomDetail({
       }
       setLocalStreamState(localStream);
       setCameraOn(false);
+      if (hadVideo) restartRecording();
     };
 
     const toggleCamera = () => {
-      // 以實際 stream 是否帶 video track 判定，避免閉包讀到舊的 React state
       const hasVideo = (localStream?.getVideoTracks().length ?? 0) > 0;
       if (hasVideo) void disableCamera();
       else void enableCamera();
     };
 
     const leave = () => {
+      voiceActive = false;
       socket.emit("voice:leave");
       for (const id of [...pcs.keys()]) closePeer(id);
+      if (recSegmentTimer) {
+        clearTimeout(recSegmentTimer);
+        recSegmentTimer = null;
+      }
+      // 停止錄製：最後一段會在 onstop 上傳（voiceActive 已為 false，不再續錄）
       if (recorder && recorder.state !== "inactive") recorder.stop();
+      // 釋放降噪鏈與原始麥克風
+      noiseHandle?.destroy();
+      noiseHandle = null;
+      rawMicTrack?.stop();
+      rawMicTrack = null;
       localStream?.getTracks().forEach((t) => t.stop());
       localStream = null;
+      speaking?.destroy();
+      speaking = null;
+      setSpeakingKeys(new Set());
       setLocalStreamState(null);
       setInVoice(false);
       setRecording(false);
+      setRecordingVideo(false);
+      setRnnoiseActive(false);
       setCameraOn(false);
       setVoicePeers([]);
     };
 
     const toggleMute = () => {
-      if (!localStream) return;
-      const enabled = localStream.getAudioTracks().every((t) => t.enabled);
-      localStream.getAudioTracks().forEach((t) => (t.enabled = !enabled));
-      setVoiceMuted(enabled);
+      if (!rawMicTrack) return;
+      const next = !rawMicTrack.enabled;
+      rawMicTrack.enabled = next;
+      setVoiceMuted(!next);
     };
 
-    const startRec = () => {
-      if (!localStream) return;
-      try {
-        recChunks = [];
-        recorder = new MediaRecorder(localStream);
-        recStart = performance.now();
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) recChunks.push(e.data);
-        };
-        recorder.onstop = async () => {
-          const blob = new Blob(recChunks, {
-            type: recorder?.mimeType || "audio/webm",
-          });
-          recChunks = [];
-          if (blob.size === 0) return;
-          const fd = new FormData();
-          fd.append("audio", blob, "recording.webm");
-          fd.append("roomId", room.id);
-          fd.append("durationMs", String(Math.round(performance.now() - recStart)));
-          try {
-            await fetch("/api/recordings", { method: "POST", body: fd });
-          } catch {
-            /* 上傳失敗忽略 */
-          }
-        };
-        recorder.start();
-        setRecording(true);
-      } catch {
-        setVoiceError("此瀏覽器不支援錄音");
-      }
-    };
-
-    const stopRec = () => {
-      if (recorder && recorder.state !== "inactive") recorder.stop();
-      setRecording(false);
-    };
-
-    // 管理操作：對某 userId 發出強制靜音/關鏡頭
     const forceMute = (userId: string) => {
       socket.emit(
         "voice:force-mute",
@@ -703,20 +791,23 @@ export default function StudyRoomDetail({
       leave,
       toggleMute,
       toggleCamera,
-      startRec,
-      stopRec,
       forceMute,
       forceCameraOff,
     };
 
     return () => {
       // 清理語音
+      voiceActive = false;
       socket.emit("voice:leave");
       for (const pc of pcs.values()) pc.close();
       pcs.clear();
       peerInfo.clear();
+      if (recSegmentTimer) clearTimeout(recSegmentTimer);
       if (recorder && recorder.state !== "inactive") recorder.stop();
+      noiseHandle?.destroy();
+      rawMicTrack?.stop();
       localStream?.getTracks().forEach((t) => t.stop());
+      speaking?.destroy();
       voiceApiRef.current = null;
       // 清理聊天 socket
       socket.off();
@@ -736,11 +827,9 @@ export default function StudyRoomDetail({
     const socket = socketRef.current;
     if (!socket || chatStatus !== "connected") return;
     sendingRef.current = true;
-    // 廣播會把訊息回送（含 id），不在本地樂觀插入以避免重複；清空輸入框即可
     socket.emit("chat:send", { content: text }, () => {
       sendingRef.current = false;
     });
-    // 保險：若 ack 未回，800ms 後解鎖
     setTimeout(() => {
       sendingRef.current = false;
     }, 800);
@@ -769,12 +858,42 @@ export default function StudyRoomDetail({
   const videoPeers = voicePeers.filter((p) => p.hasVideo);
   const showVideoGrid = inVoice && (cameraOn || videoPeers.length > 0);
 
+  // 語音成員清單（含自己）：給「誰在語音中」區塊渲染。
+  const selfMember = members.find((m) => m.isSelf);
+  const voiceParticipants = [
+    ...(inVoice
+      ? [
+          {
+            key: "self",
+            name: selfMember?.name ?? "你",
+            image: selfMember?.image ?? null,
+            isSelf: true,
+            hasVideo: cameraOn,
+          },
+        ]
+      : []),
+    ...voicePeers.map((p) => {
+      const mem = p.userId ? memberByUserId.get(p.userId) : null;
+      return {
+        key: p.id,
+        name: mem?.name ?? p.name,
+        image: mem?.image ?? null,
+        isSelf: false,
+        hasVideo: p.hasVideo,
+      };
+    }),
+  ];
+
   const title = room.subject || room.name;
   const remainingSlots = Math.max(0, room.capacity - members.length);
 
+  // 紅點指示文字：開鏡頭時是「錄音錄影中」，否則「錄音中」。
+  const recordingLabel = recordingVideo ? "錄音錄影中" : "錄音中";
+
   return (
-    <section id="sect-study-detail">
-      <div className="flex justify-between items-start mb-md gap-4">
+    <section id="sect-study-detail" className="pb-6">
+      {/* ===== 標題列 ===== */}
+      <div className="flex flex-col gap-3 mb-lg sm:flex-row sm:justify-between sm:items-start">
         <div className="min-w-0">
           <h1 className="font-bold text-headline-lg text-on-background">
             {title}
@@ -785,9 +904,7 @@ export default function StudyRoomDetail({
               {memberCount} 位成員
             </span>
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">
-                person
-              </span>{" "}
+              <span className="material-symbols-outlined text-sm">person</span>{" "}
               建立者：{creatorName ?? "系統房間"}
             </span>
             {room.hasPassword && (
@@ -796,9 +913,15 @@ export default function StudyRoomDetail({
                 私密房
               </span>
             )}
+            {recording && (
+              <span className="flex items-center gap-1 font-bold text-error">
+                <span className="inline-block w-2 h-2 rounded-full bg-error animate-pulse" />
+                {recordingLabel}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:justify-end">
           <button
             type="button"
             onClick={copyInviteLink}
@@ -881,238 +1004,206 @@ export default function StudyRoomDetail({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-lg">
-        {/* Left: 專注夥伴 */}
-        <div className="lg:col-span-3 bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
-          <h3 className="font-bold text-body-md text-on-surface mb-3 flex items-center gap-1">
-            <span className="material-symbols-outlined text-primary">
-              grid_view
-            </span>{" "}
-            專注夥伴
-          </h3>
-          <div className="grid grid-cols-2 gap-sm">
-            {members.map((m, i) => {
-              const targetInVoice = voicePeers.find((p) => p.userId === m.id);
-              return (
-                <div
-                  key={m.id}
-                  className="aspect-square bg-surface-container-low dark:bg-surface rounded-lg border border-outline-variant/30 flex flex-col items-center justify-center p-2 relative overflow-hidden group"
-                >
-                  <Link
-                    href={`/u/${m.id}`}
-                    className="flex flex-col items-center justify-center no-underline"
-                    title={`查看 ${m.name} 的個人檔案`}
-                  >
-                    {m.image ? (
-                      // 有 Google 頭像就顯示真實照片，沒有才退回 emoji 頭像
-                      <img
-                        alt=""
-                        src={m.image}
-                        className="w-10 h-10 mb-1 rounded-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-3xl mb-1">
-                        {AVATARS[i % AVATARS.length]}
-                      </span>
-                    )}
-                    <span className="text-[10px] font-bold text-on-surface truncate w-full text-center group-hover:text-primary transition-colors">
-                      {m.name}
-                    </span>
-                  </Link>
-                  {m.isSelf && (
-                    <span className="absolute top-1 right-1 bg-primary text-on-primary text-[8px] font-bold px-1 rounded-full">你</span>
-                  )}
-                  {m.isOwner ? (
-                    <span className="absolute top-1 left-1 bg-tertiary-container text-on-tertiary-container text-[8px] font-bold px-1 rounded-full flex items-center">
-                      <span className="material-symbols-outlined text-[10px]">star</span>
-                    </span>
-                  ) : m.isModerator ? (
-                    <span className="absolute top-1 left-1 bg-secondary-container text-on-secondary-container text-[8px] font-bold px-1 rounded-full flex items-center">
-                      <span className="material-symbols-outlined text-[10px]">shield_person</span>
-                    </span>
-                  ) : null}
-
-                  {/* 管理控制：建立者可指派/取消管理員；管理員可禁麥/禁鏡/踢人 */}
-                  {!m.isSelf && (canModerate || canEdit) && (
-                    <div className="absolute inset-x-0 bottom-0 bg-surface-container-highest/95 px-1 py-1 flex flex-wrap items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                      {/* 指派/取消管理員：僅建立者/系統 admin，且目標非建立者 */}
-                      {canEdit && !m.isOwner && (
-                        <button
-                          type="button"
-                          title={m.isModerator ? "取消管理員" : "設為管理員"}
-                          onClick={() =>
-                            setRoomModerator(room.id, m.id, !m.isModerator)
-                          }
-                          className="p-0.5 rounded text-on-surface-variant hover:text-primary hover:bg-primary-container/40"
-                        >
-                          <span className="material-symbols-outlined text-[14px]">
-                            {m.isModerator ? "remove_moderator" : "add_moderator"}
-                          </span>
-                        </button>
-                      )}
-                      {canModerate && !m.isOwner && (
-                        <>
-                          <button
-                            type="button"
-                            title="強制靜音"
-                            disabled={!targetInVoice}
-                            onClick={() => voiceApiRef.current?.forceMute(m.id)}
-                            className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">mic_off</span>
-                          </button>
-                          <button
-                            type="button"
-                            title="強制關鏡頭"
-                            disabled={!targetInVoice}
-                            onClick={() =>
-                              voiceApiRef.current?.forceCameraOff(m.id)
-                            }
-                            className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">videocam_off</span>
-                          </button>
-                          <button
-                            type="button"
-                            title="踢出"
-                            onClick={() => kickMember(room.id, m.id)}
-                            className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">person_remove</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {Array.from({ length: remainingSlots }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                className="aspect-square bg-surface-container-lowest border border-dashed border-outline-variant/40 rounded-lg flex items-center justify-center text-outline/50"
-              >
-                <span className="material-symbols-outlined">add</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Center: 番茄鐘 + 視訊格 */}
-        <div className="lg:col-span-6 flex flex-col gap-md">
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-xl rounded-xl border border-outline-variant/30 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
-            <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl opacity-40" />
-            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-tertiary-container/20 rounded-full blur-3xl opacity-40" />
-
-            <div className="text-center z-10">
-              <h2 className="font-bold text-body-lg text-primary dark:text-primary-fixed mb-1">
-                專注鐘 (Pomodoro)
-              </h2>
-              <p className="text-secondary text-xs mb-6">
-                {running ? "番茄鐘運作中" : "準備開始一個番茄鐘"}
-              </p>
-
-              <div className="text-[72px] font-bold tracking-tight text-on-background leading-none mb-8 tabular-nums">
-                {mins}:{secs}
-              </div>
-
-              <div className="flex gap-4 justify-center">
-                <button
-                  type="button"
-                  onClick={toggleTimer}
-                  className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-6 py-2.5 rounded-lg shadow flex items-center gap-1 transition-all"
-                >
-                  <span className="material-symbols-outlined">
-                    {running ? "pause" : "play_arrow"}
-                  </span>
-                  <span>{running ? "暫停" : "開始"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={resetTimer}
-                  className="bg-surface-container text-on-surface-variant font-bold text-body-md px-5 py-2.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest transition-all flex items-center gap-1"
-                >
-                  <span className="material-symbols-outlined">refresh</span> 重置
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 視訊格（grid）：開鏡頭時顯示本地預覽 + 有視訊的遠端 peer */}
-          {showVideoGrid && (
-            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
-              <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
-                <span className="material-symbols-outlined text-primary">videocam</span>
-                視訊
+      {/* ===== 主版面：左欄(夥伴+語音) / 中央(視訊或番茄鐘) / 右欄(目標+聊天) ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-md items-start">
+        {/* ---------- 左欄：專注夥伴 + 語音成員 + 語音控制 ---------- */}
+        <div className="lg:col-span-3 flex flex-col gap-md">
+          {/* 專注夥伴 */}
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1">
+                <span className="material-symbols-outlined text-primary">
+                  grid_view
+                </span>{" "}
+                專注夥伴
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {/* 本地預覽 */}
-                {cameraOn && (
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-black border border-outline-variant/30">
-                    <video
-                      ref={localVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover -scale-x-100"
-                    />
-                    <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                      你
-                    </span>
-                  </div>
-                )}
-                {videoPeers.map((p) => {
-                  const mem = p.userId ? memberByUserId.get(p.userId) : null;
-                  return (
-                    <div
-                      key={p.id}
-                      className="relative aspect-video rounded-lg overflow-hidden bg-black border border-outline-variant/30"
-                    >
-                      <video
-                        autoPlay
-                        playsInline
-                        ref={(el) => {
-                          if (el && el.srcObject !== p.stream)
-                            el.srcObject = p.stream;
-                        }}
-                        className="w-full h-full object-cover"
-                      />
-                      <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                        {mem?.name ?? p.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              <span className="text-[10px] font-bold text-secondary bg-surface-container-high px-2 py-0.5 rounded-full">
+                {members.length}/{room.capacity}
+              </span>
             </div>
-          )}
-        </div>
+            <div className="grid grid-cols-3 gap-sm">
+              {members.map((m, i) => {
+                const targetInVoice = voicePeers.find((p) => p.userId === m.id);
+                return (
+                  <div
+                    key={m.id}
+                    className="aspect-square bg-surface-container-low dark:bg-surface rounded-lg border border-outline-variant/30 flex flex-col items-center justify-center p-1.5 relative overflow-hidden group"
+                  >
+                    <Link
+                      href={`/u/${m.id}`}
+                      className="flex flex-col items-center justify-center no-underline min-w-0 w-full"
+                      title={`查看 ${m.name} 的個人檔案`}
+                    >
+                      {m.image ? (
+                        <img
+                          alt=""
+                          src={m.image}
+                          className="w-9 h-9 mb-1 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-2xl mb-1">
+                          {AVATARS[i % AVATARS.length]}
+                        </span>
+                      )}
+                      <span className="text-[9px] font-bold text-on-surface truncate w-full text-center group-hover:text-primary transition-colors">
+                        {m.name}
+                      </span>
+                    </Link>
+                    {m.isSelf && (
+                      <span className="absolute top-1 right-1 bg-primary text-on-primary text-[8px] font-bold px-1 rounded-full">你</span>
+                    )}
+                    {m.isOwner ? (
+                      <span className="absolute top-1 left-1 bg-tertiary-container text-on-tertiary-container text-[8px] font-bold px-1 rounded-full flex items-center">
+                        <span className="material-symbols-outlined text-[10px]">star</span>
+                      </span>
+                    ) : m.isModerator ? (
+                      <span className="absolute top-1 left-1 bg-secondary-container text-on-secondary-container text-[8px] font-bold px-1 rounded-full flex items-center">
+                        <span className="material-symbols-outlined text-[10px]">shield_person</span>
+                      </span>
+                    ) : null}
 
-        {/* Right: 語音 + 目標清單 + 聊天 */}
-        <div className="lg:col-span-3 flex flex-col gap-md h-full">
-          {/* 語音 / 視訊通話（WebRTC + Cloudflare TURN） */}
+                    {/* 管理控制：建立者可指派/取消管理員；管理員可禁麥/禁鏡/踢人 */}
+                    {!m.isSelf && (canModerate || canEdit) && (
+                      <div className="absolute inset-x-0 bottom-0 bg-surface-container-highest/95 px-1 py-1 flex flex-wrap items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        {canEdit && !m.isOwner && (
+                          <button
+                            type="button"
+                            title={m.isModerator ? "取消管理員" : "設為管理員"}
+                            onClick={() =>
+                              setRoomModerator(room.id, m.id, !m.isModerator)
+                            }
+                            className="p-0.5 rounded text-on-surface-variant hover:text-primary hover:bg-primary-container/40"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              {m.isModerator ? "remove_moderator" : "add_moderator"}
+                            </span>
+                          </button>
+                        )}
+                        {canModerate && !m.isOwner && (
+                          <>
+                            <button
+                              type="button"
+                              title="強制靜音"
+                              disabled={!targetInVoice}
+                              onClick={() => voiceApiRef.current?.forceMute(m.id)}
+                              className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">mic_off</span>
+                            </button>
+                            <button
+                              type="button"
+                              title="強制關鏡頭"
+                              disabled={!targetInVoice}
+                              onClick={() =>
+                                voiceApiRef.current?.forceCameraOff(m.id)
+                              }
+                              className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">videocam_off</span>
+                            </button>
+                            <button
+                              type="button"
+                              title="踢出"
+                              onClick={() => kickMember(room.id, m.id)}
+                              className="p-0.5 rounded text-on-surface-variant hover:text-error hover:bg-error-container/40"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">person_remove</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {Array.from({ length: remainingSlots }).map((_, i) => (
+                <div
+                  key={`empty-${i}`}
+                  className="aspect-square bg-surface-container-lowest border border-dashed border-outline-variant/40 rounded-lg flex items-center justify-center text-outline/50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 語音 / 視訊通話 */}
           <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
-            <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-primary">mic</span>
-              語音 / 視訊
-              {inVoice && (
-                <span className="ml-1 text-[10px] font-normal text-green-600 dark:text-green-400">
-                  ● 通話中（{voicePeers.length + 1} 人）
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1">
+                <span className="material-symbols-outlined text-primary">groups</span>
+                語音通話
+              </h3>
+              {recording && (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-error bg-error-container/40 px-2 py-0.5 rounded-full">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
+                  {recordingLabel}
                 </span>
               )}
-            </h3>
+            </div>
+
             {voiceError && (
               <p className="text-[10px] text-error mb-1.5">{voiceError}</p>
             )}
             {voiceNotice && (
               <p className="text-[10px] text-tertiary mb-1.5">{voiceNotice}</p>
             )}
+
+            {/* 誰在語音中（頭像 + Discord 風 speaking 綠色光環） */}
+            {inVoice && (
+              <div className="mb-2.5">
+                <p className="text-[10px] text-secondary mb-1.5">
+                  通話中（{voiceParticipants.length} 人）
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {voiceParticipants.map((p) => {
+                    const isSpeaking = speakingKeys.has(p.key);
+                    return (
+                      <div
+                        key={p.key}
+                        className="flex flex-col items-center gap-0.5 w-12"
+                        title={`${p.name}${isSpeaking ? "（說話中）" : ""}`}
+                      >
+                        <div
+                          className={`relative w-10 h-10 rounded-full p-[2px] transition-all ${
+                            isSpeaking
+                              ? "ring-2 ring-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                              : "ring-1 ring-outline-variant/40"
+                          }`}
+                        >
+                          {p.image ? (
+                            <img
+                              src={p.image}
+                              alt=""
+                              className="w-full h-full rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full rounded-full bg-surface-container-high flex items-center justify-center text-base">
+                              {p.isSelf ? "🙂" : "🧑‍🎓"}
+                            </div>
+                          )}
+                          {p.hasVideo && (
+                            <span className="absolute -bottom-0.5 -right-0.5 bg-primary text-on-primary rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                              <span className="material-symbols-outlined text-[10px]">videocam</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-on-surface truncate w-full text-center">
+                          {p.isSelf ? "你" : p.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {!isMember ? (
               <p className="text-[11px] text-secondary">加入此自習室後即可使用語音/視訊通話。</p>
             ) : !inVoice ? (
               <button
                 type="button"
-                onClick={() => voiceApiRef.current?.join()}
+                onClick={() => setShowConsent(true)}
                 className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-2 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1"
               >
                 <span className="material-symbols-outlined text-[18px]">call</span>
@@ -1123,7 +1214,11 @@ export default function StudyRoomDetail({
                 <button
                   type="button"
                   onClick={() => voiceApiRef.current?.toggleMute()}
-                  className="bg-surface-container hover:bg-surface-container-highest text-on-surface-variant font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-outline-variant/30 flex items-center gap-1"
+                  className={`font-bold text-[11px] px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${
+                    voiceMuted
+                      ? "bg-error-container text-on-error-container border-error/30"
+                      : "bg-surface-container hover:bg-surface-container-highest text-on-surface-variant border-outline-variant/30"
+                  }`}
                 >
                   <span className="material-symbols-outlined text-[16px]">
                     {voiceMuted ? "mic_off" : "mic"}
@@ -1144,25 +1239,6 @@ export default function StudyRoomDetail({
                   </span>
                   {cameraOn ? "關鏡頭" : "開鏡頭"}
                 </button>
-                {recording ? (
-                  <button
-                    type="button"
-                    onClick={() => voiceApiRef.current?.stopRec()}
-                    className="bg-error text-on-error font-bold text-[11px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 animate-pulse"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">stop_circle</span>
-                    停止錄音
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => voiceApiRef.current?.startRec()}
-                    className="bg-surface-container hover:bg-surface-container-highest text-on-surface-variant font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-outline-variant/30 flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">fiber_manual_record</span>
-                    錄音
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => voiceApiRef.current?.leave()}
@@ -1173,21 +1249,16 @@ export default function StudyRoomDetail({
                 </button>
               </div>
             )}
-            {inVoice && voicePeers.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {voicePeers.map((p) => (
-                  <span
-                    key={p.id}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-primary-container/40 text-on-primary-container flex items-center gap-0.5"
-                  >
-                    <span className="material-symbols-outlined text-[12px]">
-                      {p.hasVideo ? "videocam" : "graphic_eq"}
-                    </span>
-                    {p.name}
-                  </span>
-                ))}
-              </div>
+
+            {inVoice && (
+              <p className="mt-2 text-[9px] text-secondary flex items-center gap-1">
+                <span className="material-symbols-outlined text-[12px]">
+                  {rnnoiseActive ? "graphic_eq" : "noise_control_off"}
+                </span>
+                {rnnoiseActive ? "AI 降噪已啟用（RNNoise）" : "使用瀏覽器內建降噪"}
+              </p>
             )}
+
             {/* 遠端音訊（隱藏播放） */}
             {voicePeers.map((p) => (
               <audio
@@ -1199,9 +1270,158 @@ export default function StudyRoomDetail({
               />
             ))}
           </div>
+        </div>
 
+        {/* ---------- 中央：通話中→視訊格優先；否則→番茄鐘 ---------- */}
+        <div className="lg:col-span-6 flex flex-col gap-md">
+          {/* 視訊格（grid）：通話中且有任何鏡頭時，置於中央區並明顯放大 */}
+          {showVideoGrid && (
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border-2 border-primary/30 shadow-md ring-1 ring-primary/10">
+              <div className="flex items-center justify-between mb-2.5">
+                <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1">
+                  <span className="material-symbols-outlined text-primary">videocam</span>
+                  視訊
+                </h3>
+                {recording && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-error">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse" />
+                    {recordingLabel}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* 本地預覽 */}
+                {cameraOn && (
+                  <div
+                    className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                      speakingKeys.has("self")
+                        ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                        : "border-outline-variant/30"
+                    }`}
+                  >
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover -scale-x-100"
+                    />
+                    <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                      {voiceMuted && (
+                        <span className="material-symbols-outlined text-[12px]">mic_off</span>
+                      )}
+                      你
+                    </span>
+                  </div>
+                )}
+                {videoPeers.map((p) => {
+                  const mem = p.userId ? memberByUserId.get(p.userId) : null;
+                  const isSpeaking = speakingKeys.has(p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                        isSpeaking
+                          ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                          : "border-outline-variant/30"
+                      }`}
+                    >
+                      <video
+                        autoPlay
+                        playsInline
+                        ref={(el) => {
+                          if (el && el.srcObject !== p.stream)
+                            el.srcObject = p.stream;
+                        }}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                        {mem?.name ?? p.name}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 番茄鐘：通話且有視訊時縮為精簡橫條，否則為大型主視覺 */}
+          {showVideoGrid ? (
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high px-md py-3 rounded-xl border border-outline-variant/30 shadow-sm flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="material-symbols-outlined text-primary">timer</span>
+                <span className="text-2xl font-bold tabular-nums text-on-background">
+                  {mins}:{secs}
+                </span>
+                <span className="text-[11px] text-secondary truncate">
+                  {running ? "番茄鐘運作中" : "已暫停"}
+                </span>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={toggleTimer}
+                  className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-3 py-1.5 rounded-lg shadow flex items-center gap-1 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {running ? "pause" : "play_arrow"}
+                  </span>
+                  {running ? "暫停" : "開始"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetTimer}
+                  className="bg-surface-container text-on-surface-variant font-bold text-xs px-3 py-1.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest transition-all flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[16px]">refresh</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-surface-container-lowest dark:bg-surface-container-high p-xl rounded-xl border border-outline-variant/30 shadow-sm flex flex-col items-center justify-center relative overflow-hidden min-h-[360px]">
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl opacity-40" />
+              <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-tertiary-container/20 rounded-full blur-3xl opacity-40" />
+
+              <div className="text-center z-10">
+                <h2 className="font-bold text-body-lg text-primary dark:text-primary-fixed mb-1">
+                  專注鐘 (Pomodoro)
+                </h2>
+                <p className="text-secondary text-xs mb-6">
+                  {running ? "番茄鐘運作中" : "準備開始一個番茄鐘"}
+                </p>
+
+                <div className="text-[80px] font-bold tracking-tight text-on-background leading-none mb-8 tabular-nums">
+                  {mins}:{secs}
+                </div>
+
+                <div className="flex gap-4 justify-center">
+                  <button
+                    type="button"
+                    onClick={toggleTimer}
+                    className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-6 py-2.5 rounded-lg shadow flex items-center gap-1 transition-all"
+                  >
+                    <span className="material-symbols-outlined">
+                      {running ? "pause" : "play_arrow"}
+                    </span>
+                    <span>{running ? "暫停" : "開始"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetTimer}
+                    className="bg-surface-container text-on-surface-variant font-bold text-body-md px-5 py-2.5 rounded-lg border border-outline-variant/30 hover:bg-surface-container-highest transition-all flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined">refresh</span> 重置
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ---------- 右欄：今日目標 + 即時討論 ---------- */}
+        <div className="lg:col-span-3 flex flex-col gap-md">
           {/* 今日小組目標 */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[220px]">
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col">
             <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
               <span className="material-symbols-outlined text-tertiary">
                 playlist_add_check
@@ -1209,7 +1429,6 @@ export default function StudyRoomDetail({
               今日小組目標
             </h3>
 
-            {/* 捲動容器：可見細捲軸 + 底部漸層提示，溢出時可明顯捲動 */}
             <div className="relative flex-grow">
               <div
                 className="space-y-1.5 overflow-y-auto max-h-[160px] pr-1.5 [scrollbar-width:thin] [scrollbar-color:rgb(var(--md-sys-color-outline-variant-rgb,148_148_148)/0.6)_transparent]"
@@ -1252,7 +1471,6 @@ export default function StudyRoomDetail({
                   ))
                 )}
               </div>
-              {/* 底部漸層：暗示下方還有可捲動的內容 */}
               {goals.length > 4 && (
                 <div className="pointer-events-none absolute bottom-0 inset-x-0 h-6 bg-gradient-to-t from-surface-container-lowest dark:from-surface-container-high to-transparent rounded-b-xl" />
               )}
@@ -1264,7 +1482,6 @@ export default function StudyRoomDetail({
                 value={newGoal}
                 onChange={(e) => setNewGoal(e.target.value)}
                 onKeyDown={(e) => {
-                  // 中文 IME 用 Enter 選字時不送出；連按(repeat)也擋掉
                   if (e.key === "Enter" && !e.nativeEvent.isComposing && !e.repeat) {
                     e.preventDefault();
                     addGoal();
@@ -1287,7 +1504,7 @@ export default function StudyRoomDetail({
           </div>
 
           {/* 即時文字討論區 */}
-          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[280px]">
+          <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[320px] flex-grow">
             <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
               <span className="material-symbols-outlined text-secondary">
                 forum
@@ -1318,7 +1535,7 @@ export default function StudyRoomDetail({
                     : "連線中…"}
               </span>
             </h3>
-            <div className="flex-grow overflow-y-auto text-xs space-y-2 max-h-[200px] pr-1 flex flex-col">
+            <div className="flex-grow overflow-y-auto text-xs space-y-2 max-h-[280px] pr-1 flex flex-col">
               {chatError && (
                 <div className="text-center text-[10px] text-error my-1.5">
                   {chatError}
@@ -1378,7 +1595,6 @@ export default function StudyRoomDetail({
                   composingRef.current = false;
                 }}
                 onKeyDown={(e) => {
-                  // Enter 送出；Shift+Enter 換行；IME 組字中的 Enter 不送出（避免吃掉選字）
                   if (
                     e.key === "Enter" &&
                     !e.shiftKey &&
@@ -1410,6 +1626,50 @@ export default function StudyRoomDetail({
           </div>
         </div>
       </div>
+
+      {/* ===== 加入語音前的隱私同意提示（務必：強制錄音/錄影告知） ===== */}
+      {showConsent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md bg-surface-container-lowest dark:bg-surface-container-high rounded-2xl border border-outline-variant/30 shadow-xl p-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-symbols-outlined text-error text-[28px]">
+                radio_button_checked
+              </span>
+              <h3 className="font-bold text-body-lg text-on-surface">
+                通話將被全程錄製
+              </h3>
+            </div>
+            <p className="text-sm text-on-surface-variant leading-relaxed mb-2">
+              為維護自習室秩序與內容審核，<strong className="text-error">本通話將被全程錄音；若你開啟鏡頭，影像也會一併錄影</strong>。錄製內容僅供管理員審核之用。
+            </p>
+            <ul className="text-xs text-secondary leading-relaxed mb-4 list-disc pl-5 space-y-0.5">
+              <li>加入語音後即自動開始錄製，無法關閉。</li>
+              <li>通話中畫面會持續顯示明顯的紅點「● {recordingLabel}」指示。</li>
+              <li>麥克風會經 AI 降噪（RNNoise）處理後再傳送。</li>
+            </ul>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConsent(false)}
+                className="bg-surface-container hover:bg-surface-container-highest text-on-surface-variant font-bold text-xs px-4 py-2 rounded-lg border border-outline-variant/30"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConsent(false);
+                  voiceApiRef.current?.join();
+                }}
+                className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[16px]">call</span>
+                我了解，加入語音
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
