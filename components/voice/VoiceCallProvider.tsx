@@ -82,7 +82,7 @@ export interface VoiceCallContextValue {
    */
   setVirtualBg: (next: VirtualBgState) => void;
   /** 加入指定房語音。roomName 供浮動視窗顯示。 */
-  join: (roomId: string, roomName: string) => void;
+  join: (roomId: string, roomName: string, opts?: { startMuted?: boolean }) => void;
   /** 離開語音（上傳最後一段錄製）。 */
   leave: () => void;
   toggleMute: () => void;
@@ -506,7 +506,7 @@ export default function VoiceCallProvider({
 
   // ---- 加入語音 ----
   const join = useCallback(
-    (roomId: string, roomName: string) => {
+    (roomId: string, roomName: string, opts?: { startMuted?: boolean }) => {
       // 單一通話限制：已在其他房語音中 → 拒絕。
       if (voiceActiveRef.current) {
         if (roomIdRef.current !== roomId) {
@@ -672,7 +672,13 @@ export default function VoiceCallProvider({
           if (audioTrack) ls.addTrack(audioTrack);
           localStreamRef.current = ls;
           setLocalStream(new MediaStream(ls.getTracks()));
-          setMuted(false);
+          // 支援「加入時先靜音」：關閉原始麥克風 track（送出的降噪 track 由它而來，故一併靜音）。
+          if (opts?.startMuted && rawMicTrack) {
+            rawMicTrack.enabled = false;
+            setMuted(true);
+          } else {
+            setMuted(false);
+          }
           setCameraOn(false);
 
           // 說話偵測：本地用原始麥克風串流（降噪後 RMS 較弱，原始更靈敏）。

@@ -294,6 +294,8 @@ export default function StudyRoomDetail({
   const localStreamState = inVoice ? voice.localStream : null;
   // 加入語音前的隱私同意提示是否顯示。
   const [showConsent, setShowConsent] = useState(false);
+  // 加入時是否先靜音麥克風。
+  const [joinMuted, setJoinMuted] = useState(false);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // 本地預覽：把本地 stream 接到 <video>
@@ -874,31 +876,28 @@ export default function StudyRoomDetail({
                             {AVATARS[i % AVATARS.length]}
                           </span>
                         )}
-                        {/* 角色徽章（左上）：加 ring-offset 與 z 讓徽章不被光環吃掉、不互相壓 */}
+                        {/* 頭像不再放角落徽章：在語音中由藍色光環、說話中由綠色光環表示，
+                            owner/管理員標記改放到名字旁，避免徽章凸出圓形邊緣。 */}
+                      </div>
+                      <span className="flex w-full items-center justify-center gap-0.5 text-[11px] font-bold text-on-surface group-hover:text-primary transition-colors">
                         {m.isOwner ? (
-                          <span className="absolute top-0 left-0 z-10 bg-tertiary-container text-on-tertiary-container w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
-                            <span className="material-symbols-outlined text-[11px] leading-none">
-                              star
-                            </span>
+                          <span
+                            title="建立者"
+                            className="material-symbols-outlined shrink-0 icon-fill text-[13px] leading-none text-tertiary"
+                          >
+                            star
                           </span>
                         ) : m.isModerator ? (
-                          <span className="absolute top-0 left-0 z-10 bg-secondary-container text-on-secondary-container w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
-                            <span className="material-symbols-outlined text-[11px] leading-none">
-                              shield_person
-                            </span>
+                          <span
+                            title="管理員"
+                            className="material-symbols-outlined shrink-0 text-[13px] leading-none text-secondary"
+                          >
+                            shield_person
                           </span>
                         ) : null}
-                        {/* 在語音中 → 麥克風指示（右下） */}
-                        {isInVoice && (
-                          <span className="absolute bottom-0 right-0 z-10 bg-primary text-on-primary w-4 h-4 rounded-full grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
-                            <span className="material-symbols-outlined text-[11px] leading-none">
-                              mic
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] font-bold text-on-surface truncate w-full text-center group-hover:text-primary transition-colors">
-                        {m.isSelf ? "你" : m.name}
+                        <span className="truncate">
+                          {m.isSelf ? "你" : m.name}
+                        </span>
                       </span>
                     </Link>
 
@@ -1025,22 +1024,27 @@ export default function StudyRoomDetail({
                             {p.isSelf ? "🙂" : "🧑‍🎓"}
                           </div>
                         )}
+                        {/* 頭像保持乾淨：說話中由綠光環表示；靜音/鏡頭狀態改放名字旁。 */}
+                      </div>
+                      <span className="flex w-full items-center justify-center gap-0.5 text-[10px] text-on-surface">
                         {showMuted ? (
-                          <span className="absolute bottom-0 right-0 z-10 bg-error text-on-error rounded-full w-4 h-4 grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
-                            <span className="material-symbols-outlined text-[11px] leading-none">
-                              mic_off
-                            </span>
+                          <span
+                            title="已靜音"
+                            className="material-symbols-outlined shrink-0 text-[12px] leading-none text-error"
+                          >
+                            mic_off
                           </span>
                         ) : p.hasVideo ? (
-                          <span className="absolute bottom-0 right-0 z-10 bg-primary text-on-primary rounded-full w-4 h-4 grid place-items-center ring-2 ring-surface-container-lowest dark:ring-surface-container-high">
-                            <span className="material-symbols-outlined text-[11px] leading-none">
-                              videocam
-                            </span>
+                          <span
+                            title="開鏡頭中"
+                            className="material-symbols-outlined shrink-0 text-[12px] leading-none text-primary"
+                          >
+                            videocam
                           </span>
                         ) : null}
-                      </div>
-                      <span className="text-[10px] text-on-surface truncate w-full text-center">
-                        {p.isSelf ? "你" : p.name}
+                        <span className="truncate">
+                          {p.isSelf ? "你" : p.name}
+                        </span>
                       </span>
                     </div>
                   );
@@ -1329,7 +1333,7 @@ export default function StudyRoomDetail({
                   }`}
                 />
                 {chatStatus === "connected"
-                  ? "即時連線中"
+                  ? "即時通訊已連線"
                   : chatStatus === "error"
                     ? "未連線"
                     : "連線中…"}
@@ -1454,6 +1458,18 @@ export default function StudyRoomDetail({
               <li>通話中畫面會持續顯示明顯的紅點「● {recordingLabel}」指示。</li>
               <li>麥克風會經 AI 降噪（RNNoise）處理後再傳送。</li>
             </ul>
+            <label className="mb-4 flex cursor-pointer select-none items-center gap-2 rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface">
+              <input
+                type="checkbox"
+                checked={joinMuted}
+                onChange={(e) => setJoinMuted(e.target.checked)}
+                className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary"
+              />
+              <span className="material-symbols-outlined text-[16px] text-on-surface-variant">
+                mic_off
+              </span>
+              加入時先靜音麥克風（之後可隨時開啟）
+            </label>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
@@ -1466,7 +1482,7 @@ export default function StudyRoomDetail({
                 type="button"
                 onClick={() => {
                   setShowConsent(false);
-                  voice.join(room.id, room.name);
+                  voice.join(room.id, room.name, { startMuted: joinMuted });
                 }}
                 className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-xs px-4 py-2 rounded-lg shadow-sm flex items-center gap-1"
               >
