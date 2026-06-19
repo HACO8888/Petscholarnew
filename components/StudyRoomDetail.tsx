@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 import { deleteRoom } from "@/app/(app)/study-rooms/actions";
 
 interface RoomInfo {
@@ -25,19 +26,22 @@ interface Goal {
   completed: boolean;
 }
 
+/** 從 server (Socket.IO) 收到的訊息形狀 */
 interface ChatMessage {
   id: string;
-  author: string;
-  text: string;
-  time: string;
-  isSelf: boolean;
+  roomId: string;
+  userId: string | null;
+  authorName: string;
+  content: string;
+  createdAt: string; // ISO 字串
 }
 
 interface StudyRoomDetailProps {
   room: RoomInfo;
   members: Member[];
   memberCount: number;
-  meName: string;
+  /** 目前登入者的 user id，用於標記自己的訊息 */
+  meId: string;
   /** 是否可解散此自習室（建立者或系統管理員） */
   canManage: boolean;
 }
@@ -45,18 +49,16 @@ interface StudyRoomDetailProps {
 const POMO_SECONDS = 25 * 60;
 const AVATARS = ["👩‍🎓", "👨‍🎓", "🐱", "🐶", "🤖"];
 
-function nowTime() {
-  return new Date().toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function formatTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function StudyRoomDetail({
   room,
   members,
   memberCount,
-  meName,
+  meId,
   canManage,
 }: StudyRoomDetailProps) {
   // ---- 番茄鐘 ----
@@ -137,46 +139,83 @@ export default function StudyRoomDetail({
     setNewGoal("");
   }
 
-  // ---- 聊天室（localStorage） ----
-  const chatKey = `study-chat:${room.id}`;
+  // ---- 聊天室（Socket.IO 即時 + DB 歷史） ----
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [newMsg, setNewMsg] = useState("");
-  const [chatLoaded, setChatLoaded] = useState(false);
+  // 連線狀態：connecting | connected | error
+  const [chatStatus, setChatStatus] = useState<
+    "connecting" | "connected" | "error"
+  >("connecting");
+  const [chatError, setChatError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  // IME（中文／日文等組字）期間不送出
+  const composingRef = useRef(false);
+  // 防連點重複送出
+  const sendingRef = useRef(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(chatKey);
-      if (raw) setChat(JSON.parse(raw) as ChatMessage[]);
-    } catch {
-      /* ignore */
-    }
-    setChatLoaded(true);
-  }, [chatKey]);
+    // 連到 custom server 的 Socket.IO；session 由同源 cookie 驗證
+    const socket = io({
+      path: "/socket.io",
+      query: { roomId: room.id },
+      transports: ["websocket", "polling"],
+    });
+    socketRef.current = socket;
 
+    socket.on("connect", () => {
+      setChatStatus("connected");
+      setChatError(null);
+    });
+    socket.on("disconnect", () => {
+      setChatStatus("connecting");
+    });
+    socket.on("connect_error", () => {
+      setChatStatus("error");
+      setChatError("即時聊天連線失敗（請確認已登入並使用 custom server 啟動）");
+    });
+
+    // 加入時回傳近 N 則歷史
+    socket.on("chat:history", (history: ChatMessage[]) => {
+      setChat(Array.isArray(history) ? history : []);
+    });
+
+    // 新訊息廣播（含自己送出的）→ 以 id 去重後 append
+    socket.on("chat:message", (msg: ChatMessage) => {
+      setChat((c) => (c.some((m) => m.id === msg.id) ? c : [...c, msg]));
+    });
+
+    socket.on("chat:error", (e: { message?: string }) => {
+      setChatStatus("error");
+      setChatError(e?.message ?? "聊天室發生錯誤");
+    });
+
+    return () => {
+      socket.off();
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [room.id]);
+
+  // 收到新訊息時捲到底
   useEffect(() => {
-    if (!chatLoaded) return;
-    try {
-      localStorage.setItem(chatKey, JSON.stringify(chat));
-    } catch {
-      /* ignore */
-    }
     chatEndRef.current?.scrollIntoView({ block: "end" });
-  }, [chat, chatKey, chatLoaded]);
+  }, [chat]);
 
   function sendMessage() {
     const text = newMsg.trim();
-    if (!text) return;
-    setChat((c) => [
-      ...c,
-      {
-        id: `chat-${Date.now()}`,
-        author: meName,
-        text,
-        time: nowTime(),
-        isSelf: true,
-      },
-    ]);
+    if (!text || sendingRef.current) return;
+    const socket = socketRef.current;
+    if (!socket || chatStatus !== "connected") return;
+    sendingRef.current = true;
+    // 廣播會把訊息回送（含 id），不在本地樂觀插入以避免重複；清空輸入框即可
+    socket.emit("chat:send", { content: text }, () => {
+      sendingRef.current = false;
+    });
+    // 保險：若 ack 未回，800ms 後解鎖
+    setTimeout(() => {
+      sendingRef.current = false;
+    }, 800);
     setNewMsg("");
   }
 
@@ -356,35 +395,61 @@ export default function StudyRoomDetail({
             </div>
           </div>
 
-          {/* 靜音文字討論區 */}
+          {/* 即時文字討論區 */}
           <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-xl border border-outline-variant/30 shadow-sm flex flex-col min-h-[280px]">
             <h3 className="font-bold text-body-md text-on-surface mb-2 flex items-center gap-1">
               <span className="material-symbols-outlined text-secondary">
                 forum
               </span>{" "}
-              專注筆記
-              <span className="ml-1 text-[10px] font-normal text-secondary">（僅自己可見）</span>
+              即時討論
+              <span
+                className={`ml-auto flex items-center gap-1 text-[10px] font-normal ${
+                  chatStatus === "connected"
+                    ? "text-primary"
+                    : chatStatus === "error"
+                      ? "text-error"
+                      : "text-secondary"
+                }`}
+              >
+                <span
+                  className={`inline-block w-1.5 h-1.5 rounded-full ${
+                    chatStatus === "connected"
+                      ? "bg-primary"
+                      : chatStatus === "error"
+                        ? "bg-error"
+                        : "bg-secondary animate-pulse"
+                  }`}
+                />
+                {chatStatus === "connected"
+                  ? "即時連線中"
+                  : chatStatus === "error"
+                    ? "未連線"
+                    : "連線中…"}
+              </span>
             </h3>
             <div className="flex-grow overflow-y-auto text-xs space-y-2 max-h-[200px] pr-1 flex flex-col">
-              <div className="text-center text-[10px] text-secondary my-1.5">
-                -- 自習時的個人專注筆記，僅儲存在本機 --
-              </div>
-              {chat.length === 0 && (
+              {chatError && (
+                <div className="text-center text-[10px] text-error my-1.5">
+                  {chatError}
+                </div>
+              )}
+              {chat.length === 0 && !chatError && (
                 <div className="flex-grow flex items-center justify-center text-center text-[10px] text-secondary py-4">
                   還沒有訊息，發出第一則討論吧！
                 </div>
               )}
-              {chat.map((msg) =>
-                msg.isSelf ? (
+              {chat.map((msg) => {
+                const isSelf = msg.userId === meId;
+                return isSelf ? (
                   <div
                     key={msg.id}
                     className="flex flex-col items-end max-w-[85%] self-end ml-auto mb-2"
                   >
                     <span className="text-[9px] text-secondary mb-0.5 mr-1">
-                      {msg.author}
+                      {msg.authorName} · {formatTime(msg.createdAt)}
                     </span>
-                    <div className="bg-primary text-on-primary px-2.5 py-1.5 rounded-lg rounded-tr-none text-xs leading-normal">
-                      {msg.text}
+                    <div className="bg-primary text-on-primary px-2.5 py-1.5 rounded-lg rounded-tr-none text-xs leading-normal break-words">
+                      {msg.content}
                     </div>
                   </div>
                 ) : (
@@ -393,14 +458,14 @@ export default function StudyRoomDetail({
                     className="flex flex-col items-start max-w-[85%] mb-2"
                   >
                     <span className="text-[9px] text-secondary mb-0.5 ml-1">
-                      {msg.author}
+                      {msg.authorName} · {formatTime(msg.createdAt)}
                     </span>
-                    <div className="bg-surface-container-low dark:bg-surface text-on-surface px-2.5 py-1.5 rounded-lg rounded-tl-none text-xs leading-normal border border-outline-variant/20">
-                      {msg.text}
+                    <div className="bg-surface-container-low dark:bg-surface text-on-surface px-2.5 py-1.5 rounded-lg rounded-tl-none text-xs leading-normal border border-outline-variant/20 break-words">
+                      {msg.content}
                     </div>
                   </div>
-                ),
-              )}
+                );
+              })}
               <div ref={chatEndRef} />
             </div>
             <div className="flex gap-1.5 mt-2">
@@ -408,17 +473,30 @@ export default function StudyRoomDetail({
                 type="text"
                 value={newMsg}
                 onChange={(e) => setNewMsg(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") sendMessage();
+                onCompositionStart={() => {
+                  composingRef.current = true;
                 }}
-                placeholder="輕聲輸入..."
-                className="flex-grow bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                onCompositionEnd={() => {
+                  composingRef.current = false;
+                }}
+                onKeyDown={(e) => {
+                  // IME 組字中的 Enter 不送出（避免吃掉選字）
+                  if (e.key === "Enter" && !composingRef.current && !e.nativeEvent.isComposing) {
+                    sendMessage();
+                  }
+                }}
+                disabled={chatStatus !== "connected"}
+                placeholder={
+                  chatStatus === "connected" ? "輸入訊息…" : "連線中…"
+                }
+                className="flex-grow bg-surface-container-low dark:bg-surface border border-outline-variant/40 rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-primary focus:border-primary outline-none disabled:opacity-60"
               />
               <button
                 type="button"
                 onClick={sendMessage}
+                disabled={chatStatus !== "connected"}
                 aria-label="送出訊息"
-                className="bg-primary text-on-primary px-3 py-1.5 rounded-lg hover:bg-surface-tint transition-all"
+                className="bg-primary text-on-primary px-3 py-1.5 rounded-lg hover:bg-surface-tint transition-all disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-[16px]">
                   send

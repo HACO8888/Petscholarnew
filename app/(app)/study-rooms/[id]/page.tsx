@@ -55,7 +55,7 @@ export default async function StudyRoomDetailPage({
       }}
       members={members}
       memberCount={members.length}
-      meName={session?.user?.name ?? "你"}
+      meId={userId}
       canManage={canManage}
     />
   );
