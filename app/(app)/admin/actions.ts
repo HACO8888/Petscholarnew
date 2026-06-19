@@ -16,6 +16,7 @@ import {
   users,
   chatMessages,
   voiceRecordings,
+  departments,
 } from "@/db/schema";
 import type { Role } from "@/db/schema";
 import { deleteObject } from "@/lib/s3";
@@ -478,6 +479,84 @@ export async function setUserRole(formData: FormData) {
     .where(eq(users.id, userId))
     .returning({ id: users.id });
   if (updated.length === 0) throw new Error("使用者不存在");
+
+  revalidatePath("/admin");
+}
+
+// ============================================================
+// 科系 department（由管理員維護的清單；所有選科系處只能從此清單選）
+// ============================================================
+
+/** 由系名產生英數 slug；非英數字元轉連字號，作為 id 備援。 */
+function slugify(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+/** 新增科系：id 留空時由系名自動產生 slug；需唯一且不可為空。 */
+export async function createDepartment(formData: FormData) {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  if (!name) throw new Error("科系名稱不可為空");
+
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const id = (idRaw ? slugify(idRaw) : slugify(name)) || `dept-${Date.now()}`;
+
+  const college = String(formData.get("college") ?? "").trim().slice(0, 32) || null;
+  const sortOrderRaw = Number(formData.get("sortOrder"));
+  const sortOrder = Number.isFinite(sortOrderRaw) ? Math.trunc(sortOrderRaw) : 0;
+
+  const [exists] = await db
+    .select({ id: departments.id })
+    .from(departments)
+    .where(eq(departments.id, id))
+    .limit(1);
+  if (exists) throw new Error(`科系代碼「${id}」已存在，請改用其他代碼`);
+
+  await db.insert(departments).values({ id, name, college, sortOrder });
+  revalidatePath("/admin");
+}
+
+/** 編輯科系名稱／所屬學院／排序（id 為 PK，不可變更）。 */
+export async function updateDepartment(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("departmentId") ?? "");
+  if (!id) throw new Error("缺少科系");
+
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  if (!name) throw new Error("科系名稱不可為空");
+  const college = String(formData.get("college") ?? "").trim().slice(0, 32) || null;
+  const sortOrderRaw = Number(formData.get("sortOrder"));
+  const sortOrder = Number.isFinite(sortOrderRaw) ? Math.trunc(sortOrderRaw) : 0;
+
+  const updated = await db
+    .update(departments)
+    .set({ name, college, sortOrder })
+    .where(eq(departments.id, id))
+    .returning({ id: departments.id });
+  if (updated.length === 0) throw new Error("科系不存在");
+
+  revalidatePath("/admin");
+}
+
+/**
+ * 刪除科系：僅從清單移除，不更動既有 users.department / posts.department 的文字快照
+ * （那些欄位為純文字，無 FK；移除後新選單將不再提供此項，但歷史資料仍保留原值）。
+ */
+export async function deleteDepartment(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("departmentId") ?? "");
+  if (!id) throw new Error("缺少科系");
+
+  const deleted = await db
+    .delete(departments)
+    .where(eq(departments.id, id))
+    .returning({ id: departments.id });
+  if (deleted.length === 0) throw new Error("科系不存在");
 
   revalidatePath("/admin");
 }
