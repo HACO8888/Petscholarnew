@@ -68,10 +68,54 @@ export default function StudyRoomDetail({
   isMember,
   isFull,
 }: StudyRoomDetailProps) {
-  // ---- 番茄鐘 ----
+  // ---- 番茄鐘（localStorage 持久化：切走再回來不重置）----
+  const pomoKey = `study-pomo:${room.id}`;
   const [timeLeft, setTimeLeft] = useState(POMO_SECONDS);
   const [running, setRunning] = useState(false);
+  const [pomoLoaded, setPomoLoaded] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 載入：還原計時狀態（執行中則扣掉離開期間經過的秒數）
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(pomoKey);
+      if (raw) {
+        const s = JSON.parse(raw) as {
+          timeLeft: number;
+          running: boolean;
+          savedAt: number;
+        };
+        if (s.running) {
+          const elapsed = Math.floor((Date.now() - s.savedAt) / 1000);
+          const remain = Math.max(0, (s.timeLeft ?? POMO_SECONDS) - elapsed);
+          if (remain > 0) {
+            setTimeLeft(remain);
+            setRunning(true);
+          } else {
+            setTimeLeft(POMO_SECONDS);
+          }
+        } else {
+          setTimeLeft(Math.max(0, s.timeLeft ?? POMO_SECONDS));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    setPomoLoaded(true);
+  }, [pomoKey]);
+
+  // 存檔：狀態變動就寫入（含時間戳，供下次還原計算經過秒數）
+  useEffect(() => {
+    if (!pomoLoaded) return;
+    try {
+      localStorage.setItem(
+        pomoKey,
+        JSON.stringify({ timeLeft, running, savedAt: Date.now() }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [timeLeft, running, pomoLoaded, pomoKey]);
 
   useEffect(() => {
     if (!running) {
@@ -139,6 +183,9 @@ export default function StudyRoomDetail({
     setGoals((gs) =>
       gs.map((g) => (g.id === id ? { ...g, completed: !g.completed } : g)),
     );
+  }
+  function removeGoal(id: string) {
+    setGoals((gs) => gs.filter((g) => g.id !== id));
   }
   function addGoal() {
     const text = newGoal.trim();
@@ -315,6 +362,11 @@ export default function StudyRoomDetail({
     const join = async () => {
       try {
         setVoiceError(null);
+        // 瀏覽器只在安全來源（HTTPS 或 localhost）才允許麥克風
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+          setVoiceError("需在 HTTPS（安全來源）下才能使用語音，請改用正式網域。");
+          return;
+        }
         const res = await fetch("/api/turn");
         const json = (await res.json()) as { iceServers?: RTCIceServer[] };
         iceServers = json.iceServers ?? [];
@@ -687,26 +739,36 @@ export default function StudyRoomDetail({
                 <p className="text-xs text-secondary p-1.5">尚無目標，新增一個吧！</p>
               ) : (
                 goals.map((goal) => (
-                  <label
+                  <div
                     key={goal.id}
-                    className={`flex items-start gap-2 p-1.5 hover:bg-surface-container-low dark:hover:bg-surface rounded-lg cursor-pointer transition-colors group ${
+                    className={`flex items-center gap-1 p-1.5 hover:bg-surface-container-low dark:hover:bg-surface rounded-lg transition-colors group ${
                       goal.completed ? "opacity-50" : ""
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={goal.completed}
-                      onChange={() => toggleGoal(goal.id)}
-                      className="mt-0.5 rounded border-outline-variant text-primary focus:ring-primary h-3.5 w-3.5"
-                    />
-                    <span
-                      className={`text-xs text-on-background group-hover:text-primary transition-all ${
-                        goal.completed ? "line-through" : ""
-                      }`}
+                    <label className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={goal.completed}
+                        onChange={() => toggleGoal(goal.id)}
+                        className="mt-0.5 rounded border-outline-variant text-primary focus:ring-primary h-3.5 w-3.5 shrink-0"
+                      />
+                      <span
+                        className={`text-xs text-on-background group-hover:text-primary transition-all break-words ${
+                          goal.completed ? "line-through" : ""
+                        }`}
+                      >
+                        {goal.text}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeGoal(goal.id)}
+                      aria-label="刪除目標"
+                      className="shrink-0 p-1 rounded text-secondary hover:text-error hover:bg-error-container/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-error"
                     >
-                      {goal.text}
-                    </span>
-                  </label>
+                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                    </button>
+                  </div>
                 ))
               )}
             </div>
