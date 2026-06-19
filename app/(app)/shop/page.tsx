@@ -6,6 +6,47 @@ import { shopItems, inventory } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
 import { buyItem, toggleEquip } from "@/app/(app)/pet/actions";
 
+/** 稀有度視覺層次：依 grade 給卡片邊框／圖底／徽章一致的色系，讓商品價值一目了然。 */
+function gradeStyle(grade: string) {
+  switch (grade) {
+    case "史詩":
+      return {
+        card: "border-tertiary-container bg-gradient-to-b from-surface-bright to-tertiary-fixed/15",
+        media: "bg-tertiary-container/30",
+        badge: "bg-tertiary text-on-tertiary",
+        title: "text-on-tertiary-container",
+        buy: "bg-tertiary text-on-tertiary hover:opacity-90 shadow-sm",
+      };
+    case "稀有":
+      return {
+        card: "border-2 border-primary-container bg-surface-bright",
+        media: "bg-primary-container/40",
+        badge: "bg-primary text-on-primary",
+        title: "text-on-surface",
+        buy: "bg-primary text-on-primary hover:bg-surface-tint",
+      };
+    case "普通":
+      return {
+        card: "border-outline-variant bg-surface-bright",
+        media: "bg-primary-container/20",
+        badge: "bg-primary/15 text-primary",
+        title: "text-on-surface",
+        buy: "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20",
+      };
+    default:
+      return {
+        card: "border-outline-variant bg-surface-bright",
+        media: "bg-surface-container-low",
+        badge: "bg-surface-container-highest text-on-surface-variant",
+        title: "text-on-surface",
+        buy: "border border-secondary text-secondary hover:bg-surface-variant",
+      };
+  }
+}
+
+const FOCUS_RING =
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-bright";
+
 export default async function ShopPage() {
   const session = await auth();
   const isLoggedIn = !!session?.user?.id;
@@ -42,184 +83,228 @@ export default async function ShopPage() {
       {/* Page Header */}
       <header className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="font-headline-lg text-headline-lg text-on-surface mb-xs">寵物商城</h1>
-          <p className="font-body-md text-body-md text-secondary">為您的學習夥伴補充能量與裝備</p>
+          <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">寵物商城</h1>
+          <p className="font-body-md text-body-md text-on-surface-variant mt-xs">
+            為您的學習夥伴補充能量與裝備。
+          </p>
         </div>
         {coins !== null ? (
-          <div className="flex shrink-0 items-center gap-sm self-start bg-surface-container px-md py-sm rounded-full shadow-sm sm:self-auto">
-            <span className="material-symbols-outlined text-tertiary">account_balance_wallet</span>
-            <span className="font-label-md text-label-md text-on-surface">
-              餘額: {coins} 枚金幣
+          <div className="flex shrink-0 items-center gap-sm self-start rounded-full border border-tertiary-container bg-tertiary-container/30 px-md py-sm shadow-sm sm:self-auto">
+            <span
+              aria-hidden
+              className="material-symbols-outlined text-tertiary icon-fill"
+            >
+              account_balance_wallet
             </span>
+            <span className="font-label-md text-label-md text-on-surface-variant">餘額</span>
+            <span className="font-headline-md text-headline-md text-on-surface tabular-nums leading-none">
+              {coins}
+            </span>
+            <span className="font-label-md text-label-md text-on-surface-variant">金幣</span>
           </div>
         ) : (
           <Link
             href="/login"
-            className="flex shrink-0 items-center gap-sm self-start bg-primary text-on-primary px-md py-sm rounded-full shadow-sm font-label-md text-label-md hover:bg-surface-tint transition-colors sm:self-auto"
+            className={`flex shrink-0 items-center gap-sm self-start bg-primary text-on-primary px-md py-sm rounded-full shadow-sm font-label-md text-label-md hover:bg-surface-tint transition-colors sm:self-auto ${FOCUS_RING}`}
           >
-            <span className="material-symbols-outlined">login</span>
+            <span className="material-symbols-outlined" aria-hidden>
+              login
+            </span>
             登入後可購買與穿戴
           </Link>
         )}
       </header>
 
-      {/* Pet Food Bento Grid */}
+      {/* Pet Food Grid */}
       <section>
         <div className="flex items-center gap-sm mb-md">
-          <span className="material-symbols-outlined text-primary">restaurant</span>
+          <span className="material-symbols-outlined text-primary" aria-hidden>
+            restaurant
+          </span>
           <h2 className="font-headline-md text-headline-md text-on-surface">補給品</h2>
+          {foods.length > 0 && (
+            <span className="font-label-md text-label-md text-on-surface-variant tabular-nums">
+              {foods.length} 項
+            </span>
+          )}
         </div>
-        {foods.length === 0 && (
-          <p className="font-body-md text-body-md text-secondary text-center py-lg bg-surface-bright rounded-xl border border-outline-variant">
+        {foods.length === 0 ? (
+          <p className="font-body-md text-body-md text-on-surface-variant text-center py-lg bg-surface-bright rounded-xl border border-outline-variant">
             目前沒有上架的補給品，敬請期待。
           </p>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
-          {foods.map((item) => {
-            const grade = item.grade ?? "";
-            const isEpic = grade === "史詩";
-            const isRare = grade === "稀有";
-            const isCommon = grade === "普通";
-            const isHot = isRare && item.price >= 50;
-            const img = item.image;
-            const ownedQty = owned.get(item.id) ?? 0;
-            const cannotAfford = coins !== null && coins < item.price;
-            // 等級鎖：min_level 高於當前寵物等級則鎖定（登入後才比對真實等級）
-            const locked = isLoggedIn && item.minLevel > 0 && petLevel < item.minLevel;
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+            {foods.map((item) => {
+              const grade = item.grade ?? "";
+              const gs = gradeStyle(grade);
+              const isHot = grade === "稀有" && item.price >= 50;
+              const img = item.image;
+              const ownedQty = owned.get(item.id) ?? 0;
+              const cannotAfford = coins !== null && coins < item.price;
+              // 等級鎖：min_level 高於當前寵物等級則鎖定（登入後才比對真實等級）
+              const locked = isLoggedIn && item.minLevel > 0 && petLevel < item.minLevel;
 
-            const cardClass = isEpic
-              ? "bg-surface-bright rounded-xl p-md border border-tertiary-container shadow-sm hover:shadow-md transition-shadow flex flex-col bg-gradient-to-b from-surface-bright to-tertiary-fixed/10 relative overflow-hidden"
-              : isRare
-                ? "bg-surface-bright rounded-xl p-md border-2 border-primary-container shadow-sm hover:shadow-md transition-shadow flex flex-col relative overflow-hidden"
-                : "bg-surface-bright rounded-xl p-md border border-outline-variant shadow-sm hover:shadow-md transition-shadow flex flex-col relative overflow-hidden";
-
-            const imageWrapClass = isEpic
-              ? "h-32 bg-tertiary-container/30 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group"
-              : isRare
-                ? "h-32 bg-primary-container/40 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group"
-                : isCommon
-                  ? "h-32 bg-primary-container/20 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group"
-                  : "h-32 bg-surface-container-low rounded-lg mb-md flex items-center justify-center relative overflow-hidden group";
-
-            const titleClass = isEpic
-              ? "font-body-lg text-body-lg font-bold text-on-tertiary-container mb-xs"
-              : "font-body-lg text-body-lg font-bold text-on-surface mb-xs";
-
-            const focusRing =
-              " focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-bright";
-            const buyBtnClass =
-              (isEpic
-                ? "px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm"
-                : isRare
-                  ? "px-md py-xs bg-primary text-on-primary rounded-lg font-label-md text-label-md hover:bg-surface-tint transition-colors"
-                  : isCommon
-                    ? "px-md py-xs bg-primary/10 text-primary border border-primary/20 rounded-lg font-label-md text-label-md hover:bg-primary/20 transition-colors"
-                    : "px-md py-xs border border-secondary text-secondary rounded-lg font-label-md text-label-md hover:bg-surface-variant transition-colors") +
-              focusRing;
-
-            return (
-              <div className={cardClass} key={item.id} id={`shop-item-${item.id}`}>
-                {isHot && (
-                  <div className="absolute top-0 right-0 bg-primary text-on-primary px-sm py-xs rounded-bl-lg font-label-md text-label-md z-20">
-                    熱銷
-                  </div>
-                )}
-                {ownedQty > 0 && (
-                  <div className="absolute top-0 left-0 bg-tertiary text-on-tertiary px-sm py-xs rounded-br-lg font-label-md text-label-md z-20">
-                    持有 {ownedQty}
-                  </div>
-                )}
-                {item.minLevel > 0 && (
-                  <div className="absolute bottom-2 left-2 flex items-center gap-0.5 bg-surface-container-highest/90 text-on-surface-variant px-sm py-xs rounded-full font-label-md text-label-md z-20">
-                    <span className="material-symbols-outlined text-[14px]" aria-hidden>
-                      {locked ? "lock" : "lock_open"}
-                    </span>
-                    Lv.{item.minLevel}
-                  </div>
-                )}
-                <div className={imageWrapClass}>
-                  {!isEpic && !isRare && !isCommon && (
-                    <div className="absolute inset-0 bg-gradient-to-br from-secondary-container to-surface-container opacity-50"></div>
-                  )}
-                  {img ? (
-                     
-                    <img
-                      alt={item.name}
-                      className="h-28 w-28 object-contain relative z-10 group-hover:scale-110 transition-transform"
-                      src={img}
-                    />
-                  ) : (
-                    <span className="text-5xl relative z-10 group-hover:scale-110 transition-transform duration-300">
-                      {item.icon}
+              return (
+                <div
+                  className={`group relative flex flex-col overflow-hidden rounded-xl border p-md shadow-sm transition-shadow hover:shadow-md ${gs.card}`}
+                  key={item.id}
+                  id={`shop-item-${item.id}`}
+                >
+                  {/* 稀有度標籤 */}
+                  {grade && (
+                    <span
+                      className={`absolute top-0 left-0 z-20 rounded-br-lg px-sm py-xs font-label-md text-label-md ${gs.badge}`}
+                    >
+                      {grade}
                     </span>
                   )}
-                </div>
-                <h3 className={titleClass}>{item.name}</h3>
-                <p className="font-body-md text-body-md text-secondary mb-md flex-1">
-                  {item.description}
-                </p>
-                <div className="flex items-center justify-between mt-auto">
-                  <span className="font-label-md text-label-md text-tertiary flex items-center gap-xs">
-                    <span className="material-symbols-outlined text-[16px] icon-fill">
-                      monetization_on
-                    </span>{" "}
-                    {item.price}
-                  </span>
-                  {!isLoggedIn ? (
-                    <Link
-                      href="/login"
-                      className={buyBtnClass}
-                    >
-                      登入購買
-                    </Link>
-                  ) : locked ? (
-                    <button
-                      type="button"
-                      disabled
-                      title={`寵物達到 Lv.${item.minLevel} 後解鎖`}
-                      className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed flex items-center gap-1"
-                    >
-                      <span className="material-symbols-outlined text-[16px]" aria-hidden>
-                        lock
+                  {isHot && (
+                    <span className="absolute top-0 right-0 z-20 bg-error text-on-error px-sm py-xs rounded-bl-lg font-label-md text-label-md">
+                      熱銷
+                    </span>
+                  )}
+
+                  <div
+                    className={`relative mb-md mt-lg flex h-32 items-center justify-center overflow-hidden rounded-lg ${gs.media}`}
+                  >
+                    {img ? (
+
+                      <img
+                        alt={item.name}
+                        className="h-28 w-28 object-contain transition-transform duration-300 group-hover:scale-110"
+                        src={img}
+                      />
+                    ) : (
+                      <span className="text-5xl transition-transform duration-300 group-hover:scale-110">
+                        {item.icon}
                       </span>
-                      需 Lv.{item.minLevel}
-                    </button>
-                  ) : cannotAfford ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed"
-                    >
-                      金幣不足
-                    </button>
-                  ) : (
-                    <form action={buyItem}>
-                      <input type="hidden" name="itemId" value={item.id} />
-                      <button type="submit" className={buyBtnClass}>
-                        購買
-                      </button>
-                    </form>
+                    )}
+                    {ownedQty > 0 && (
+                      <span className="absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-full bg-tertiary text-on-tertiary px-sm py-xs font-label-md text-label-md shadow-sm">
+                        <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>
+                          inventory_2
+                        </span>
+                        {ownedQty}
+                      </span>
+                    )}
+                    {item.minLevel > 0 && (
+                      <div className="absolute bottom-2 left-2 z-10 flex items-center gap-0.5 rounded-full bg-surface-container-highest/90 px-sm py-xs font-label-md text-label-md text-on-surface-variant">
+                        <span className="material-symbols-outlined text-[14px]" aria-hidden>
+                          {locked ? "lock" : "lock_open"}
+                        </span>
+                        Lv.{item.minLevel}
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className={`font-body-lg text-body-lg font-bold mb-xs ${gs.title}`}>
+                    {item.name}
+                  </h3>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-md flex-1">
+                    {item.description}
+                  </p>
+
+                  {/* 效果一覽 */}
+                  {(item.hpRestore > 0 || item.expGain > 0) && (
+                    <div className="mb-md flex flex-wrap gap-xs">
+                      {item.hpRestore > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-error/10 px-sm py-xs font-label-md text-label-md text-error">
+                          <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>
+                            favorite
+                          </span>
+                          +{item.hpRestore}
+                        </span>
+                      )}
+                      {item.expGain > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-sm py-xs font-label-md text-label-md text-primary">
+                          <span className="material-symbols-outlined text-[14px]" aria-hidden>
+                            trending_up
+                          </span>
+                          +{item.expGain} EXP
+                        </span>
+                      )}
+                    </div>
                   )}
+
+                  <div className="mt-auto flex items-center justify-between gap-sm">
+                    <span className="flex items-center gap-xs font-body-lg text-body-lg font-bold text-on-surface tabular-nums">
+                      <span className="material-symbols-outlined text-[18px] icon-fill text-tertiary" aria-hidden>
+                        monetization_on
+                      </span>
+                      {item.price}
+                    </span>
+                    {!isLoggedIn ? (
+                      <Link
+                        href="/login"
+                        className={`px-md py-xs rounded-lg font-label-md text-label-md transition-colors ${gs.buy} ${FOCUS_RING}`}
+                      >
+                        登入購買
+                      </Link>
+                    ) : locked ? (
+                      <button
+                        type="button"
+                        disabled
+                        title={`寵物達到 Lv.${item.minLevel} 後解鎖`}
+                        className="flex items-center gap-1 px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed"
+                      >
+                        <span className="material-symbols-outlined text-[16px]" aria-hidden>
+                          lock
+                        </span>
+                        需 Lv.{item.minLevel}
+                      </button>
+                    ) : cannotAfford ? (
+                      <button
+                        type="button"
+                        disabled
+                        title="金幣不足，先去解題賺金幣吧"
+                        className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed"
+                      >
+                        金幣不足
+                      </button>
+                    ) : (
+                      <form action={buyItem}>
+                        <input type="hidden" name="itemId" value={item.id} />
+                        <button
+                          type="submit"
+                          className={`px-md py-xs rounded-lg font-label-md text-label-md transition-colors ${gs.buy} ${FOCUS_RING}`}
+                        >
+                          購買
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Accessory Backpack */}
       <section>
         <div className="flex items-center gap-sm mb-md">
-          <span className="material-symbols-outlined text-tertiary">backpack</span>
+          <span className="material-symbols-outlined text-tertiary" aria-hidden>
+            backpack
+          </span>
           <h2 className="font-headline-md text-headline-md text-on-surface">裝飾配件背包</h2>
+          {ownedAccs.length > 0 && (
+            <span className="font-label-md text-label-md text-on-surface-variant tabular-nums">
+              {ownedAccs.length} 件
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-md">
           {ownedAccs.length === 0 ? (
-            <p className="font-body-md text-body-md text-secondary col-span-2 sm:col-span-3 lg:col-span-4 text-center py-lg bg-surface-bright rounded-xl border border-outline-variant">
-              {isLoggedIn
-                ? "背包目前是空的。在下方選購配件，為您的學習夥伴穿戴打扮吧！🎩"
-                : "登入後即可查看與穿戴你擁有的裝飾配件。🎩"}
-            </p>
+            <div className="col-span-2 sm:col-span-3 lg:col-span-4 flex flex-col items-center gap-sm text-center py-lg bg-surface-bright rounded-xl border border-outline-variant">
+              <span className="material-symbols-outlined text-[40px] text-on-surface-variant/50" aria-hidden>
+                styler
+              </span>
+              <p className="font-body-md text-body-md text-on-surface-variant">
+                {isLoggedIn
+                  ? "背包目前是空的。在下方選購配件，為您的學習夥伴穿戴打扮吧。"
+                  : "登入後即可查看與穿戴你擁有的裝飾配件。"}
+              </p>
+            </div>
           ) : (
             ownedAccs.map((item) => {
               const isEquipped = item.accessoryType
@@ -229,10 +314,18 @@ export default async function ShopPage() {
                 <div
                   key={item.id}
                   id={`inv-slot-${item.id}`}
-                  className={`bg-surface-bright rounded-xl p-md border shadow-sm flex flex-col items-center text-center transition-shadow hover:shadow-md ${
+                  className={`relative flex flex-col items-center rounded-xl border bg-surface-bright p-md text-center shadow-sm transition-shadow hover:shadow-md ${
                     isEquipped ? "border-2 border-tertiary-container" : "border-outline-variant"
                   }`}
                 >
+                  {isEquipped && (
+                    <span className="absolute top-2 right-2 flex items-center gap-0.5 rounded-full bg-tertiary text-on-tertiary px-sm py-xs font-label-md text-label-md shadow-sm">
+                      <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>
+                        check
+                      </span>
+                      穿戴中
+                    </span>
+                  )}
                   <span className="text-4xl mb-xs">{item.icon}</span>
                   <h3 className="font-label-md text-label-md font-bold text-on-surface mb-md line-clamp-1">
                     {item.name}
@@ -246,7 +339,7 @@ export default async function ShopPage() {
                     <button
                       type="submit"
                       disabled={!item.accessoryType}
-                      className={`w-full px-md py-xs rounded-lg font-label-md text-label-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-bright ${
+                      className={`w-full px-md py-xs rounded-lg font-label-md text-label-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS_RING} ${
                         isEquipped
                           ? "bg-tertiary text-on-tertiary hover:opacity-90"
                           : "border border-secondary text-secondary hover:bg-surface-variant"
@@ -266,7 +359,9 @@ export default async function ShopPage() {
       {accessories.length > 0 && (
         <section>
           <div className="flex items-center gap-sm mb-md">
-            <span className="material-symbols-outlined text-tertiary">styler</span>
+            <span className="material-symbols-outlined text-tertiary" aria-hidden>
+              styler
+            </span>
             <h2 className="font-headline-md text-headline-md text-on-surface">精緻裝飾配件</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
@@ -278,48 +373,54 @@ export default async function ShopPage() {
                 <div
                   key={item.id}
                   id={`shop-item-${item.id}`}
-                  className="bg-surface-bright rounded-xl p-md border border-tertiary-container shadow-sm hover:shadow-md transition-shadow flex flex-col bg-gradient-to-b from-surface-bright to-tertiary-fixed/10"
+                  className="group relative flex flex-col overflow-hidden rounded-xl border border-tertiary-container bg-gradient-to-b from-surface-bright to-tertiary-fixed/15 p-md shadow-sm transition-shadow hover:shadow-md"
                 >
-                  <div className="h-32 bg-tertiary-container/30 rounded-lg mb-md flex items-center justify-center relative overflow-hidden group">
+                  <div className="relative mb-md flex h-32 items-center justify-center overflow-hidden rounded-lg bg-tertiary-container/30">
                     {isOwned && (
-                      <span className="absolute top-2 right-2 z-20 bg-tertiary text-on-tertiary px-sm py-xs rounded-full font-label-md text-label-md">
+                      <span className="absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-full bg-tertiary text-on-tertiary px-sm py-xs font-label-md text-label-md shadow-sm">
+                        <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>
+                          check
+                        </span>
                         已擁有
                       </span>
                     )}
                     {item.minLevel > 0 && (
-                      <span className="absolute bottom-2 left-2 z-20 flex items-center gap-0.5 bg-surface-container-highest/90 text-on-surface-variant px-sm py-xs rounded-full font-label-md text-label-md">
+                      <span className="absolute bottom-2 left-2 z-20 flex items-center gap-0.5 rounded-full bg-surface-container-highest/90 px-sm py-xs font-label-md text-label-md text-on-surface-variant">
                         <span className="material-symbols-outlined text-[14px]" aria-hidden>
                           {locked ? "lock" : "lock_open"}
                         </span>
                         Lv.{item.minLevel}
                       </span>
                     )}
-                    <span className="text-5xl relative z-10 group-hover:scale-110 transition-transform duration-300">
+                    <span className="text-5xl transition-transform duration-300 group-hover:scale-110">
                       {item.icon}
                     </span>
                   </div>
                   <h3 className="font-body-lg text-body-lg font-bold text-on-tertiary-container mb-xs">
                     {item.name}
                   </h3>
-                  <p className="font-body-md text-body-md text-secondary mb-md flex-1">
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-md flex-1">
                     {item.description}
                   </p>
-                  <div className="flex items-center justify-between gap-sm mt-auto">
-                    <span className="font-label-md text-label-md text-tertiary flex items-center gap-xs">
-                      <span className="material-symbols-outlined text-[16px] icon-fill">
+                  <div className="mt-auto flex items-center justify-between gap-sm">
+                    <span className="flex items-center gap-xs font-body-lg text-body-lg font-bold text-on-surface tabular-nums">
+                      <span className="material-symbols-outlined text-[18px] icon-fill text-tertiary" aria-hidden>
                         monetization_on
-                      </span>{" "}
+                      </span>
                       {item.price}
                     </span>
                     {!isLoggedIn ? (
                       <Link
                         href="/login"
-                        className="px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm"
+                        className={`px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm ${FOCUS_RING}`}
                       >
                         登入購買
                       </Link>
                     ) : isOwned ? (
-                      <span className="px-md py-xs border border-tertiary-container text-tertiary rounded-lg font-label-md text-label-md">
+                      <span className="flex items-center gap-0.5 px-md py-xs border border-tertiary-container text-tertiary rounded-lg font-label-md text-label-md">
+                        <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>
+                          check_circle
+                        </span>
                         已擁有
                       </span>
                     ) : locked ? (
@@ -327,7 +428,7 @@ export default async function ShopPage() {
                         type="button"
                         disabled
                         title={`寵物達到 Lv.${item.minLevel} 後解鎖`}
-                        className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed flex items-center gap-1"
+                        className="flex items-center gap-1 px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed"
                       >
                         <span className="material-symbols-outlined text-[16px]" aria-hidden>
                           lock
@@ -338,6 +439,7 @@ export default async function ShopPage() {
                       <button
                         type="button"
                         disabled
+                        title="金幣不足，先去解題賺金幣吧"
                         className="px-md py-xs rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant/60 cursor-not-allowed"
                       >
                         金幣不足
@@ -347,7 +449,7 @@ export default async function ShopPage() {
                         <input type="hidden" name="itemId" value={item.id} />
                         <button
                           type="submit"
-                          className="px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm"
+                          className={`px-md py-xs bg-tertiary text-on-tertiary rounded-lg font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm ${FOCUS_RING}`}
                         >
                           購買
                         </button>
