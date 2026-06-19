@@ -945,7 +945,7 @@ async function UsersPanel({ currentUserId }: { currentUserId?: string }) {
                 </div>
                 <form action={setUserRole} className="flex items-center gap-1.5 shrink-0">
                   <input type="hidden" name="userId" value={u.id} />
-                  <select name="role" defaultValue={u.role} className={FIELD}>
+                  <select key={u.role} name="role" defaultValue={u.role} className={FIELD}>
                     {ROLE_OPTIONS.map((r) => (
                       <option key={r.value} value={r.value}>{r.label}</option>
                     ))}

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { loginWithGoogle } from "@/app/actions/auth";
@@ -45,16 +46,14 @@ export default async function LoginPage() {
 
       {/* Right Side: Login Form Area */}
       <div className="relative flex w-full items-center justify-center bg-surface p-margin-mobile lg:w-1/2 lg:p-margin-desktop">
-        {/* Mobile Brand Logo (Visible only on mobile) */}
-        <div className="absolute left-margin-mobile top-margin-mobile flex items-center gap-sm lg:hidden">
-          <span
-            className="material-symbols-outlined text-primary"
-            style={{ fontSize: "28px", fontVariationSettings: "'FILL' 1" }}
-          >
-            menu_book
-          </span>
-          <span className="text-headline-md font-bold text-primary">PetScholar</span>
-        </div>
+        {/* 返回首頁（全尺寸可見） */}
+        <Link
+          href="/"
+          className="absolute left-margin-mobile top-margin-mobile flex items-center gap-1 rounded-full px-3 py-1.5 text-label-md text-secondary hover:text-primary hover:bg-surface-container transition-colors no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+          返回首頁
+        </Link>
 
         <div className="w-full max-w-md rounded-xl border border-surface-variant bg-surface-container-lowest p-lg shadow-sm lg:p-xl">
           {/* Welcome Text */}

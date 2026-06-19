@@ -28,20 +28,21 @@ interface GuideStep {
   adminOnly?: boolean;
 }
 
+// 步驟順序對齊左側 sidebar 的導覽順序，避免 spotlight 在畫面上跳來跳去。
 const GUIDE_STEPS: GuideStep[] = [
+  {
+    href: "/",
+    selector: 'a[href="/"]',
+    title: "首頁",
+    message:
+      "首頁是你的學習儀表板：可瀏覽各學院看板與熱門提問，右側面板顯示你的寵物狀態、每日簽到與快捷餵食。",
+  },
   {
     href: "/boards",
     selector: 'a[href="/boards"]',
     title: "看板",
     message:
       "這裡是全站問題入口，可以依學院與科系快速找到課業提問，也可以按『發佈新提問』提出問題。",
-  },
-  {
-    href: "/study-rooms",
-    selector: 'a[href="/study-rooms"]',
-    title: "自習室",
-    message:
-      "自習室用來模擬共讀與學習小組，學生可以查看不同讀書房間、加入討論並完成讀書目標。",
   },
   {
     href: "/discussion",
@@ -51,11 +52,11 @@ const GUIDE_STEPS: GuideStep[] = [
       "討論版集中顯示提問與解答。發佈問題後會出現在這裡，也能檢視懸賞、狀態與回覆。",
   },
   {
-    href: "/pet/feed",
-    selector: 'a[href="/pet/feed"]',
-    title: "寵物餵食",
+    href: "/study-rooms",
+    selector: 'a[href="/study-rooms"]',
+    title: "自習室",
     message:
-      "答題或簽到得到金幣後，可以購買道具並在這裡餵食寵物，恢復生命值與經驗值。",
+      "自習室用來共讀與學習小組：可加入房間、用番茄鐘專注、設定讀書目標，並有即時文字/語音聊天。",
   },
   {
     href: "/shop",
@@ -64,9 +65,16 @@ const GUIDE_STEPS: GuideStep[] = [
     message: "商城可以購買食物、裝飾與道具。購買後金幣餘額會即時同步到所有分頁。",
   },
   {
+    href: "/pet/feed",
+    selector: 'a[href="/pet/feed"]',
+    title: "寵物餵食",
+    message:
+      "答題或簽到得到金幣後，可以購買道具並在這裡餵食寵物，恢復生命值與經驗值。",
+  },
+  {
     href: "/leaderboard",
     selector: 'a[href="/leaderboard"]',
-    title: "排行榜與成就",
+    title: "排行榜",
     message: "這裡展示學術排行榜、徽章與成就，讓學習互助形成遊戲化回饋。",
   },
   {
@@ -82,7 +90,7 @@ const GUIDE_STEPS: GuideStep[] = [
     title: "系統管理後台",
     adminOnly: true,
     message:
-      "系統管理員可以查看上線狀態、全站提問紀錄、檢舉案件、封鎖帳號與學習方向分析。",
+      "系統管理員可以查看全站提問紀錄、留言、自習室、聊天/語音錄音、檢舉案件與使用者角色管理。",
   },
 ];
 
@@ -205,15 +213,9 @@ export default function GuidedTour({ role = "student" }: { role?: Role }) {
       };
 
   return (
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="網站導覽">
-      {/* 遮罩，點擊可結束 */}
-      <div
-        className="absolute inset-0 bg-black/55 transition-opacity"
-        onClick={stop}
-      />
-
-      {/* spotlight：以 box-shadow 鏤空目標區域 */}
-      {spot && (
+    <div className="fixed inset-0 z-[100] pointer-events-none" role="dialog" aria-label="網站導覽">
+      {/* spotlight：box-shadow 鏤空目標並使周圍變暗；不攔截點擊，畫面其餘區域仍可正常操作（不卡畫面） */}
+      {spot ? (
         <div
           className="pointer-events-none absolute rounded-xl ring-2 ring-primary transition-all"
           style={{
@@ -221,16 +223,17 @@ export default function GuidedTour({ role = "student" }: { role?: Role }) {
             left: spot.left - 8,
             width: spot.width + 16,
             height: spot.height + 12,
-            boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
+            boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
           }}
         />
+      ) : (
+        <div className="pointer-events-none absolute inset-0 bg-black/40" />
       )}
 
       {/* 提示卡 */}
       <div
         style={cardStyle}
-        className="bg-surface text-on-surface rounded-2xl shadow-2xl border border-outline-variant/30 p-5"
-        onClick={(e) => e.stopPropagation()}
+        className="pointer-events-auto bg-surface text-on-surface rounded-2xl shadow-2xl border border-outline-variant/30 p-5"
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
