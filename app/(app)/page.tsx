@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { boards, posts } from "@/db/schema";
-import { formatDateTime } from "@/lib/format";
+import { boards, posts, comments, users } from "@/db/schema";
 import { readLevelUpSignal } from "@/lib/level-up-signal";
 import LevelUpToast from "@/components/LevelUpToast";
+import PostListItem, { type PostListData } from "@/components/PostListItem";
 
 export default async function HomePage({
   searchParams,
@@ -26,16 +26,20 @@ export default async function HomePage({
     .select({
       id: posts.id,
       title: posts.title,
+      authorId: posts.authorId,
       authorName: posts.authorName,
+      authorImage: users.image,
       department: posts.department,
       boardName: boards.name,
       tags: posts.tags,
       bounty: posts.bounty,
       solved: posts.solved,
       createdAt: posts.createdAt,
+      commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
+    .leftJoin(users, eq(posts.authorId, users.id))
     .where(activeBoard ? and(eq(posts.boardId, activeBoard.id), eq(posts.hidden, false)) : eq(posts.hidden, false))
     .orderBy(desc(posts.createdAt));
 
@@ -52,13 +56,20 @@ export default async function HomePage({
           </div>
 
           {topTags.length > 0 && (
-            <div className="mb-lg bg-surface-container-low dark:bg-surface-container p-md rounded-xl border border-outline-variant/20">
-              <h2 className="font-bold text-label-md text-secondary mb-2 flex items-center gap-1">
-                <span className="material-symbols-outlined text-base" aria-hidden>trending_up</span> 熱門標籤
+            <div className="mb-lg rounded-xl border border-outline-variant/20 bg-surface-container-low p-md dark:bg-surface-container">
+              <h2 className="mb-sm flex items-center gap-1 text-label-md font-bold text-secondary">
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>trending_up</span> 熱門標籤
               </h2>
               <div className="flex flex-wrap gap-2">
-                {topTags.map((t) => (
-                  <span key={t} className="bg-primary-container/40 text-on-primary-container font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-sm">
+                {topTags.map((t, i) => (
+                  <span
+                    key={t}
+                    className={`rounded-full px-3.5 py-1.5 text-label-md font-semibold shadow-sm ${
+                      i === 0
+                        ? "bg-tertiary-container text-on-tertiary-container"
+                        : "bg-surface-container-high text-on-surface-variant border border-outline-variant/40"
+                    }`}
+                  >
                     # {t}
                   </span>
                 ))}
@@ -69,17 +80,41 @@ export default async function HomePage({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-sm sm:gap-md mb-lg">
             {boardRows.map((b) => {
               const isActive = activeBoard?.id === b.id;
+              const accent = b.color ?? "#4b6172";
               return (
                 <Link
                   key={b.id}
                   href={isActive ? "/" : `/?dept=${b.id}`}
                   aria-pressed={isActive}
                   title={isActive ? `取消篩選：${b.name}` : `只看 ${b.name} 的提問`}
-                  className={`rounded-xl border bg-surface-container-lowest dark:bg-surface-container-high p-md flex flex-col items-center justify-center text-center transition-all no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isActive ? "border-2 font-bold shadow-md" : "border-outline-variant/30 hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-sm"}`}
-                  style={isActive && b.color ? { borderColor: b.color, backgroundColor: `${b.color}15`, boxShadow: `0 10px 15px -3px ${b.color}25` } : undefined}
+                  className={`group relative flex flex-col items-center justify-center gap-2 rounded-xl border p-md text-center no-underline transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
+                    isActive
+                      ? "border-2 shadow-md"
+                      : "border-outline-variant/30 bg-surface-container-lowest hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm dark:bg-surface-container-high"
+                  }`}
+                  style={
+                    isActive
+                      ? { borderColor: accent, backgroundColor: `${accent}15`, boxShadow: `0 10px 15px -3px ${accent}25` }
+                      : undefined
+                  }
                 >
-                  <span className="text-3xl mb-2" aria-hidden>{b.icon}</span>
-                  <h3 className="font-bold text-body-md sm:text-body-lg text-on-surface leading-tight">{b.name}</h3>
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-white"
+                      style={{ backgroundColor: accent }}
+                    >
+                      <span className="material-symbols-outlined text-[12px] icon-fill">check</span>
+                    </span>
+                  )}
+                  <span
+                    aria-hidden
+                    className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl transition-transform group-hover:scale-105"
+                    style={{ backgroundColor: `${accent}22`, color: accent }}
+                  >
+                    {b.icon ?? "📚"}
+                  </span>
+                  <h3 className={`text-body-md sm:text-body-lg leading-tight text-on-surface ${isActive ? "font-bold" : "font-semibold"}`}>{b.name}</h3>
                 </Link>
               );
             })}
@@ -108,50 +143,10 @@ export default async function HomePage({
               </div>
             ) : (
               postRows.map((p) => (
-                <Link
+                <PostListItem
                   key={p.id}
-                  href={`/posts/${p.id}`}
-                  className="block rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 no-underline transition-all hover:border-primary/40 hover:shadow-sm dark:bg-surface-container-high focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="min-w-0 break-words text-body-lg font-semibold text-on-background">{p.title}</h3>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {p.solved ? (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-container px-2 py-0.5 text-label-md font-medium text-on-primary-container">
-                          <span className="material-symbols-outlined text-[14px] icon-fill">check_circle</span>
-                          已解決
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-label-md text-secondary">
-                          待解答
-                        </span>
-                      )}
-                      {p.bounty > 0 && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-tertiary-container px-2 py-0.5 text-label-md font-medium text-on-tertiary-container">
-                          <span className="material-symbols-outlined text-[14px]">paid</span>
-                          {p.bounty}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-label-md text-secondary">
-                    <span className="font-medium">{p.authorName}</span>
-                    <span>· {p.department ?? p.boardName}</span>
-                    <span>· {formatDateTime(p.createdAt)}</span>
-                  </div>
-                  {p.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {p.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-secondary-container px-2 py-0.5 text-label-md text-on-secondary-container"
-                        >
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </Link>
+                  post={{ ...p, department: p.department ?? p.boardName } as PostListData}
+                />
               ))
             )}
           </div>
