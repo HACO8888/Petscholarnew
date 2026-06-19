@@ -65,6 +65,57 @@ function ReplyForm({
   );
 }
 
+/**
+ * 留言作者頭像（首字字母圈）＋名稱。
+ * 有 authorId（理論上現在留言都有）時整組連到公開檔案 /u/[authorId]；
+ * authorId 為 null（防呆）時純文字顯示、不連結。
+ * 留言列僅查 comments 未帶作者頭像 URL，故沿用既有的字母圈頭像。
+ */
+function CommentAuthor({
+  authorId,
+  authorName,
+  isAdopted,
+}: {
+  authorId: string | null;
+  authorName: string;
+  isAdopted: boolean;
+}) {
+  const initial = authorName.trim().charAt(0).toUpperCase() || "?";
+  const avatar = (
+    <span
+      aria-hidden
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+        isAdopted
+          ? "bg-primary text-on-primary"
+          : "bg-secondary-container text-on-secondary-container"
+      }`}
+    >
+      {initial}
+    </span>
+  );
+
+  if (!authorId) {
+    return (
+      <span className="inline-flex items-center gap-x-2">
+        {avatar}
+        <span className="text-body-md font-semibold text-on-background break-words">{authorName}</span>
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={`/u/${authorId}`}
+      className="inline-flex items-center gap-x-2 rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {avatar}
+      <span className="text-body-md font-semibold text-on-background break-words hover:underline">
+        {authorName}
+      </span>
+    </Link>
+  );
+}
+
 function CommentItem({
   node,
   postId,
@@ -106,17 +157,11 @@ function CommentItem({
       }`}
     >
       <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span
-          aria-hidden
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-            node.isAdopted
-              ? "bg-primary text-on-primary"
-              : "bg-secondary-container text-on-secondary-container"
-          }`}
-        >
-          {node.authorName.trim().charAt(0).toUpperCase() || "?"}
-        </span>
-        <span className="text-body-md font-semibold text-on-background break-words">{node.authorName}</span>
+        <CommentAuthor
+          authorId={node.authorId}
+          authorName={node.authorName}
+          isAdopted={node.isAdopted}
+        />
         <span className="text-label-md text-secondary">{node.time}</span>
         {node.isAdopted && (
           <span className="inline-flex items-center gap-0.5 rounded-full bg-primary px-2 py-0.5 text-label-md font-medium text-on-primary">

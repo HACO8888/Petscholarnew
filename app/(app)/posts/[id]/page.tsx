@@ -9,6 +9,7 @@ import { buildCommentTree, pruneHidden } from "@/lib/comment-tree";
 import { formatDateTime } from "@/lib/format";
 import CommentThread from "@/components/CommentThread";
 import CommentTreeSvg from "@/components/CommentTreeSvg";
+import UserAvatarLink from "@/components/UserAvatarLink";
 import { addComment, reportPost } from "@/app/(app)/posts/actions";
 
 export default async function PostPage({
@@ -78,10 +79,14 @@ export default async function PostPage({
 
         {/* Metadata author */}
         <div className="flex flex-wrap items-center gap-x-sm gap-y-2 mb-lg text-secondary text-xs pb-3 border-b border-outline-variant/20">
-          <span className="material-symbols-outlined text-[16px]">person</span>
-          <span>
-            提問學生: <strong className="text-on-surface">{post.authorName}</strong>
-          </span>
+          <span>提問學生:</span>
+          <UserAvatarLink
+            userId={post.authorId}
+            name={post.authorName}
+            image={null}
+            showName
+            nameClassName="font-bold text-on-surface"
+          />
 
           {session?.user && (
             <div className="ml-auto flex items-center gap-3">
