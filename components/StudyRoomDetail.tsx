@@ -15,6 +15,10 @@ import StudyRoomEditDialog from "@/components/StudyRoomEditDialog";
 import EmojiPicker, { insertAtCursor } from "@/components/EmojiPicker";
 import PomodoroRing from "@/components/study-room/PomodoroRing";
 import { useVoiceCall } from "@/components/voice/VoiceCallProvider";
+import {
+  BACKGROUND_IMAGES,
+  type VirtualBgMode,
+} from "@/components/voice/videoProcessing";
 
 interface RoomInfo {
   id: string;
@@ -77,6 +81,18 @@ const AVATARS = ["👩‍🎓", "👨‍🎓", "🐱", "🐶", "🤖"];
 function formatTime(iso: string) {
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * 視訊舞台 grid 類別：依參與者視訊格數做響應式排版。
+ * 1 人大畫面、2 人並排、3–4 人 2×2、5+ 自動填列（可捲）。
+ */
+function videoGridClass(count: number): string {
+  if (count <= 1) return "grid-cols-1";
+  if (count === 2) return "grid-cols-1 sm:grid-cols-2";
+  if (count <= 4) return "grid-cols-1 sm:grid-cols-2";
+  if (count <= 6) return "grid-cols-2 lg:grid-cols-3";
+  return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
 }
 
 export default function StudyRoomDetail({
@@ -381,7 +397,10 @@ export default function StudyRoomDetail({
   const memberByUserId = new Map(members.map((m) => [m.id, m]));
   // 有視訊的 peer（含本地若開鏡頭）→ 顯示視訊格
   const videoPeers = voicePeers.filter((p) => p.hasVideo);
-  const showVideoGrid = inVoice && (cameraOn || videoPeers.length > 0);
+  // 視訊舞台模式：只要有人開鏡頭（自己或任一 peer 有 video）即進入。
+  const showVideoStage = inVoice && (cameraOn || videoPeers.length > 0);
+  // 視訊格總數（本地若開鏡頭算 1）→ 決定 grid 排版。
+  const videoTileCount = (cameraOn ? 1 : 0) + videoPeers.length;
 
   // 語音成員清單（含自己）：給「誰在語音中」區塊渲染。
   const selfMember = members.find((m) => m.isSelf);
@@ -584,147 +603,207 @@ export default function StudyRoomDetail({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-md items-start lg:flex-1 lg:min-h-0 lg:items-stretch">
         {/* ========== 專注工作室 ========== */}
         <div className="lg:col-span-8 flex flex-col gap-md lg:min-h-0 lg:overflow-y-auto lg:pr-1 hide-scrollbar">
-          {/* ---- Hero：番茄鐘「專注光環」；運作中整區進入專注狀態 ---- */}
-          <div
-            className={`relative overflow-hidden rounded-2xl border shadow-sm transition-colors duration-700 ${
-              running
-                ? "border-tertiary/40 bg-gradient-to-b from-tertiary-container/30 to-surface-container-lowest dark:to-surface-container-high"
-                : "border-outline-variant/30 bg-surface-container-lowest dark:bg-surface-container-high"
-            }`}
-          >
-            {/* 環境暈光：運作中暖色脈動，閒置沉穩 */}
+          {/* ---- Hero：模式切換 ----
+              沒有任何人開鏡頭 → 中央大「專注光環」（focus 模式）。
+              只要有人開鏡頭（自己或任一 peer 有 video）→ 中央變「視訊舞台」，
+              番茄鐘縮成頂部一條精簡計時 pill（仍可開始/暫停）。離開鏡頭再切回光環。 */}
+          {showVideoStage ? (
+            /* ===== 視訊舞台模式 ===== */
             <div
-              aria-hidden
-              className={`pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl transition-opacity duration-700 ${
-                running
-                  ? "bg-tertiary/25 focus-pulse"
-                  : "bg-primary-container/20 opacity-40"
-              }`}
-            />
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -bottom-28 -left-28 w-72 h-72 rounded-full bg-primary-container/15 blur-3xl opacity-40"
-            />
+              key="video-stage"
+              className="stage-fade relative overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest dark:bg-surface-container-high shadow-sm"
+            >
+              {/* 頂部精簡計時 pill：時間 + 開始/暫停 + 重置 + 輪數，不跟視訊搶位 */}
+              <div className="flex items-center gap-2 flex-wrap px-md pt-md pb-2.5 border-b border-outline-variant/20">
+                <div
+                  className={`flex items-center gap-2 rounded-full pl-1.5 pr-3 py-1 border transition-colors ${
+                    running
+                      ? "border-tertiary/40 bg-tertiary-container/30"
+                      : "border-outline-variant/30 bg-surface-container-high"
+                  }`}
+                >
+                  <PomodoroRing
+                    mins={mins}
+                    secs={secs}
+                    progress={pomoProgress}
+                    running={running}
+                    size={40}
+                    stroke={4}
+                    compact
+                  />
+                  <button
+                    type="button"
+                    onClick={toggleTimer}
+                    aria-label={running ? "暫停番茄鐘" : "開始番茄鐘"}
+                    className="w-8 h-8 grid place-items-center rounded-full bg-primary text-on-primary hover:bg-surface-tint transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {running ? "pause" : "play_arrow"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetTimer}
+                    aria-label="重置番茄鐘"
+                    title="重置"
+                    className="w-8 h-8 grid place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-highest transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      refresh
+                    </span>
+                  </button>
+                </div>
+                <span className="text-label-md font-bold uppercase tracking-[0.12em] text-secondary">
+                  {running ? "專注中" : "已就緒"}
+                  <span className="mx-1.5 text-outline-variant/60" aria-hidden>
+                    ·
+                  </span>
+                  {pomoRound > 0
+                    ? `第 ${pomoRound + 1} 輪 · 已完成 ${pomoRound}`
+                    : "第 1 輪"}
+                </span>
+                {recording && (
+                  <span className="ml-auto flex items-center gap-1.5 text-[11px] font-bold text-on-error-container bg-error-container px-2.5 py-1 rounded-full">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse motion-reduce:animate-none" />
+                    {recordingLabel}
+                  </span>
+                )}
+              </div>
 
-            <div className="relative p-lg sm:p-xl flex flex-col items-center">
-              {/* 視訊格（grid）：通話且有任何鏡頭 → 明顯置於 hero 區頂部 */}
-              {showVideoGrid && (
-                <div className="w-full mb-lg">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <h2 className="font-bold text-body-md text-on-surface flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-primary text-[20px]">
-                        videocam
+              {/* 視訊格：響應式 grid，1 人大畫面、2 並排、3–4 為 2×2、更多可捲 */}
+              <div className="p-md">
+                <div
+                  className={`grid gap-2.5 ${videoGridClass(videoTileCount)} ${
+                    videoTileCount > 4
+                      ? "max-h-[60vh] lg:max-h-[calc(100dvh-22rem)] overflow-y-auto pr-1 hide-scrollbar"
+                      : ""
+                  }`}
+                >
+                  {/* 本地預覽（套虛擬背景後的畫面） */}
+                  {cameraOn && (
+                    <div
+                      className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
+                        speakingKeys.has("self")
+                          ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
+                          : "border-outline-variant/30"
+                      }`}
+                    >
+                      <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover -scale-x-100"
+                      />
+                      <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[11px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                        {voiceMuted && (
+                          <span className="material-symbols-outlined text-[13px]">
+                            mic_off
+                          </span>
+                        )}
+                        你
                       </span>
-                      視訊
-                    </h2>
-                    {recording && (
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-on-error-container bg-error-container px-2 py-0.5 rounded-full">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-error animate-pulse motion-reduce:animate-none" />
-                        {recordingLabel}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {/* 本地預覽 */}
-                    {cameraOn && (
+                    </div>
+                  )}
+                  {videoPeers.map((p) => {
+                    const mem = p.userId
+                      ? memberByUserId.get(p.userId)
+                      : null;
+                    const isSpeaking = speakingKeys.has(p.id);
+                    return (
                       <div
+                        key={p.id}
                         className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
-                          speakingKeys.has("self")
+                          isSpeaking
                             ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
                             : "border-outline-variant/30"
                         }`}
                       >
                         <video
-                          ref={localVideoRef}
                           autoPlay
                           playsInline
-                          muted
-                          className="w-full h-full object-cover -scale-x-100"
+                          ref={(el) => {
+                            if (el && el.srcObject !== p.stream)
+                              el.srcObject = p.stream;
+                          }}
+                          className="w-full h-full object-cover"
                         />
-                        <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                          {voiceMuted && (
-                            <span className="material-symbols-outlined text-[12px]">
-                              mic_off
-                            </span>
-                          )}
-                          你
+                        <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[11px] px-1.5 py-0.5 rounded">
+                          {mem?.name ?? p.name}
                         </span>
                       </div>
-                    )}
-                    {videoPeers.map((p) => {
-                      const mem = p.userId
-                        ? memberByUserId.get(p.userId)
-                        : null;
-                      const isSpeaking = speakingKeys.has(p.id);
-                      return (
-                        <div
-                          key={p.id}
-                          className={`relative aspect-video rounded-xl overflow-hidden bg-black border-2 transition-all ${
-                            isSpeaking
-                              ? "border-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.35)]"
-                              : "border-outline-variant/30"
-                          }`}
-                        >
-                          <video
-                            autoPlay
-                            playsInline
-                            ref={(el) => {
-                              if (el && el.srcObject !== p.stream)
-                                el.srcObject = p.stream;
-                            }}
-                            className="w-full h-full object-cover"
-                          />
-                          <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                            {mem?.name ?? p.name}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                    );
+                  })}
                 </div>
-              )}
-
-              {/* 簽名元件：圓形進度環包住時間 */}
-              <PomodoroRing
-                mins={mins}
-                secs={secs}
-                progress={pomoProgress}
-                running={running}
-                size={showVideoGrid ? 200 : 256}
-                stroke={showVideoGrid ? 12 : 14}
+              </div>
+            </div>
+          ) : (
+            /* ===== 專注光環模式（無人開鏡頭）===== */
+            <div
+              key="focus-ring"
+              className={`stage-fade relative overflow-hidden rounded-2xl border shadow-sm transition-colors duration-700 ${
+                running
+                  ? "border-tertiary/40 bg-gradient-to-b from-tertiary-container/30 to-surface-container-lowest dark:to-surface-container-high"
+                  : "border-outline-variant/30 bg-surface-container-lowest dark:bg-surface-container-high"
+              }`}
+            >
+              {/* 環境暈光：運作中暖色脈動，閒置沉穩 */}
+              <div
+                aria-hidden
+                className={`pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full blur-3xl transition-opacity duration-700 ${
+                  running
+                    ? "bg-tertiary/25 focus-pulse"
+                    : "bg-primary-container/20 opacity-40"
+                }`}
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -bottom-28 -left-28 w-72 h-72 rounded-full bg-primary-container/15 blur-3xl opacity-40"
               />
 
-              {/* 控制：開始/暫停、重置、第幾輪 */}
-              <div className="mt-lg flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={toggleTimer}
-                  className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-7 py-2.5 rounded-full shadow flex items-center gap-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                >
-                  <span className="material-symbols-outlined text-[20px]">
-                    {running ? "pause" : "play_arrow"}
-                  </span>
-                  {running ? "暫停" : "開始"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetTimer}
-                  className="bg-surface-container text-on-surface-variant hover:bg-surface-container-highest font-bold text-body-md w-11 h-11 rounded-full border border-outline-variant/30 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  aria-label="重置番茄鐘"
-                  title="重置"
-                >
-                  <span className="material-symbols-outlined text-[20px]">
-                    refresh
-                  </span>
-                </button>
+              <div className="relative p-lg sm:p-xl flex flex-col items-center">
+                {/* 簽名元件：圓形進度環包住時間 */}
+                <PomodoroRing
+                  mins={mins}
+                  secs={secs}
+                  progress={pomoProgress}
+                  running={running}
+                  size={256}
+                  stroke={14}
+                />
+
+                {/* 控制：開始/暫停、重置、第幾輪 */}
+                <div className="mt-lg flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={toggleTimer}
+                    className="bg-primary text-on-primary hover:bg-surface-tint font-bold text-body-md px-7 py-2.5 rounded-full shadow flex items-center gap-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {running ? "pause" : "play_arrow"}
+                    </span>
+                    {running ? "暫停" : "開始"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetTimer}
+                    className="bg-surface-container text-on-surface-variant hover:bg-surface-container-highest font-bold text-body-md w-11 h-11 rounded-full border border-outline-variant/30 transition-all flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-label="重置番茄鐘"
+                    title="重置"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      refresh
+                    </span>
+                  </button>
+                </div>
+                <p className="mt-3 text-label-md font-bold uppercase tracking-[0.14em] text-secondary">
+                  {pomoRound > 0
+                    ? `第 ${pomoRound + 1} 輪 · 已完成 ${pomoRound}`
+                    : "第 1 輪"}
+                </p>
               </div>
-              <p className="mt-3 text-label-md font-bold uppercase tracking-[0.14em] text-secondary">
-                {pomoRound > 0
-                  ? `第 ${pomoRound + 1} 輪 · 已完成 ${pomoRound}`
-                  : "第 1 輪"}
-              </p>
             </div>
-          </div>
+          )}
 
           {/* ---- 專注夥伴：頭像叢集（present 成員，語音中顯示綠光環） ---- */}
           <div className="bg-surface-container-lowest dark:bg-surface-container-high p-md rounded-2xl border border-outline-variant/30 shadow-sm">
@@ -1042,6 +1121,81 @@ export default function StudyRoomDetail({
                   </span>
                   {rnnoiseActive ? "AI 降噪（RNNoise）" : "瀏覽器內建降噪"}
                 </span>
+              </div>
+            )}
+
+            {/* 虛擬背景選擇：開鏡頭時顯示。切換不需重開鏡頭，即時套到送 peer / 錄製的畫面。 */}
+            {inVoice && cameraOn && (
+              <div className="mt-3 flex items-center gap-2 flex-wrap rounded-xl bg-surface-container-high/60 border border-outline-variant/30 px-3 py-2">
+                <span className="text-[11px] font-bold text-on-surface-variant flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-primary">
+                    wallpaper
+                  </span>
+                  虛擬背景
+                </span>
+                {/* 無 / 模糊 模式按鈕 */}
+                {([
+                  { mode: "none", label: "無", icon: "block" },
+                  { mode: "blur", label: "模糊", icon: "blur_on" },
+                ] as { mode: VirtualBgMode; label: string; icon: string }[]).map(
+                  (opt) => {
+                    const active = voice.virtualBg.mode === opt.mode;
+                    return (
+                      <button
+                        key={opt.mode}
+                        type="button"
+                        onClick={() =>
+                          voice.setVirtualBg({
+                            ...voice.virtualBg,
+                            mode: opt.mode,
+                          })
+                        }
+                        aria-pressed={active}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                          active
+                            ? "bg-primary-container text-on-primary-container border-primary/30"
+                            : "bg-surface-container text-on-surface-variant border-outline-variant/30 hover:bg-surface-container-highest"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          {opt.icon}
+                        </span>
+                        {opt.label}
+                      </button>
+                    );
+                  },
+                )}
+                {/* 背景圖片：點任一張即進入 image 模式並選定 */}
+                <span className="mx-0.5 text-outline-variant/50" aria-hidden>
+                  |
+                </span>
+                {BACKGROUND_IMAGES.map((bg) => {
+                  const active =
+                    voice.virtualBg.mode === "image" &&
+                    voice.virtualBg.imageId === bg.id;
+                  return (
+                    <button
+                      key={bg.id}
+                      type="button"
+                      onClick={() =>
+                        voice.setVirtualBg({ mode: "image", imageId: bg.id })
+                      }
+                      aria-pressed={active}
+                      title={`背景圖片：${bg.label}`}
+                      className={`relative w-9 h-7 rounded-md overflow-hidden border-2 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        active
+                          ? "border-primary shadow-[0_0_0_2px_rgba(59,130,246,0.25)]"
+                          : "border-outline-variant/40 hover:border-outline-variant"
+                      }`}
+                    >
+                      <img
+                        src={bg.src}
+                        alt={bg.label}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
 

@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     ".claude/**",
     // 第三方 RNNoise worklet/wasm 編譯產物（@sapphi-red/web-noise-suppressor），不納入 lint
     "public/rnnoise/**",
+    // 第三方 MediaPipe Tasks Vision wasm 與 selfie 分割模型（虛擬背景用），不納入 lint
+    "public/mediapipe/**",
   ]),
   {
     rules: {
