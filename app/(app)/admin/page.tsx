@@ -36,7 +36,7 @@ import {
   updateShopItem,
   toggleShopItem,
   deleteShopItem,
-  setUserRole,
+  updateUser,
   bootstrapAdmin,
   hideChatMessage,
   unhideChatMessage,
@@ -78,6 +78,20 @@ const FIELD = "bg-surface border border-outline-variant text-on-surface rounded-
 const BTN_PRIMARY = "bg-primary hover:bg-surface-tint text-on-primary font-bold text-[11px] px-3 py-1.5 rounded-lg";
 const BTN_NEUTRAL = "bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-bold text-[11px] px-3 py-1.5 rounded-lg border border-outline-variant/30";
 const BTN_DANGER = "bg-error hover:opacity-90 text-on-error font-bold text-[11px] px-3 py-1.5 rounded-lg";
+
+/** 使用者編輯：性別／電子雞造型選項（值與 profile/actions.ts 白名單一致）。 */
+const GENDER_OPTIONS = [
+  { value: "female", label: "🙋‍♀️ 女生" },
+  { value: "male", label: "🙋‍♂️ 男生" },
+  { value: "undisclosed", label: "🤐 未指定" },
+] as const;
+const PET_STYLE_OPTIONS = [
+  { value: "classic", label: "🤖 經典北科科" },
+  { value: "dog", label: "🐶 狗狗" },
+  { value: "cat", label: "🐱 貓咪" },
+  { value: "rabbit", label: "🐰 兔子" },
+  { value: "dragon", label: "🐲 小龍" },
+] as const;
 
 /** 保留目前 searchParams、覆寫部分鍵的小工具。 */
 function buildHref(
@@ -1020,69 +1034,183 @@ async function ShopPanel() {
 // ============================================================
 
 async function UsersPanel({ currentUserId }: { currentUserId?: string }) {
-  const rows = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      image: users.image,
-      role: users.role,
-      department: users.department,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .orderBy(desc(users.createdAt))
-    .limit(300);
+  const [rows, departmentRows] = await Promise.all([
+    db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        image: users.image,
+        role: users.role,
+        gender: users.gender,
+        petStyle: users.petStyle,
+        department: users.department,
+        bio: users.bio,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(300),
+    db
+      .select({ name: departments.name })
+      .from(departments)
+      .orderBy(departments.sortOrder, departments.name),
+  ]);
+
+  const departmentNames = departmentRows.map((d) => d.name);
 
   return (
     <PanelShell title="使用者管理" icon="group" count={`${rows.length} 位`}>
+      <p className="text-xs text-secondary mb-md">
+        展開每位使用者可編輯其全部可改資訊（暱稱、系所、角色、性別、自我介紹、電子雞造型）。電子郵件為 Google 綁定，唯讀不可改。防呆：不可把自己降為非管理員。
+      </p>
       {rows.length === 0 ? (
         <EmptyState text="尚無使用者。" />
       ) : (
         <div className="space-y-md max-h-[680px] overflow-y-auto pr-1 hide-scrollbar">
           {rows.map((u) => {
             const isSelf = u.id === currentUserId;
+            const deptInList =
+              !u.department || departmentNames.includes(u.department);
             return (
-              <div key={u.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="size-10 rounded-full bg-surface-container shrink-0 overflow-hidden flex items-center justify-center text-secondary">
-                    {u.image ? (
-                      <img src={u.image} alt="" className="size-full object-cover" />
-                    ) : (
-                      <span className="material-symbols-outlined text-[20px]">person</span>
-                    )}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-on-surface truncate">{u.name ?? "（未命名）"}</span>
-                      {isSelf && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">你</span>
+              <details key={u.id} className="group p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface">
+                <summary className="flex items-center justify-between gap-2 cursor-pointer list-none">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="size-10 rounded-full bg-surface-container shrink-0 overflow-hidden flex items-center justify-center text-secondary">
+                      {u.image ? (
+                        <img src={u.image} alt="" className="size-full object-cover" />
+                      ) : (
+                        <span className="material-symbols-outlined text-[20px]">person</span>
                       )}
-                      <RoleBadge role={u.role as Role} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-on-surface truncate">{u.name ?? "（未命名）"}</span>
+                        {isSelf && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">你</span>
+                        )}
+                        <RoleBadge role={u.role as Role} />
+                      </div>
+                      <p className="text-[10px] text-secondary truncate">{u.email ?? "（無 email）"}</p>
+                      <p className="text-[10px] text-secondary truncate">
+                        {u.department ?? "未指定科系"} • 註冊於 {formatDateTime(u.createdAt)}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-secondary truncate">{u.email ?? "（無 email）"}</p>
-                    <p className="text-[10px] text-secondary truncate">
-                      {u.department ?? "未指定科系"} • 註冊於 {formatDateTime(u.createdAt)}
-                    </p>
                   </div>
-                </div>
-                <form action={setUserRole} className="flex items-center gap-1.5 shrink-0">
+                  <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-secondary group-open:text-primary">
+                    <span className="material-symbols-outlined text-[18px] transition-transform group-open:rotate-180">expand_more</span>
+                    <span className="group-open:hidden">編輯</span>
+                    <span className="hidden group-open:inline">收合</span>
+                  </span>
+                </summary>
+
+                <form
+                  action={updateUser}
+                  className="mt-md pt-md border-t border-outline-variant/20 grid grid-cols-1 md:grid-cols-2 gap-3"
+                >
                   <input type="hidden" name="userId" value={u.id} />
-                  <select key={u.role} name="role" defaultValue={u.role} className={FIELD}>
-                    {ROLE_OPTIONS.map((r) => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    disabled={isSelf}
-                    className={`${BTN_PRIMARY} disabled:opacity-40 disabled:cursor-not-allowed`}
-                    title={isSelf ? "不可變更自己的角色" : undefined}
-                  >
-                    套用
-                  </button>
+
+                  <label className="text-[10px] text-secondary">
+                    暱稱（留空維持原暱稱）
+                    <input
+                      name="name"
+                      defaultValue={u.name ?? ""}
+                      maxLength={100}
+                      className={`${FIELD} w-full mt-0.5`}
+                      placeholder="（未命名）"
+                    />
+                  </label>
+
+                  <label className="text-[10px] text-secondary">
+                    電子郵件（Google 綁定，唯讀）
+                    <input
+                      value={u.email ?? "（無 email）"}
+                      readOnly
+                      disabled
+                      className={`${FIELD} w-full mt-0.5 opacity-60 cursor-not-allowed`}
+                    />
+                  </label>
+
+                  <label className="text-[10px] text-secondary">
+                    系所
+                    <select
+                      key={u.department ?? "none"}
+                      name="department"
+                      defaultValue={u.department ?? ""}
+                      className={`${FIELD} w-full mt-0.5`}
+                    >
+                      <option value="">未指定科系</option>
+                      {/* 目前值已不在清單（例：科系被刪除）時，保留為選項以免儲存時遺失 */}
+                      {u.department && !deptInList && (
+                        <option value={u.department}>{u.department}（已停用）</option>
+                      )}
+                      {departmentNames.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-[10px] text-secondary">
+                    角色
+                    <select
+                      key={`role-${u.role}`}
+                      name="role"
+                      defaultValue={u.role}
+                      disabled={isSelf}
+                      className={`${FIELD} w-full mt-0.5 disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title={isSelf ? "不可變更自己的角色" : undefined}
+                    >
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-[10px] text-secondary">
+                    性別
+                    <select
+                      key={`gender-${u.gender ?? "none"}`}
+                      name="gender"
+                      defaultValue={u.gender ?? "undisclosed"}
+                      className={`${FIELD} w-full mt-0.5`}
+                    >
+                      {GENDER_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-[10px] text-secondary">
+                    電子雞造型
+                    <select
+                      key={`pet-${u.petStyle ?? "none"}`}
+                      name="petStyle"
+                      defaultValue={u.petStyle ?? "classic"}
+                      className={`${FIELD} w-full mt-0.5`}
+                    >
+                      {PET_STYLE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-[10px] text-secondary md:col-span-2">
+                    自我介紹
+                    <textarea
+                      name="bio"
+                      defaultValue={u.bio ?? ""}
+                      maxLength={500}
+                      rows={3}
+                      className={`${FIELD} w-full mt-0.5 resize-y`}
+                      placeholder="這位使用者的自我介紹..."
+                    />
+                  </label>
+
+                  <div className="md:col-span-2 flex justify-end">
+                    <button type="submit" className={BTN_PRIMARY}>儲存變更</button>
+                  </div>
                 </form>
-              </div>
+              </details>
             );
           })}
         </div>
