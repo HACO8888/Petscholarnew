@@ -115,6 +115,46 @@ async function roomExists(roomId) {
   return rows.length > 0;
 }
 
+// ---- 文章留言即時化（post:{postId} 房）----
+const POST_COMMENT_MAX_LENGTH = 20000;
+
+/** 文章是否存在且未被隱藏（被隱藏文章不開放留言）。 */
+async function postVisible(postId) {
+  const rows = await sql`
+    SELECT 1 FROM "post" WHERE id = ${postId} AND hidden = false LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+/** 父留言是否屬於同一篇文章（樹狀回覆需 parent 同 post）。 */
+async function parentBelongsToPost(parentId, postId) {
+  const rows = await sql`
+    SELECT 1 FROM "comment"
+    WHERE id = ${parentId} AND post_id = ${postId}
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+/** 寫入一則留言（原生 SQL，id 用 randomUUID），回傳給前端的形狀。 */
+async function saveComment({ postId, parentId, authorId, authorName, content, image }) {
+  const trimmed = content.trim().slice(0, POST_COMMENT_MAX_LENGTH);
+  const id = randomUUID();
+  const rows = await sql`
+    INSERT INTO "comment" (id, post_id, parent_id, author_id, author_name, content, image)
+    VALUES (
+      ${id}, ${postId}, ${parentId ?? null}, ${authorId},
+      ${(authorName || "使用者").slice(0, 200)}, ${trimmed}, ${image ?? null}
+    )
+    RETURNING id, post_id AS "postId", parent_id AS "parentId",
+              author_id AS "authorId", author_name AS "authorName",
+              content, image, is_adopted AS "isAdopted",
+              created_at AS "createdAt"
+  `;
+  const r = rows[0];
+  return { ...r, createdAt: new Date(r.createdAt).toISOString() };
+}
+
 async function loadRoomHistory(roomId, limit = HISTORY_LIMIT) {
   const rows = await sql`
     SELECT id, room_id AS "roomId", user_id AS "userId",
@@ -219,10 +259,118 @@ io.use(async (socket, nextFn) => {
 
 const roomChannel = (roomId) => `study-room:${roomId}`;
 const voiceChannel = (roomId) => `voice:${roomId}`;
+const postChannel = (postId) => `post:${postId}`;
 
 io.on("connection", (socket) => {
-  // client 連線時帶上 ?roomId=...（在 handshake query），加入該房
+  // 兩種連線：自習室（?roomId=...）或文章頁留言（?postId=...）。
   const roomId = socket.handshake.query?.roomId;
+  const postId = socket.handshake.query?.postId;
+
+  // ---- 文章頁：加入 post:{postId} 房，接收即時留言廣播 ----
+  if (postId && typeof postId === "string" && (!roomId || typeof roomId !== "string")) {
+    (async () => {
+      try {
+        if (!(await postVisible(postId))) {
+          socket.emit("comment:error", { message: "文章不存在" });
+          socket.disconnect(true);
+          return;
+        }
+        socket.join(postChannel(postId));
+        socket.data.postId = postId;
+      } catch (err) {
+        console.error("[socket.io] post join error:", err?.message);
+        socket.emit("comment:error", { message: "加入文章即時更新失敗" });
+        socket.disconnect(true);
+      }
+    })();
+
+    // 新增留言：驗 session（已於 io.use）+ 文章存在 → 寫 DB → 廣播該房
+    socket.on("comment:add", async (payload, ack) => {
+      try {
+        const pid = socket.data.postId;
+        if (!pid) {
+          if (typeof ack === "function") ack({ ok: false, error: "尚未加入文章" });
+          return;
+        }
+        const content =
+          typeof payload?.content === "string" ? payload.content.trim() : "";
+        const image =
+          typeof payload?.image === "string" && payload.image
+            ? payload.image
+            : null;
+        const parentId =
+          typeof payload?.parentId === "string" && payload.parentId
+            ? payload.parentId
+            : null;
+        // 內容可空但需有圖（純圖留言）；兩者皆空則拒絕
+        if (!content && !image) {
+          if (typeof ack === "function") ack({ ok: false, error: "內容不可為空" });
+          return;
+        }
+        if (!(await postVisible(pid))) {
+          if (typeof ack === "function") ack({ ok: false, error: "文章不存在" });
+          return;
+        }
+        // image 只接受本站上傳服務 URL（防注入外連／XSS）
+        if (image && !image.startsWith("/api/uploads/file?")) {
+          if (typeof ack === "function") ack({ ok: false, error: "圖片來源不合法" });
+          return;
+        }
+        if (parentId && !(await parentBelongsToPost(parentId, pid))) {
+          if (typeof ack === "function") ack({ ok: false, error: "回覆對象不存在" });
+          return;
+        }
+
+        const saved = await saveComment({
+          postId: pid,
+          parentId,
+          authorId: socket.data.userId,
+          authorName: socket.data.userName,
+          content,
+          image,
+        });
+
+        io.to(postChannel(pid)).emit("comment:new", saved);
+        if (typeof ack === "function") ack({ ok: true, id: saved.id });
+      } catch (err) {
+        console.error("[socket.io] comment:add error:", err?.message);
+        if (typeof ack === "function") ack({ ok: false, error: "送出失敗" });
+      }
+    });
+
+    // 採納即時廣播：採納/認證的 DB 寫入由 server action 負責（含金幣轉帳、授權）。
+    // 此事件僅在該寫入完成後，由發動者 client 觸發；server 重新確認 DB 狀態
+    // （該留言確為 is_adopted=true 且屬此文章、文章已解決）才廣播，故不可偽造。
+    socket.on("comment:adopt-notify", async (payload, ack) => {
+      try {
+        const pid = socket.data.postId;
+        const commentId =
+          typeof payload?.commentId === "string" ? payload.commentId : "";
+        if (!pid || !commentId) {
+          if (typeof ack === "function") ack({ ok: false, error: "缺少參數" });
+          return;
+        }
+        const rows = await sql`
+          SELECT 1 FROM "comment"
+          WHERE id = ${commentId} AND post_id = ${pid} AND is_adopted = true
+          LIMIT 1
+        `;
+        if (rows.length === 0) {
+          if (typeof ack === "function") ack({ ok: false, error: "尚未採納" });
+          return;
+        }
+        io.to(postChannel(pid)).emit("comment:adopted", { commentId });
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (err) {
+        console.error("[socket.io] comment:adopt-notify error:", err?.message);
+        if (typeof ack === "function") ack({ ok: false, error: "廣播失敗" });
+      }
+    });
+
+    return; // 文章頁連線不參與自習室聊天/語音事件
+  }
+
+  // ---- 自習室：client 連線時帶上 ?roomId=...，加入該房 ----
   if (!roomId || typeof roomId !== "string") {
     socket.emit("chat:error", { message: "缺少 roomId" });
     socket.disconnect(true);

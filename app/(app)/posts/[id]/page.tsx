@@ -10,7 +10,7 @@ import { formatDateTime } from "@/lib/format";
 import CommentThread from "@/components/CommentThread";
 import CommentTreeSvg from "@/components/CommentTreeSvg";
 import UserAvatarLink from "@/components/UserAvatarLink";
-import { addComment, reportPost } from "@/app/(app)/posts/actions";
+import { reportPost } from "@/app/(app)/posts/actions";
 
 export default async function PostPage({
   params,
@@ -122,6 +122,21 @@ export default async function PostPage({
           />
         </div>
 
+        {post.image && (
+          <a
+            href={post.image}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-lg block w-fit rounded-lg border border-outline-variant/40 overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <img
+              src={post.image}
+              alt="提問附圖"
+              className="max-h-96 max-w-full object-contain"
+            />
+          </a>
+        )}
+
         {/* Tags list */}
         {post.tags.length > 0 && (
           <div className="flex flex-wrap gap-sm mt-md">
@@ -161,7 +176,7 @@ export default async function PostPage({
         )}
       </div>
 
-      {/* Comment list (rendered as Tree recursively) */}
+      {/* Comment list (rendered as Tree recursively) + 即時留言輸入（含頂層輸入框） */}
       <div className="space-y-md">
         <CommentThread
           nodes={tree}
@@ -171,48 +186,6 @@ export default async function PostPage({
           currentUserRole={session?.user?.role ?? null}
           postSolved={post.solved}
         />
-      </div>
-
-      {/* Write Answer Card */}
-      <div className="bg-surface-container-lowest dark:bg-surface-container-high p-lg rounded-xl border border-outline-variant/30 shadow-sm mt-lg">
-        <h3 className="font-bold text-body-md text-on-surface flex items-center gap-1 mb-md">
-          <span className="material-symbols-outlined">edit_square</span> 撰寫您的解答 / 回覆
-        </h3>
-
-        {session?.user ? (
-          <form action={addComment} className="flex flex-col gap-md">
-            <input type="hidden" name="postId" value={post.id} />
-            <input type="hidden" name="parentId" value="" />
-            <div className="flex flex-col gap-xs">
-              <label htmlFor="reply-content" className="text-on-surface text-label-md">
-                您的解答描述
-              </label>
-              <textarea
-                id="reply-content"
-                name="content"
-                required
-                rows={5}
-                placeholder="請詳細列出您的公式推導、參考資料或邏輯解釋…（支援 $LaTeX$ 數學式）"
-                className="w-full rounded-lg border border-outline-variant bg-surface px-sm py-sm text-on-surface outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary text-body-md"
-              />
-            </div>
-            <div className="mt-sm flex justify-end">
-              <button
-                type="submit"
-                className="flex items-center gap-1 rounded-lg bg-primary px-4 py-2 font-bold text-on-primary shadow-sm transition-all hover:bg-surface-tint text-body-md"
-              >
-                <span className="material-symbols-outlined text-[18px]">send</span> 發表解答
-              </button>
-            </div>
-          </form>
-        ) : (
-          <p className="text-secondary text-body-md">
-            <Link href="/login" className="text-primary hover:underline">
-              登入
-            </Link>{" "}
-            後即可發表解答。
-          </p>
-        )}
       </div>
     </section>
   );

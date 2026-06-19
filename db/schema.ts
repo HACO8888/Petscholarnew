@@ -101,6 +101,8 @@ export const posts = pgTable("post", {
   authorName: text("author_name").notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  // 發問可附一張圖：本站服務 URL（/api/uploads/file?key=comments/{userId}/{uuid}.{ext}）
+  image: text("image"),
   department: text("department"),
   tags: jsonb("tags").$type<string[]>().default([]).notNull(),
   bounty: integer("bounty").default(0).notNull(),
@@ -128,6 +130,8 @@ export const comments = pgTable("comment", {
   authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
   authorName: text("author_name").notNull(),
   content: text("content").notNull(),
+  // 留言可附一張圖：本站服務 URL（/api/uploads/file?key=comments/{userId}/{uuid}.{ext}）
+  image: text("image"),
   isAdopted: boolean("is_adopted").default(false).notNull(),
   hidden: boolean("hidden").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
