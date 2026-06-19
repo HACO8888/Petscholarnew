@@ -12,6 +12,7 @@ import {
   studyRoomMembers,
   shopItems,
   users,
+  chatMessages,
 } from "@/db/schema";
 import AccessDenied from "@/components/AccessDenied";
 import ConfirmSubmit from "@/components/admin/ConfirmSubmit";
@@ -34,6 +35,8 @@ import {
   deleteShopItem,
   setUserRole,
   bootstrapAdmin,
+  hideChatMessage,
+  unhideChatMessage,
 } from "./actions";
 
 /** 後台子面板：涵蓋所有可管理實體。 */
@@ -43,6 +46,7 @@ const PANELS = [
   { id: "posts", label: "貼文", icon: "forum" },
   { id: "comments", label: "留言", icon: "chat" },
   { id: "rooms", label: "自習室", icon: "meeting_room" },
+  { id: "chat", label: "聊天訊息", icon: "chat_bubble" },
   { id: "shop", label: "商城商品", icon: "storefront" },
   { id: "users", label: "使用者", icon: "group" },
   { id: "reports", label: "檢舉案件", icon: "report" },
@@ -157,6 +161,7 @@ export default async function AdminPage({
         )}
         {panel === "comments" && <CommentsPanel />}
         {panel === "rooms" && <RoomsPanel />}
+        {panel === "chat" && <ChatPanel />}
         {panel === "shop" && <ShopPanel />}
         {panel === "users" && <UsersPanel currentUserId={session.user.id} />}
         {panel === "reports" && <ReportsPanel />}
@@ -634,6 +639,73 @@ async function RoomsPanel() {
 // ============================================================
 // 商城商品
 // ============================================================
+
+async function ChatPanel() {
+  const rows = await db
+    .select({
+      id: chatMessages.id,
+      content: chatMessages.content,
+      authorName: chatMessages.authorName,
+      hidden: chatMessages.hidden,
+      createdAt: chatMessages.createdAt,
+      roomId: chatMessages.roomId,
+      roomName: studyRooms.name,
+    })
+    .from(chatMessages)
+    .leftJoin(studyRooms, eq(chatMessages.roomId, studyRooms.id))
+    .orderBy(desc(chatMessages.createdAt))
+    .limit(200);
+
+  return (
+    <PanelShell title="自習室聊天訊息" icon="chat_bubble" count={`${rows.length} 則（最近 200）`}>
+      {rows.length === 0 ? (
+        <EmptyState text="目前沒有任何聊天訊息。" />
+      ) : (
+        <div className="space-y-md max-h-[640px] overflow-y-auto pr-1 hide-scrollbar">
+          {rows.map((m) => (
+            <div key={m.id} className="p-md rounded-xl border border-outline-variant/30 bg-surface-container-low dark:bg-surface space-y-2">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    {m.hidden && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
+                        已隱藏
+                      </span>
+                    )}
+                    <span className="text-[10px] text-secondary">
+                      <strong className="text-on-surface">{m.authorName}</strong> 於{" "}
+                      <strong className="text-on-surface">{m.roomName ?? "（自習室已刪除）"}</strong>
+                    </span>
+                    <span className="text-[10px] text-secondary">{formatDateTime(m.createdAt)}</span>
+                  </div>
+                  <p className="text-xs text-on-surface line-clamp-3 whitespace-pre-wrap break-words">{m.content}</p>
+                </div>
+                <div className="flex md:flex-col gap-1.5 shrink-0">
+                  {m.roomId && (
+                    <Link href={`/study-rooms/${m.roomId}`} className={`${BTN_NEUTRAL} no-underline text-center`}>
+                      前往
+                    </Link>
+                  )}
+                  {m.hidden ? (
+                    <form action={unhideChatMessage}>
+                      <input type="hidden" name="messageId" value={m.id} />
+                      <button type="submit" className={`${BTN_NEUTRAL} w-full`}>取消隱藏</button>
+                    </form>
+                  ) : (
+                    <form action={hideChatMessage}>
+                      <input type="hidden" name="messageId" value={m.id} />
+                      <button type="submit" className={`${BTN_NEUTRAL} w-full`}>隱藏</button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
 
 async function ShopPanel() {
   const rows = await db.select().from(shopItems).orderBy(shopItems.sortOrder);

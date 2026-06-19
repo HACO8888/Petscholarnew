@@ -14,6 +14,7 @@ import {
   studyRooms,
   shopItems,
   users,
+  chatMessages,
 } from "@/db/schema";
 import type { Role } from "@/db/schema";
 
@@ -26,6 +27,34 @@ async function requireAdmin(): Promise<Session> {
   if (!session?.user) redirect("/login");
   if (session.user.role !== "admin") throw new Error("需要系統管理員權限");
   return session;
+}
+
+/** admin：隱藏一則自習室聊天訊息（hidden 後一般使用者不再看得到） */
+export async function hideChatMessage(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("messageId") ?? "");
+  if (!id) throw new Error("缺少訊息");
+  const updated = await db
+    .update(chatMessages)
+    .set({ hidden: true })
+    .where(eq(chatMessages.id, id))
+    .returning({ id: chatMessages.id });
+  if (updated.length === 0) throw new Error("訊息不存在");
+  revalidatePath("/admin");
+}
+
+/** admin：取消隱藏一則聊天訊息 */
+export async function unhideChatMessage(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("messageId") ?? "");
+  if (!id) throw new Error("缺少訊息");
+  const updated = await db
+    .update(chatMessages)
+    .set({ hidden: false })
+    .where(eq(chatMessages.id, id))
+    .returning({ id: chatMessages.id });
+  if (updated.length === 0) throw new Error("訊息不存在");
+  revalidatePath("/admin");
 }
 
 const VALID_ROLES: Role[] = ["student", "ta", "professor", "admin"];
