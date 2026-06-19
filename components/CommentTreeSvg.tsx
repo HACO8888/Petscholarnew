@@ -21,21 +21,46 @@ interface Edge {
   adopted: boolean;
 }
 
-// 版面常數：節點為圓角卡片，連線改用平滑貝茲曲線。
-const PAD_X = 24;
-const PAD_TOP = 20;
-const PAD_BOTTOM = 24;
-const LEVEL_H = 92;
-const LEAF_W = 92;
-const NODE_W = 76;
-const NODE_H = 38;
-const NODE_RX = 12;
+// 版面常數：節點為圓角卡片，連線以垂直方向的三次貝茲曲線連接父子。
+const PAD_X = 24; // 左右內距
+const PAD_TOP = 20; // 上方內距
+const PAD_BOTTOM = 24; // 下方內距
+const LEVEL_H = 92; // 每層垂直間距（節點中心到中心）
+const NODE_W = 76; // 節點卡片寬
+const NODE_H = 38; // 節點卡片高
+const NODE_RX = 12; // 節點圓角
+const H_GAP = 16; // 同層相鄰子樹之間的最小水平間隙
+const SLOT_W = NODE_W + H_GAP; // 單一節點佔用的水平寬度（含間隙）
 
 // 作者名截斷：保留可讀長度，過長補上省略號（完整名稱仍以 <title> 提供）。
 function truncate(name: string, max = 6): string {
   const trimmed = name.trim();
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, max)}…`;
+}
+
+type TreeLike = {
+  id: string;
+  authorName: string;
+  isAdopted: boolean;
+  children: TreeLike[];
+};
+
+// 每個節點先算出「子樹寬度」：葉節點佔一格，內部節點佔其所有子樹寬度之和。
+// 這保證任意深度/寬度的子樹都不會互相重疊（tidy-tree 的水平空間配置）。
+function subtreeWidth(node: TreeLike, widths: Map<string, number>): number {
+  if (node.children.length === 0) {
+    widths.set(node.id, SLOT_W);
+    return SLOT_W;
+  }
+  const total = node.children.reduce(
+    (sum, c) => sum + subtreeWidth(c, widths),
+    0,
+  );
+  // 內部節點本身至少要有一格寬，避免單一窄子樹讓父節點被擠到與兄弟重疊。
+  const w = Math.max(total, SLOT_W);
+  widths.set(node.id, w);
+  return w;
 }
 
 export default function CommentTreeSvg({
@@ -45,61 +70,6 @@ export default function CommentTreeSvg({
   nodes: CommentNode[];
   rootLabel: string;
 }) {
-  const placed: PlacedNode[] = [];
-  const edges: Edge[] = [];
-  let leafCounter = 0;
-  let maxDepth = 0;
-
-  type TreeLike = {
-    id: string;
-    authorName: string;
-    isAdopted: boolean;
-    children: TreeLike[];
-  };
-
-  const root: TreeLike = {
-    id: "__root__",
-    authorName: rootLabel,
-    isAdopted: false,
-    children: nodes,
-  };
-
-  function place(node: TreeLike, depth: number): { x: number; y: number } {
-    maxDepth = Math.max(maxDepth, depth);
-    const y = PAD_TOP + depth * LEVEL_H + NODE_H / 2;
-    let x: number;
-
-    if (node.children.length === 0) {
-      x = PAD_X + leafCounter * LEAF_W + LEAF_W / 2;
-      leafCounter += 1;
-    } else {
-      const childPos = node.children.map((c) => {
-        const p = place(c, depth + 1);
-        edges.push({ x1: 0, y1: y, x2: p.x, y2: p.y, adopted: c.isAdopted });
-        return p;
-      });
-      x = (childPos[0].x + childPos[childPos.length - 1].x) / 2;
-      // 補上本節點 x（edges 起點）
-      for (let i = edges.length - childPos.length; i < edges.length; i++) {
-        edges[i].x1 = x;
-      }
-    }
-
-    placed.push({
-      id: node.id,
-      label: truncate(node.authorName),
-      fullLabel: node.authorName,
-      x,
-      y,
-      adopted: node.isAdopted,
-      isRoot: node.id === "__root__",
-      depth,
-    });
-    return { x, y };
-  }
-
-  place(root, 0);
-
   // 空狀態：尚無留言時不畫圖，給友善提示。
   if (nodes.length === 0) {
     return (
@@ -114,7 +84,86 @@ export default function CommentTreeSvg({
     );
   }
 
-  const width = Math.max(PAD_X * 2 + leafCounter * LEAF_W, 280);
+  const placed: PlacedNode[] = [];
+  const edges: Edge[] = [];
+  let maxDepth = 0;
+
+  const root: TreeLike = {
+    id: "__root__",
+    authorName: rootLabel,
+    isAdopted: false,
+    children: nodes,
+  };
+
+  // Pass 1：算出每棵子樹的水平寬度。
+  const widths = new Map<string, number>();
+  subtreeWidth(root, widths);
+
+  // Pass 2：以 [left, left+width) 的水平帶狀區間配置每個子樹，
+  // 節點置於其子節點群（子帶）的水平中點；葉節點置於自身帶的中點。
+  function place(node: TreeLike, depth: number, left: number): PlacedNode {
+    maxDepth = Math.max(maxDepth, depth);
+    const y = PAD_TOP + depth * LEVEL_H + NODE_H / 2;
+    const width = widths.get(node.id)!;
+
+    let x: number;
+    const childPlacements: PlacedNode[] = [];
+
+    if (node.children.length === 0) {
+      // 葉節點：置於自身水平帶中點。
+      x = left + width / 2;
+    } else {
+      // 內部節點：依序把子樹排進連續的水平帶。
+      let cursor = left;
+      // 若子樹總寬小於本節點最小寬（被 SLOT_W 撐大），置中其子群於本帶。
+      const childrenTotal = node.children.reduce(
+        (sum, c) => sum + widths.get(c.id)!,
+        0,
+      );
+      cursor += Math.max(0, (width - childrenTotal) / 2);
+
+      for (const c of node.children) {
+        const cw = widths.get(c.id)!;
+        childPlacements.push(place(c, depth + 1, cursor));
+        cursor += cw;
+      }
+      // 父節點水平置中於「第一個子」與「最後一個子」的中心之間。
+      const first = childPlacements[0];
+      const last = childPlacements[childPlacements.length - 1];
+      x = (first.x + last.x) / 2;
+    }
+
+    const self: PlacedNode = {
+      id: node.id,
+      label: truncate(node.authorName),
+      fullLabel: node.authorName,
+      x,
+      y,
+      adopted: node.isAdopted,
+      isRoot: node.id === "__root__",
+      depth,
+    };
+    placed.push(self);
+
+    // 連線：父節點下緣 → 子節點上緣（x 在父節點確定後才能對準，故於此推入）。
+    for (const c of childPlacements) {
+      edges.push({ x1: x, y1: y, x2: c.x, y2: c.y, adopted: c.adopted });
+    }
+
+    return self;
+  }
+
+  place(root, 0, PAD_X);
+
+  // SVG 尺寸：完整涵蓋所有節點（含卡片半寬）與內距。
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const n of placed) {
+    minX = Math.min(minX, n.x - NODE_W / 2);
+    maxX = Math.max(maxX, n.x + NODE_W / 2);
+  }
+  const contentRight = maxX + PAD_X;
+  const width = Math.max(contentRight, 280);
   const height = PAD_TOP + maxDepth * LEVEL_H + NODE_H + PAD_BOTTOM;
 
   function focusComment(id: string) {
@@ -126,7 +175,7 @@ export default function CommentTreeSvg({
     window.setTimeout(() => el.classList.remove("ring-2", "ring-primary"), 1600);
   }
 
-  // 平滑連線：以垂直方向的三次貝茲曲線連接父子節點下/上緣。
+  // 平滑連線：以垂直方向的三次貝茲曲線連接父節點下緣與子節點上緣。
   function edgePath(e: Edge): string {
     const startY = e.y1 + NODE_H / 2;
     const endY = e.y2 - NODE_H / 2;
@@ -136,20 +185,30 @@ export default function CommentTreeSvg({
 
   return (
     <div className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest dark:bg-surface-container">
-      {/* 圖例 */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-outline-variant/20 px-3 py-2 text-label-md text-secondary">
+      {/* 圖例：色塊與實際節點填色一致（提問=primary、回覆=一般卡片、已採納=primary-container + 打勾） */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-outline-variant/20 px-3 py-2 text-label-md text-on-surface-variant">
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-4 rounded-[4px] bg-primary" aria-hidden />
+          <span
+            className="inline-block h-4 w-5 rounded-md bg-primary"
+            aria-hidden
+          />
           提問
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-4 rounded-[4px] border border-outline-variant bg-surface-container-high" aria-hidden />
+          <span
+            className="inline-block h-4 w-5 rounded-md border border-outline-variant bg-surface-container-high"
+            aria-hidden
+          />
           回覆
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-4 rounded-[4px] border border-primary bg-primary-container" aria-hidden />
-          <span className="material-symbols-outlined text-[14px] text-primary icon-fill" aria-hidden>
-            verified
+          <span
+            className="relative inline-flex h-4 w-5 items-center justify-center rounded-md border border-primary bg-primary-container"
+            aria-hidden
+          >
+            <span className="material-symbols-outlined text-[12px] leading-none text-primary icon-fill">
+              check
+            </span>
           </span>
           已採納
         </span>
