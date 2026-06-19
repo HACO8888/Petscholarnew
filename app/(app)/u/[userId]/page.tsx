@@ -123,18 +123,19 @@ export default async function PublicProfilePage({
   return (
     <div className="mx-auto max-w-4xl flex flex-col gap-xl">
       {/* 檔案頭部 */}
-      <section className="bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col items-center gap-lg sm:flex-row sm:items-start relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary-container rounded-full blur-3xl opacity-20 -mr-10 -mt-10" />
+      <section className="bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col items-center gap-lg sm:flex-row sm:items-center relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-primary-container rounded-full blur-3xl opacity-20 -mr-12 -mt-12" aria-hidden />
+        <div className="absolute bottom-0 left-0 w-28 h-28 bg-tertiary-container rounded-full blur-3xl opacity-20 -ml-10 -mb-10" aria-hidden />
         <div className="relative z-10 shrink-0">
           {user.image ? (
             <img
               alt={displayName}
-              className="w-28 h-28 rounded-full border-4 border-surface shadow-sm object-cover"
+              className="w-28 h-28 rounded-full border-4 border-surface shadow-md object-cover"
               src={user.image}
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="w-28 h-28 rounded-full border-4 border-surface shadow-sm bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg select-none">
+            <div className="w-28 h-28 rounded-full border-4 border-surface shadow-md bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg select-none">
               {avatarInitial || (
                 <span className="material-symbols-outlined" style={{ fontSize: "44px" }}>
                   person
@@ -146,7 +147,7 @@ export default async function PublicProfilePage({
 
         <div className="relative z-10 flex-1 min-w-0 text-center sm:text-left">
           <div className="flex flex-wrap items-center justify-center gap-sm sm:justify-start">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface break-words">
+            <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight break-words">
               {displayName}
             </h1>
             <span className={`text-label-md font-bold px-2 py-0.5 rounded ${roleBadge.cls}`}>
@@ -158,30 +159,44 @@ export default async function PublicProfilePage({
               </span>
             )}
           </div>
-          <p className="font-body-lg text-body-lg text-secondary mt-xs break-words">{department}</p>
+          <p className="inline-flex items-center gap-1 font-body-md text-body-md text-secondary mt-sm break-words">
+            <span className="material-symbols-outlined text-[18px] icon-fill" aria-hidden>school</span>
+            {department}
+          </p>
+          {pet && (
+            <p className="hidden sm:flex items-center gap-1 font-label-md text-label-md text-on-tertiary-container mt-sm">
+              <span className="inline-flex items-center gap-1 bg-tertiary-container px-2.5 py-1 rounded-full font-bold">
+                <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>star</span>
+                Lv. {pet.level}・{petName}
+              </span>
+            </p>
+          )}
         </div>
       </section>
 
       {/* 公開統計 */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-md">
-        {stats.map((s) => (
-          <div
-            key={s.key}
-            className="bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col items-center justify-center text-center border border-surface-container"
-          >
-            <span
-              className={`material-symbols-outlined mb-xs ${s.fg}`}
-              style={{ fontVariationSettings: "'FILL' 1" }}
-              aria-hidden
+      <section className="flex flex-col gap-md">
+        <h2 className="font-headline-md text-headline-md text-on-surface">學術足跡</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-md">
+          {stats.map((s) => (
+            <div
+              key={s.key}
+              className="bg-surface-container-low rounded-xl p-lg shadow-sm flex flex-col items-center justify-center text-center border border-surface-container hover:shadow-md transition-shadow"
             >
-              {s.icon}
-            </span>
-            <span className="font-headline-md text-headline-md text-on-surface">
-              {s.value.toLocaleString()}
-            </span>
-            <span className="font-label-md text-label-md text-secondary">{s.label}</span>
-          </div>
-        ))}
+              <span
+                className={`material-symbols-outlined mb-xs ${s.fg}`}
+                style={{ fontVariationSettings: "'FILL' 1" }}
+                aria-hidden
+              >
+                {s.icon}
+              </span>
+              <span className="font-headline-md text-headline-md text-on-surface">
+                {s.value.toLocaleString()}
+              </span>
+              <span className="font-label-md text-label-md text-secondary">{s.label}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* 學習夥伴（寵物） */}
