@@ -161,14 +161,15 @@ export default async function StudyRoomsPage() {
         ) : (
           <div className="flex gap-md overflow-x-auto hide-scrollbar pb-sm">
             {radarPins.map((pin) => (
-              <div
+              <Link
                 key={pin.id}
-                title={pin.name ?? "同學"}
-                className="flex flex-col items-center min-w-[72px] sm:min-w-[80px] group"
+                href={`/u/${pin.id}`}
+                title={`查看 ${pin.name ?? "同學"} 的公開檔案`}
+                className="flex flex-col items-center min-w-[72px] sm:min-w-[80px] group no-underline rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <div className="w-16 h-16 rounded-full bg-surface relative p-1 border-2 border-transparent group-hover:border-primary transition-colors">
                   {pin.image ? (
-                     
+
                     <img
                       alt={pin.name ?? "同學"}
                       className="w-full h-full rounded-full object-cover"
@@ -180,10 +181,10 @@ export default async function StudyRoomsPage() {
                     </div>
                   )}
                 </div>
-                <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center">
+                <span className="font-label-md text-label-md text-on-surface mt-xs truncate w-full text-center group-hover:text-primary transition-colors">
                   {pin.name ?? "同學"}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

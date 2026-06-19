@@ -131,7 +131,7 @@ export default async function DiscussionPage({
         </div>
         <Link
           href="/posts/new"
-          className="bg-primary text-on-primary px-lg py-md rounded-lg flex items-center justify-center gap-sm hover:bg-surface-tint shadow-sm transition-all focus:ring-2 focus:ring-primary-container focus:outline-none"
+          className="bg-primary text-on-primary px-lg py-md rounded-lg flex items-center justify-center gap-sm hover:bg-surface-tint shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           style={{ textDecoration: "none" }}
         >
           <span className="material-symbols-outlined">edit_square</span>
@@ -212,7 +212,7 @@ export default async function DiscussionPage({
           /* Empty State Placeholder */
           <div
             id="empty-state-placeholder"
-            className="flex flex-col items-center justify-center py-xl px-md bg-surface-container-lowest border border-dashed border-outline-variant/60 rounded-xl text-center p-8 shadow-sm"
+            className="flex flex-col items-center justify-center p-8 bg-surface-container-lowest dark:bg-surface-container border border-dashed border-outline-variant/50 rounded-xl text-center shadow-sm"
           >
             <span className="material-symbols-outlined text-[64px] text-outline mb-md">
               forum
@@ -229,7 +229,7 @@ export default async function DiscussionPage({
             </p>
             <Link
               href="/posts/new"
-              className="bg-primary hover:bg-surface-tint text-on-primary px-lg py-md rounded-lg font-label-md text-label-md flex items-center justify-center gap-xs shadow-sm transition-all focus:ring-2 focus:ring-primary-container focus:outline-none"
+              className="bg-primary hover:bg-surface-tint text-on-primary px-lg py-md rounded-full font-label-md text-label-md flex items-center justify-center gap-xs shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               style={{ textDecoration: "none" }}
             >
               <span className="material-symbols-outlined text-[18px]">edit_square</span>
@@ -241,7 +241,7 @@ export default async function DiscussionPage({
             <Link
               key={post.id}
               href={`/posts/${post.id}`}
-              className="bg-surface-container-lowest border border-surface-variant rounded-lg p-lg shadow-sm hover:shadow-md hover:border-primary/40 transition-all relative group block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              className="bg-surface-container-lowest dark:bg-surface-container border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-primary/40 transition-all relative group block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               style={{ textDecoration: "none" }}
             >
               <div className="flex flex-col sm:flex-row gap-md">
@@ -269,7 +269,8 @@ export default async function DiscussionPage({
                     <span aria-hidden="true">•</span>
                     <span>{formatDateTime(post.createdAt)}</span>
                     {post.solved && (
-                      <span className="px-sm py-[2px] bg-primary-container text-on-primary-container rounded-sm font-label-md text-label-md text-[11px]">
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-container px-2 py-0.5 font-medium text-on-primary-container text-label-md">
+                        <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>check_circle</span>
                         已解決
                       </span>
                     )}
@@ -280,20 +281,20 @@ export default async function DiscussionPage({
                   <p className="text-on-surface-variant font-body-md text-body-md line-clamp-2 mb-md break-words">
                     {toPlainPreview(post.content)}
                   </p>
-                  <div className="flex flex-wrap gap-xs">
-                    <span className="px-sm py-[2px] bg-secondary-container text-on-secondary-container rounded-sm font-label-md text-label-md text-[11px]">
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-secondary-container px-2 py-0.5 text-on-secondary-container font-label-md text-label-md">
                       #{post.boardName}
                     </span>
                     {post.tags.map((t) => (
                       <span
                         key={t}
-                        className="px-sm py-[2px] bg-secondary-container text-on-secondary-container rounded-sm font-label-md text-label-md text-[11px]"
+                        className="rounded-full bg-secondary-container px-2 py-0.5 text-on-secondary-container font-label-md text-label-md"
                       >
                         #{t}
                       </span>
                     ))}
                     {post.bounty > 0 && (
-                      <span className="px-sm py-[2px] bg-secondary-container text-on-secondary-container rounded-sm font-label-md text-label-md text-[11px]">
+                      <span className="rounded-full bg-secondary-container px-2 py-0.5 text-on-secondary-container font-label-md text-label-md">
                         #懸賞{post.bounty}
                       </span>
                     )}
