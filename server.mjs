@@ -261,6 +261,50 @@ const roomChannel = (roomId) => `study-room:${roomId}`;
 const voiceChannel = (roomId) => `voice:${roomId}`;
 const postChannel = (postId) => `post:${postId}`;
 
+// ---- 房間層級錄製：每房選一位「錄製端」（recorder）----
+// 為每房維護「依加入順序」的語音成員 socket id 清單（in-memory，單機）。
+// 規則：recorder = 目前語音成員中「最早加入」者（清單第一個仍在線者）。
+// 任一時刻每房最多一個 recorder；成員變動就重算，換人才廣播 voice:recorder。
+// 注意：此為單機 in-memory 追蹤。多實例（Redis adapter）時錄製端選舉需另行設計，
+// 但本專案語音 mesh 亦假設同房成員落在同一實例，故沿用單機模型。
+const voiceOrder = new Map(); // roomId -> string[]（socket id，依加入序）
+const roomRecorder = new Map(); // roomId -> socketId | undefined
+
+// 重算某房 recorder 並在換人時廣播。回傳目前 recorderId（或 null）。
+const recomputeRecorder = (rid) => {
+  const order = voiceOrder.get(rid);
+  const nextRecorder = order && order.length > 0 ? order[0] : undefined;
+  const prev = roomRecorder.get(rid);
+  if (nextRecorder) roomRecorder.set(rid, nextRecorder);
+  else roomRecorder.delete(rid);
+  if (nextRecorder !== prev) {
+    // 換人（或從有到無）→ 廣播給全房，讓客戶端更新 amRecorder 與「房間錄製中」狀態。
+    io.to(voiceChannel(rid)).emit("voice:recorder", {
+      recorderId: nextRecorder ?? null,
+    });
+  }
+  return nextRecorder ?? null;
+};
+
+// 將 socket 加入某房語音成員序列（去重，維持既有順序）。
+const addVoiceMember = (rid, sid) => {
+  let order = voiceOrder.get(rid);
+  if (!order) {
+    order = [];
+    voiceOrder.set(rid, order);
+  }
+  if (!order.includes(sid)) order.push(sid);
+};
+
+// 從某房語音成員序列移除 socket。
+const removeVoiceMember = (rid, sid) => {
+  const order = voiceOrder.get(rid);
+  if (!order) return;
+  const idx = order.indexOf(sid);
+  if (idx >= 0) order.splice(idx, 1);
+  if (order.length === 0) voiceOrder.delete(rid);
+};
+
 io.on("connection", (socket) => {
   // 兩種連線：自習室（?roomId=...）或文章頁留言（?postId=...）。
   const roomId = socket.handshake.query?.roomId;
@@ -470,7 +514,13 @@ io.on("connection", (socket) => {
         name: socket.data.userName,
         userId: socket.data.userId,
       });
-      if (typeof ack === "function") ack({ ok: true, peers });
+      // 登記語音成員序列並（重）選錄製端。新成員加入後若 recorder 變動會廣播給全房；
+      // 此 socket 已在頻道內，故也會收到 voice:recorder。ack 一併帶上目前 recorderId
+      // 以避免「廣播在 join 完成前已送出」造成新成員漏接（join 通常不會換掉既有 recorder，
+      // 但首位加入者會成為 recorder，需靠 ack 得知）。
+      addVoiceMember(rid, socket.id);
+      const recorderId = recomputeRecorder(rid);
+      if (typeof ack === "function") ack({ ok: true, peers, recorderId });
     } catch (err) {
       console.error("[voice] join error:", err?.message);
       if (typeof ack === "function") ack({ ok: false, error: "加入語音失敗" });
@@ -562,6 +612,9 @@ io.on("connection", (socket) => {
           s.to(voiceChannel(ctx.rid)).emit("voice:peer-left", { id: s.id });
           s.leave(voiceChannel(ctx.rid));
           s.data.inVoice = false;
+          // 被踢者退出語音 → 重算錄製端（若他正是 recorder 則由次早者接手並廣播）。
+          removeVoiceMember(ctx.rid, s.id);
+          recomputeRecorder(ctx.rid);
         }
         s.emit("room:kicked", { by: socket.data.userName });
         s.disconnect(true);
@@ -579,6 +632,10 @@ io.on("connection", (socket) => {
       socket.to(voiceChannel(rid)).emit("voice:peer-left", { id: socket.id });
       socket.leave(voiceChannel(rid));
       socket.data.inVoice = false;
+      // 退出語音 → 重算錄製端。若離開者正是 recorder，由次早成員接手並廣播 voice:recorder；
+      // 房內已無人時清除（廣播 recorderId=null，雖此時無人收聽亦無妨）。
+      removeVoiceMember(rid, socket.id);
+      recomputeRecorder(rid);
     }
   };
   socket.on("voice:leave", leaveVoice);
