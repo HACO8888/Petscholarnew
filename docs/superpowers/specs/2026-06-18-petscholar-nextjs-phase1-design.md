@@ -1,7 +1,9 @@
 # PetScholar → Next.js 遷移：Phase 1 地基設計
 
 日期：2026-06-18
-狀態：設計待 review
+狀態：**歷史快照（已完成並大幅擴充）** —— 本文為 Phase 1 地基的設計記錄；專案此後已加入
+自訂 Socket.IO 伺服器、即時聊天/語音/視訊、Redis、MinIO、Cloudflare TURN、寵物等級制度、
+科系系統、公開檔案等。**最新狀態請見 [`AGENTS.md`](../../../AGENTS.md) 與 [`README.md`](../../../README.md)。**
 
 ## 背景與整體方向
 
