@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import Sidebar, { type SidebarData } from "@/components/Sidebar";
 import GuidedTour from "@/components/GuidedTour";
 import { auth } from "@/auth";
-import { getOrCreatePet } from "@/lib/pet";
+import { getOrCreatePet, isCheckedInToday } from "@/lib/pet";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import type { Role } from "@/db/schema";
@@ -12,9 +12,12 @@ const DEFAULT_SIDEBAR: SidebarData = {
   role: "student",
   petName: "",
   petStyle: null,
+  level: 1,
   hp: 0,
   maxHp: 0,
+  exp: 0,
   coins: 0,
+  checkedIn: false,
   equippedHat: false,
   equippedBackground: false,
   equippedRareStyle: false,
@@ -38,9 +41,12 @@ export default async function AppLayout({
       role: (session.user.role ?? "student") as Role,
       petName: pet.name,
       petStyle: me?.petStyle ?? "classic",
+      level: pet.level,
       hp: pet.hp,
       maxHp: pet.maxHp,
+      exp: pet.exp,
       coins: pet.coins,
+      checkedIn: isCheckedInToday(pet.lastCheckIn),
       equippedHat: pet.equippedHat,
       equippedBackground: pet.equippedBackground,
       equippedRareStyle: pet.equippedRareStyle,

@@ -1,41 +1,10 @@
 import Link from "next/link";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { boards, posts, users, shopItems, inventory } from "@/db/schema";
+import { boards, posts } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
-import { auth } from "@/auth";
-import { getOrCreatePet, isCheckedInToday } from "@/lib/pet";
 import { readLevelUpSignal } from "@/lib/level-up-signal";
-import HomeSidebar, { type HomeSidebarData } from "@/components/HomeSidebar";
 import LevelUpToast from "@/components/LevelUpToast";
-import type { Role } from "@/db/schema";
-
-const ROLE_LABELS: Record<string, string> = {
-  student: "學生",
-  ta: "課程助教",
-  professor: "課程教授",
-  admin: "系統管理員",
-};
-
-const DEFAULT_HOME_SIDEBAR: HomeSidebarData = {
-  loggedIn: false,
-  userName: "訪客",
-  userDept: "請先登入",
-  userImage: null,
-  petName: "未領養",
-  petStyle: null,
-  equippedHat: false,
-  equippedBackground: false,
-  equippedRareStyle: false,
-  level: 1,
-  // 未登入不顯示假數值（先前是 500/500、100 金幣），改為 0 的鎖定狀態
-  hp: 0,
-  maxHp: 0,
-  exp: 0,
-  coins: 0,
-  checkedIn: false,
-  quickFeed: [],
-};
 
 export default async function HomePage({
   searchParams,
@@ -43,7 +12,6 @@ export default async function HomePage({
   searchParams: Promise<{ dept?: string }>;
 }) {
   const { dept } = await searchParams;
-  const session = await auth();
   const levelUp = await readLevelUpSignal();
 
   const boardRows = await db.select().from(boards).orderBy(boards.sortOrder);
@@ -71,54 +39,13 @@ export default async function HomePage({
     .where(activeBoard ? and(eq(posts.boardId, activeBoard.id), eq(posts.hidden, false)) : eq(posts.hidden, false))
     .orderBy(desc(posts.createdAt));
 
-  // Home sidebar data
-  let sidebar: HomeSidebarData = DEFAULT_HOME_SIDEBAR;
-  if (session?.user?.id) {
-    const pet = await getOrCreatePet(session.user.id);
-    const [me] = await db
-      .select({ name: users.name, department: users.department, role: users.role, image: users.image, petStyle: users.petStyle })
-      .from(users)
-      .where(eq(users.id, session.user.id))
-      .limit(1);
-    const food = await db
-      .select({ itemId: inventory.itemId, name: shopItems.name, icon: shopItems.icon, image: shopItems.image, quantity: inventory.quantity })
-      .from(inventory)
-      .innerJoin(shopItems, eq(inventory.itemId, shopItems.id))
-      .where(and(eq(inventory.userId, session.user.id), eq(shopItems.type, "food"), gt(inventory.quantity, 0)))
-      .limit(4);
-    const roleLabel = ROLE_LABELS[(me?.role as Role) ?? "student"] ?? "學生";
-    const deptText = me?.department?.trim()
-      ? `${me.department} · ${roleLabel}`
-      : `請選擇系所 · ${roleLabel}`;
-    sidebar = {
-      loggedIn: true,
-      userName: me?.name ?? session.user.name ?? "同學",
-      userDept: deptText,
-      userImage: me?.image ?? session.user.image ?? null,
-      petName: pet.name,
-      petStyle: me?.petStyle ?? "classic",
-      equippedHat: pet.equippedHat,
-      equippedBackground: pet.equippedBackground,
-      equippedRareStyle: pet.equippedRareStyle,
-      level: pet.level,
-      hp: pet.hp,
-      maxHp: pet.maxHp,
-      exp: pet.exp,
-      coins: pet.coins,
-      checkedIn: isCheckedInToday(pet.lastCheckIn),
-      quickFeed: food,
-    };
-  }
-
   return (
-    <div className="flex flex-col xl:flex-row relative w-full gap-lg">
+    <>
       <LevelUpToast
         initialLevel={levelUp?.newLevel ?? null}
         initialLevels={levelUp?.levels ?? null}
       />
-      <div className="flex-1 min-w-0">
-
-        <section>
+      <section>
           <div className="mb-lg">
             <h1 className="font-semibold text-headline-lg text-on-background">看板</h1>
             <p className="text-secondary text-body-md mt-xs">探索各學院與科系的專業課業討論。</p>
@@ -216,9 +143,6 @@ export default async function HomePage({
             )}
           </div>
         </section>
-      </div>
-
-      <HomeSidebar data={sidebar} />
-    </div>
+    </>
   );
 }
