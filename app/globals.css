@@ -212,6 +212,16 @@ body {
 
 .hearts-glow { filter: drop-shadow(0 0 3px rgba(255, 80, 80, 0.5)); }
 
+/* ==== 自習室「專注光環」：番茄鐘運作中的柔和脈動發光 ==== */
+.focus-pulse { animation: focus-pulse 3.4s ease-in-out infinite; }
+@keyframes focus-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-pulse { animation: none; opacity: 0.7; }
+}
+
 .hp-bar { background: linear-gradient(90deg, #34d399, #10b981); }
 .exp-bar { background: linear-gradient(90deg, #60a5fa, #4b6172); }
 
