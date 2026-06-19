@@ -98,6 +98,9 @@ export async function deleteRecording(formData: FormData) {
 }
 
 const VALID_ROLES: Role[] = ["student", "ta", "professor", "admin"];
+/** 與個人檔案（profile/actions.ts）一致的合法值，杜絕竄改表單寫入任意字串。 */
+const VALID_GENDERS = ["male", "female", "undisclosed"] as const;
+const VALID_PET_STYLES = ["classic", "cat", "dog", "rabbit", "dragon"] as const;
 
 /** 重新驗證受某篇貼文影響的所有列表/詳情頁。 */
 function revalidatePostSurfaces(postId: string, boardId?: string) {
@@ -459,28 +462,73 @@ export async function deleteShopItem(formData: FormData) {
 // 使用者 user
 // ============================================================
 
-/** 變更使用者角色（student/ta/professor/admin）。 */
-export async function setUserRole(formData: FormData) {
+/**
+ * 編輯使用者所有可改資訊：暱稱、系所、角色、性別、自我介紹、電子雞造型。
+ * email 為 Google 綁定不可改，故不接受。所有值在 server 端嚴格白名單化：
+ *   - role/gender/petStyle 只接受固定列舉值，否則拒絕（role）或落回原值/null。
+ *   - department 僅接受 departments 清單內的系名，其餘（含竄改）一律設為 null。
+ * 防呆（沿用 setUserRole 精神）：管理員不可把自己降為非 admin，避免鎖死後台入口。
+ */
+export async function updateUser(formData: FormData) {
   const session = await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
-  const role = String(formData.get("role") ?? "");
   if (!userId) throw new Error("缺少使用者");
+
+  const role = String(formData.get("role") ?? "");
   if (!(VALID_ROLES as string[]).includes(role)) throw new Error("無效的角色");
 
-  // 防呆：避免管理員把自己降權後再也進不來後台（仍可由 ADMIN_BOOTSTRAP_EMAIL 救回，
-  // 但這裡先擋下明顯的自我降權誤操作）。
+  // 防呆：避免管理員把自己降權後再也進不來後台。
   if (session.user?.id === userId && role !== "admin") {
     throw new Error("不可變更自己的管理員角色（請改用其他管理員帳號操作）");
   }
 
+  // 暱稱：留空則維持原暱稱（不清成 null，否則貼文作者顯示與排行榜身分會壞掉）。
+  const name = String(formData.get("name") ?? "").trim().slice(0, 100);
+
+  const genderRaw = String(formData.get("gender") ?? "");
+  const gender = (VALID_GENDERS as readonly string[]).includes(genderRaw)
+    ? genderRaw
+    : null;
+
+  const petStyleRaw = String(formData.get("petStyle") ?? "");
+  const petStyle = (VALID_PET_STYLES as readonly string[]).includes(petStyleRaw)
+    ? petStyleRaw
+    : null;
+
+  const bio = String(formData.get("bio") ?? "").trim().slice(0, 500) || null;
+
+  // 系所：只接受 departments 清單內的系名（空字串＝未指定→null）。
+  const departmentRaw = String(formData.get("department") ?? "").trim().slice(0, 60);
+  let department: string | null = null;
+  if (departmentRaw) {
+    const [match] = await db
+      .select({ name: departments.name })
+      .from(departments)
+      .where(eq(departments.name, departmentRaw))
+      .limit(1);
+    department = match?.name ?? null;
+  }
+
+  const userSet: {
+    role: string;
+    gender: string | null;
+    petStyle: string | null;
+    department: string | null;
+    bio: string | null;
+    name?: string;
+  } = { role, gender, petStyle, department, bio };
+  if (name) userSet.name = name;
+
   const updated = await db
     .update(users)
-    .set({ role })
+    .set(userSet)
     .where(eq(users.id, userId))
     .returning({ id: users.id });
   if (updated.length === 0) throw new Error("使用者不存在");
 
+  // 角色／科系等變更會反映在多個頁面（後台、個人檔案、貼文作者顯示）。
   revalidatePath("/admin");
+  revalidatePath("/profile");
 }
 
 // ============================================================
