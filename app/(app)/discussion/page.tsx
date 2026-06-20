@@ -16,7 +16,6 @@ type FilterKey = (typeof FILTERS)[number]["key"];
 
 const SORTS = [
   { key: "latest", label: "最新發布" },
-  { key: "bounty", label: "最高懸賞" },
   { key: "comments", label: "最多回覆" },
 ] as const;
 
@@ -82,11 +81,9 @@ export default async function DiscussionPage({
   const commentCount = sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`;
 
   const orderBy =
-    activeSort === "bounty"
-      ? [desc(posts.bounty), desc(posts.createdAt)]
-      : activeSort === "comments"
-        ? [desc(commentCount), desc(posts.createdAt)]
-        : [desc(posts.createdAt)];
+    activeSort === "comments"
+      ? [desc(commentCount), desc(posts.createdAt)]
+      : [desc(posts.createdAt)];
 
   // 先取總數以計算分頁，再依目前頁碼取對應區段。
   const [{ total }] = await db
@@ -111,7 +108,6 @@ export default async function DiscussionPage({
       authorImage: users.image,
       department: posts.department,
       tags: posts.tags,
-      bounty: posts.bounty,
       solved: posts.solved,
       createdAt: posts.createdAt,
       boardName: boards.name,
@@ -131,7 +127,7 @@ export default async function DiscussionPage({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-xl gap-md">
         <div>
           <h1 className="text-headline-lg font-semibold text-on-surface mb-xs">學術討論版</h1>
-          <p className="text-body-lg text-on-surface-variant">尋找解答，分享知識，賺取懸賞金幣。</p>
+          <p className="text-body-lg text-on-surface-variant">尋找解答，分享知識，賺取金幣。</p>
         </div>
         <Link
           href="/posts/new"
@@ -255,13 +251,6 @@ export default async function DiscussionPage({
                     <span className="text-body-md font-bold text-on-surface">{post.commentCount}</span>
                     <span className="text-label-md">回覆</span>
                   </div>
-                  <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-tertiary-container px-2 py-1.5 text-on-tertiary-container">
-                    <span className="inline-flex items-center gap-0.5 text-body-md font-bold">
-                      <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>paid</span>
-                      {post.solved ? "—" : post.bounty}
-                    </span>
-                    <span className="text-label-md">{post.solved ? "已結算" : "懸賞"}</span>
-                  </div>
                 </div>
                 <div className="order-1 min-w-0 flex-1 sm:order-2">
                   <div className="mb-sm flex flex-wrap items-center gap-x-sm gap-y-xs text-label-md text-secondary">
@@ -302,12 +291,6 @@ export default async function DiscussionPage({
                         #{t}
                       </span>
                     ))}
-                    {post.bounty > 0 && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-tertiary-container px-2 py-0.5 text-label-md font-medium text-on-tertiary-container">
-                        <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>paid</span>
-                        懸賞 {post.bounty}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>

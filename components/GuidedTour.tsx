@@ -49,7 +49,7 @@ const GUIDE_STEPS: GuideStep[] = [
     selector: 'a[href="/discussion"]',
     title: "討論版",
     message:
-      "討論版集中顯示提問與解答。發佈問題後會出現在這裡，也能檢視懸賞、狀態與回覆。",
+      "討論版集中顯示提問與解答。發佈問題後會出現在這裡，也能檢視狀態與回覆。",
   },
   {
     href: "/study-rooms",

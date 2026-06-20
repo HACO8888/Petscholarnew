@@ -8,7 +8,18 @@ import { users, pets, departments } from "@/db/schema";
 import { getOrCreatePet } from "@/lib/pet";
 
 const GENDERS = ["male", "female", "undisclosed"] as const;
-const PET_STYLES = ["classic", "cat", "dog", "rabbit", "dragon"] as const;
+const PET_STYLES = [
+  "classic",
+  "cat",
+  "dog",
+  "rabbit",
+  "dragon",
+  "tiger",
+  "lion",
+  "monkey",
+  "frog",
+  "unicorn",
+] as const;
 const DEFAULT_PET_NAME = "未命名小精靈";
 
 export async function updateProfile(formData: FormData) {

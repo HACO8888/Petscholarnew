@@ -30,6 +30,11 @@ const STYLE_EMOJI: Record<string, string> = {
   dog: "🐶",
   rabbit: "🐰",
   dragon: "🐉",
+  tiger: "🐯",
+  lion: "🦁",
+  monkey: "🐵",
+  frog: "🐸",
+  unicorn: "🦄",
 };
 
 // 側欄的寵物互動在每一頁都可能觸發，故 revalidate 整個 layout 讓側欄即時更新。

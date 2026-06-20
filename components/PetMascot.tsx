@@ -4,6 +4,11 @@ const STYLE_EMOJI: Record<string, string> = {
   dog: "🐶",
   rabbit: "🐰",
   dragon: "🐉",
+  tiger: "🐯",
+  lion: "🦁",
+  monkey: "🐵",
+  frog: "🐸",
+  unicorn: "🦄",
 };
 
 export default function PetMascot({

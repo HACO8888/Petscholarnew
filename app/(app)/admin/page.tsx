@@ -91,6 +91,11 @@ const PET_STYLE_OPTIONS = [
   { value: "cat", label: "🐱 貓咪" },
   { value: "rabbit", label: "🐰 兔子" },
   { value: "dragon", label: "🐲 小龍" },
+  { value: "tiger", label: "🐯 老虎" },
+  { value: "lion", label: "🦁 獅子" },
+  { value: "monkey", label: "🐵 猴子" },
+  { value: "frog", label: "🐸 青蛙" },
+  { value: "unicorn", label: "🦄 獨角獸" },
 ] as const;
 
 /** 保留目前 searchParams、覆寫部分鍵的小工具。 */
@@ -504,7 +509,6 @@ async function PostsPanel({
       authorName: posts.authorName,
       department: posts.department,
       boardName: boards.name,
-      bounty: posts.bounty,
       solved: posts.solved,
       hidden: posts.hidden,
       createdAt: posts.createdAt,
@@ -614,8 +618,6 @@ async function PostsPanel({
                 <span>作者：<strong>{p.authorName}</strong></span>
                 <span>•</span>
                 <span>{p.department ?? "未指定科系"}</span>
-                <span>•</span>
-                <span>🪙 {p.bounty} 金幣</span>
                 <span>•</span>
                 <span>{formatDateTime(p.createdAt)}</span>
               </div>

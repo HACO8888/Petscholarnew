@@ -28,7 +28,6 @@ export default async function BoardPage({
       authorImage: users.image,
       department: posts.department,
       tags: posts.tags,
-      bounty: posts.bounty,
       solved: posts.solved,
       createdAt: posts.createdAt,
       commentCount: sql<number>`(select count(*)::int from ${comments} where ${comments.postId} = ${posts.id} and ${comments.hidden} = false)`,

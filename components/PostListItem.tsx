@@ -10,7 +10,6 @@ export interface PostListData {
   authorImage?: string | null;
   department: string | null;
   tags: string[];
-  bounty: number;
   solved: boolean;
   createdAt: Date;
   commentCount: number;
@@ -19,7 +18,7 @@ export interface PostListData {
 
 /**
  * 統一的提問卡：被看板內頁、看板儀表板、全站提問列表共用。
- * 結構固定為「狀態/懸賞徽章 → 標題 → 作者（可點頭像）/分系/時間/回覆數 → 標籤」，
+ * 結構固定為「狀態徽章 → 標題 → 作者（可點頭像）/分系/時間/回覆數 → 標籤」，
  * 以確保跨頁掃讀體驗一致。
  */
 export default function PostListItem({ post }: { post: PostListData }) {
@@ -46,12 +45,6 @@ export default function PostListItem({ post }: { post: PostListData }) {
               <span className="inline-flex items-center gap-0.5 rounded-full bg-surface-container-high px-2 py-0.5 text-label-md font-medium text-secondary dark:bg-surface-variant">
                 <span className="material-symbols-outlined text-[14px]" aria-hidden>schedule</span>
                 待解答
-              </span>
-            )}
-            {post.bounty > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-tertiary-container px-2 py-0.5 text-label-md font-bold text-on-tertiary-container">
-                <span className="material-symbols-outlined text-[14px] icon-fill" aria-hidden>paid</span>
-                {post.bounty}
               </span>
             )}
           </div>

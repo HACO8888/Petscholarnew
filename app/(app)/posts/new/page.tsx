@@ -42,7 +42,7 @@ export default async function NewPostPage({
           發佈新提問
         </h1>
         <p className="mt-xs text-body-md text-on-surface-variant">
-          清楚描述你的問題、附上相關資料，設置懸賞金幣能吸引更多學霸來解答。
+          清楚描述你的問題並附上相關資料。每次發問可獲得 10 金幣；解答被採納時，回答者可獲得 20 金幣。
         </p>
       </div>
 
@@ -114,14 +114,14 @@ export default async function NewPostPage({
           <PostImageField />
         </div>
 
-        {/* 區段二：分類與懸賞 */}
+        {/* 區段二：分類與標籤 */}
         <div className="space-y-md">
           <h2 className="flex items-center gap-1.5 border-b border-outline-variant/30 pb-sm text-body-md font-bold text-on-surface">
-            <span className="material-symbols-outlined text-[20px] text-primary" aria-hidden>sell</span>
-            分類與懸賞
+            <span className="material-symbols-outlined text-[20px] text-primary" aria-hidden>label</span>
+            分類與標籤
           </h2>
 
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
             <label className="block sm:col-span-1">
               <span className="mb-1 block text-label-md font-medium text-on-surface-variant">科系（選填）</span>
               <select name="department" defaultValue="" className={fieldClass}>
@@ -142,18 +142,6 @@ export default async function NewPostPage({
                 className={fieldClass}
               />
               <span className="mt-1 block text-label-md text-secondary">以逗號分隔多個標籤。</span>
-            </label>
-            <label className="block sm:col-span-1">
-              <span className="mb-1 block text-label-md font-medium text-on-surface-variant">懸賞金幣（選填）</span>
-              <input
-                type="number"
-                name="bounty"
-                min={0}
-                max={9999}
-                defaultValue={0}
-                className={fieldClass}
-              />
-              <span className="mt-1 block text-label-md text-secondary">解答被採納時支付。</span>
             </label>
           </div>
         </div>

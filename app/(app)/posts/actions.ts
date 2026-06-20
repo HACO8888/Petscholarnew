@@ -2,16 +2,18 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, comments, boards, pets, reports, departments } from "@/db/schema";
 import { getOrCreatePet, applyExp } from "@/lib/pet";
 
 const ADOPT_EXP = 20;
-// 採納基礎獎勵：即使發問者未設懸賞，解答被採納也固定發放金幣（鼓勵解題）。
-const ADOPT_BASE_REWARD = 15;
-// 發問者獎勵：自己的提問獲得（被）採納解答 → 問題被解決，給小額金幣（鼓勵發問）。
+// 發問獎勵：每發佈一次提問，系統固定發給提問者金幣（鼓勵發問）。
+const ASK_CREATE_REWARD = 10;
+// 採納獎勵：解答被採納時，系統固定發給解答者金幣（鼓勵解題）。
+const ADOPT_BASE_REWARD = 20;
+// 發問者結案獎勵：自己的提問獲得採納解答 → 問題被解決，再給小額金幣。
 const ASK_RESOLVED_REWARD = 5;
 
 function str(formData: FormData, key: string): string {
@@ -42,10 +44,6 @@ export async function createPost(formData: FormData) {
     .map((t) => t.trim())
     .filter(Boolean)
     .slice(0, 8);
-  const bounty = Math.max(
-    0,
-    Math.min(9999, Number.parseInt(str(formData, "bounty"), 10) || 0),
-  );
   // 附圖：只接受本站上傳服務 URL（前端先上傳 /api/uploads 取得），其餘一律忽略。
   const imageRaw = str(formData, "image");
   const image = imageRaw.startsWith("/api/uploads/file?") ? imageRaw : null;
@@ -65,16 +63,6 @@ export async function createPost(formData: FormData) {
 
   const id = crypto.randomUUID();
   await db.transaction(async (tx) => {
-    // 懸賞採「託管」制：發文時先原子扣除發問者金幣（餘額不足則中止），
-    // 採納時再把這筆託管轉給解答者 → 金幣守恆，杜絕無中生有的增發。
-    if (bounty > 0) {
-      const debited = await tx
-        .update(pets)
-        .set({ coins: sql`${pets.coins} - ${bounty}`, updatedAt: new Date() })
-        .where(and(eq(pets.userId, userId), gte(pets.coins, bounty)))
-        .returning({ userId: pets.userId });
-      if (debited.length === 0) throw new Error("金幣不足以設定此懸賞");
-    }
     await tx.insert(posts).values({
       id,
       boardId,
@@ -85,8 +73,12 @@ export async function createPost(formData: FormData) {
       image,
       department,
       tags,
-      bounty,
     });
+    // 發問獎勵：發文成功即由系統固定發給提問者金幣（取代舊的懸賞託管制，不再扣款）。
+    await tx
+      .update(pets)
+      .set({ coins: sql`${pets.coins} + ${ASK_CREATE_REWARD}`, updatedAt: new Date() })
+      .where(eq(pets.userId, userId));
   });
 
   // 重新驗證所有會顯示此貼文的清單頁，避免新貼文在清單上過期
@@ -230,7 +222,7 @@ export async function adoptAnswer(formData: FormData) {
         await tx
           .update(pets)
           .set({
-            // 懸賞託管轉帳 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
+            // 採納固定獎勵(ADOPT_BASE_REWARD) + 任何殘留的舊懸賞託管 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
             coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward + ADOPT_BASE_REWARD}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
@@ -319,7 +311,7 @@ export async function verifyAnswerAsTA(formData: FormData) {
         await tx
           .update(pets)
           .set({
-            // 懸賞託管轉帳 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
+            // 採納固定獎勵(ADOPT_BASE_REWARD) + 任何殘留的舊懸賞託管 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
             coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward + ADOPT_BASE_REWARD}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,

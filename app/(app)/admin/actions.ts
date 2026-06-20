@@ -100,7 +100,18 @@ export async function deleteRecording(formData: FormData) {
 const VALID_ROLES: Role[] = ["student", "ta", "professor", "admin"];
 /** 與個人檔案（profile/actions.ts）一致的合法值，杜絕竄改表單寫入任意字串。 */
 const VALID_GENDERS = ["male", "female", "undisclosed"] as const;
-const VALID_PET_STYLES = ["classic", "cat", "dog", "rabbit", "dragon"] as const;
+const VALID_PET_STYLES = [
+  "classic",
+  "cat",
+  "dog",
+  "rabbit",
+  "dragon",
+  "tiger",
+  "lion",
+  "monkey",
+  "frog",
+  "unicorn",
+] as const;
 
 /** 重新驗證受某篇貼文影響的所有列表/詳情頁。 */
 function revalidatePostSurfaces(postId: string, boardId?: string) {

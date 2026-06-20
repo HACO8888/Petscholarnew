@@ -20,6 +20,11 @@ const PET_STYLE_OPTIONS = [
   { value: "cat", emoji: "🐱", label: "貓咪" },
   { value: "rabbit", emoji: "🐰", label: "兔子" },
   { value: "dragon", emoji: "🐲", label: "小龍" },
+  { value: "tiger", emoji: "🐯", label: "老虎" },
+  { value: "lion", emoji: "🦁", label: "獅子" },
+  { value: "monkey", emoji: "🐵", label: "猴子" },
+  { value: "frog", emoji: "🐸", label: "青蛙" },
+  { value: "unicorn", emoji: "🦄", label: "獨角獸" },
 ];
 
 export default async function ProfilePage() {
@@ -74,7 +79,6 @@ export default async function ProfilePage() {
       id: posts.id,
       title: posts.title,
       content: posts.content,
-      bounty: posts.bounty,
       solved: posts.solved,
       department: posts.department,
       createdAt: posts.createdAt,
@@ -281,9 +285,7 @@ export default async function ProfilePage() {
                       {q.department}
                     </span>
                   ) : null}
-                  <span className="flex items-center gap-xs">
-                    <span className="material-symbols-outlined text-sm">monetization_on</span> {q.bounty} 金幣
-                  </span>
+                  <span className="text-secondary">{formatDateTime(q.createdAt)}</span>
                 </div>
               </a>
             ))
@@ -336,9 +338,6 @@ export default async function ProfilePage() {
                         #{q.department}
                       </span>
                     ) : null}
-                    <span className="px-sm py-[2px] bg-tertiary-container text-on-tertiary-container rounded-sm">
-                      🪙 {q.bounty} 金幣
-                    </span>
                     <span className="text-secondary self-center">{formatDateTime(q.createdAt)}</span>
                   </div>
                 </a>

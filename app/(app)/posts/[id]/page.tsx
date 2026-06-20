@@ -55,7 +55,7 @@ export default async function PostPage({
       {/* 題目卡 */}
       <article className="mb-lg min-w-0 overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm dark:bg-surface-container-high">
         <div className="p-lg">
-          {/* 狀態 + 懸賞徽章列 */}
+          {/* 狀態徽章列 */}
           <div className="mb-md flex flex-wrap items-center gap-sm">
             {post.solved ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-tertiary-container px-3 py-1 text-label-md font-bold text-on-tertiary-container">
@@ -71,13 +71,6 @@ export default async function PostPage({
             <span className="inline-flex items-center gap-1 rounded-full bg-primary-container px-3 py-1 text-label-md font-bold text-on-primary-container">
               <span className="material-symbols-outlined text-[16px]" aria-hidden>school</span>
               {post.department || "未分系"}
-            </span>
-            <span
-              className="ml-auto inline-flex items-center gap-1 rounded-full bg-tertiary-container px-3 py-1 text-label-md font-bold text-on-tertiary-container shadow-sm"
-              title={post.solved ? "本提問已結算懸賞" : "解答被採納可獲得懸賞金幣"}
-            >
-              <span className="material-symbols-outlined text-[16px] icon-fill" aria-hidden>monetization_on</span>
-              懸賞 {post.bounty}
             </span>
           </div>
 
