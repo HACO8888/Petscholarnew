@@ -11,6 +11,9 @@
 ---
 
 ## 🧱 技術棧
+
+> 完整技術文件（架構圖、伺服器組成、資料表、部署）見 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
 - **Next.js 16**（App Router、React 19）、**TypeScript**、**Tailwind CSS v4**（Material 3 設計 token + 深淺模式）
 - **PostgreSQL + Drizzle ORM**
 - **Auth.js v5（next-auth）+ Google 登入**、資料庫 session
