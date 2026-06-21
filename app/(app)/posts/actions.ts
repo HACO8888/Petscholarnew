@@ -7,14 +7,13 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { posts, comments, boards, pets, reports, departments } from "@/db/schema";
 import { getOrCreatePet, applyExp } from "@/lib/pet";
+import { recordCoin } from "@/lib/coins";
 
 const ADOPT_EXP = 20;
 // 發問獎勵：每發佈一次提問，系統固定發給提問者金幣（鼓勵發問）。
-const ASK_CREATE_REWARD = 10;
+const ASK_CREATE_REWARD = 20;
 // 採納獎勵：解答被採納時，系統固定發給解答者金幣（鼓勵解題）。
 const ADOPT_BASE_REWARD = 20;
-// 發問者結案獎勵：自己的提問獲得採納解答 → 問題被解決，再給小額金幣。
-const ASK_RESOLVED_REWARD = 5;
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -75,10 +74,21 @@ export async function createPost(formData: FormData) {
       tags,
     });
     // 發問獎勵：發文成功即由系統固定發給提問者金幣（取代舊的懸賞託管制，不再扣款）。
-    await tx
+    const [walletAfter] = await tx
       .update(pets)
       .set({ coins: sql`${pets.coins} + ${ASK_CREATE_REWARD}`, updatedAt: new Date() })
-      .where(eq(pets.userId, userId));
+      .where(eq(pets.userId, userId))
+      .returning({ coins: pets.coins });
+    if (walletAfter) {
+      await recordCoin(tx, {
+        userId,
+        amount: ASK_CREATE_REWARD,
+        balanceAfter: walletAfter.coins,
+        reason: "ask",
+        description: "發問獎勵",
+        refId: id,
+      });
+    }
   });
 
   // 重新驗證所有會顯示此貼文的清單頁，避免新貼文在清單上過期
@@ -219,27 +229,44 @@ export async function adoptAnswer(formData: FormData) {
           answerer.maxHp,
           ADOPT_EXP,
         );
-        await tx
+        const baseReward = Math.max(0, claimed[0].bounty) + ADOPT_BASE_REWARD;
+        const [walletAfter] = await tx
           .update(pets)
           .set({
             // 採納固定獎勵(ADOPT_BASE_REWARD) + 任何殘留的舊懸賞託管 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
-            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward + ADOPT_BASE_REWARD}`,
+            coins: sql`${pets.coins} + ${baseReward + grown.coinReward}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,
             maxHp: grown.maxHp,
             updatedAt: new Date(),
           })
-          .where(eq(pets.userId, rewardTo));
+          .where(eq(pets.userId, rewardTo))
+          .returning({ coins: pets.coins });
+        if (walletAfter) {
+          // 採納獎勵與升級獎勵拆成兩筆，讓「解答被採納」永遠顯示固定金額，升級獎勵另計
+          await recordCoin(tx, {
+            userId: rewardTo,
+            amount: baseReward,
+            balanceAfter: walletAfter.coins - grown.coinReward,
+            reason: "adopt",
+            description: "解答被採納",
+            refId: postId,
+          });
+          if (grown.coinReward > 0) {
+            await recordCoin(tx, {
+              userId: rewardTo,
+              amount: grown.coinReward,
+              balanceAfter: walletAfter.coins,
+              reason: "levelup",
+              description: "寵物升級獎勵",
+              refId: postId,
+            });
+          }
+        }
       }
     }
   });
-
-  // 發問者：自己的提問獲得採納解答 → 問題解決，給小額金幣鼓勵發問
-  await db
-    .update(pets)
-    .set({ coins: sql`${pets.coins} + ${ASK_RESOLVED_REWARD}`, updatedAt: new Date() })
-    .where(eq(pets.userId, userId));
 
   revalidatePath(`/posts/${postId}`);
   revalidatePath("/discussion");
@@ -308,18 +335,40 @@ export async function verifyAnswerAsTA(formData: FormData) {
           answerer.maxHp,
           ADOPT_EXP,
         );
-        await tx
+        const baseReward = Math.max(0, claimed[0].bounty) + ADOPT_BASE_REWARD;
+        const [walletAfter] = await tx
           .update(pets)
           .set({
             // 採納固定獎勵(ADOPT_BASE_REWARD) + 任何殘留的舊懸賞託管 + 升級獎勵金幣（每升一級 +20×新等級，連升多級已累加）
-            coins: sql`${pets.coins} + ${Math.max(0, claimed[0].bounty) + grown.coinReward + ADOPT_BASE_REWARD}`,
+            coins: sql`${pets.coins} + ${baseReward + grown.coinReward}`,
             hp: Math.min(grown.maxHp, answerer.hp + grown.hpGain),
             exp: grown.exp,
             level: grown.level,
             maxHp: grown.maxHp,
             updatedAt: new Date(),
           })
-          .where(eq(pets.userId, rewardTo));
+          .where(eq(pets.userId, rewardTo))
+          .returning({ coins: pets.coins });
+        if (walletAfter) {
+          await recordCoin(tx, {
+            userId: rewardTo,
+            amount: baseReward,
+            balanceAfter: walletAfter.coins - grown.coinReward,
+            reason: "ta_verify",
+            description: "助教認證正解",
+            refId: postId,
+          });
+          if (grown.coinReward > 0) {
+            await recordCoin(tx, {
+              userId: rewardTo,
+              amount: grown.coinReward,
+              balanceAfter: walletAfter.coins,
+              reason: "levelup",
+              description: "寵物升級獎勵",
+              refId: postId,
+            });
+          }
+        }
       }
     }
   });

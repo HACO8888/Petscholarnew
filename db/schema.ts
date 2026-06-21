@@ -198,9 +198,36 @@ export const inventory = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.itemId] })],
 );
 
+// 金幣交易明細：每一筆金幣增減都記一列，供個人檔案「金幣紀錄」呈現。
+// pets.coins 仍是餘額的唯一真實來源；此表僅為可讀的歷史流水帳。
+export const coinTransactions = pgTable(
+  "coin_transaction",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // 正數＝獲得、負數＝支出
+    amount: integer("amount").notNull(),
+    // 此筆異動後的金幣餘額（顯示用，避免前端重算）
+    balanceAfter: integer("balance_after").notNull(),
+    // 類型：ask|adopt|ta_verify|levelup|checkin|purchase|heal|opening
+    reason: varchar("reason", { length: 24 }).notNull(),
+    // 人類可讀說明，如「發問獎勵」「購買 鮮魚便當」
+    description: text("description").notNull(),
+    // 關聯來源 id（postId / itemId），可為 null
+    refId: text("ref_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("coin_tx_user_created_idx").on(t.userId, t.createdAt)],
+);
+
 export type Pet = typeof pets.$inferSelect;
 export type ShopItem = typeof shopItems.$inferSelect;
 export type InventoryRow = typeof inventory.$inferSelect;
+export type CoinTransaction = typeof coinTransactions.$inferSelect;
 
 // ---- 自習室 ----
 

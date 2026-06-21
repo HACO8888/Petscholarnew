@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { pets, shopItems, inventory } from "@/db/schema";
 import { getOrCreatePet, applyExp, CHECKIN_REWARD } from "@/lib/pet";
+import { recordCoin } from "@/lib/coins";
 import { setLevelUpSignal } from "@/lib/level-up-signal";
 
 function revalidatePetPages() {
@@ -71,6 +72,15 @@ export async function buyItem(formData: FormData) {
         target: [inventory.userId, inventory.itemId],
         set: { quantity: sql`${inventory.quantity} + 1` },
       });
+
+    await recordCoin(tx, {
+      userId,
+      amount: -item.price,
+      balanceAfter: debited[0].coins,
+      reason: "purchase",
+      description: `購買 ${item.name}`,
+      refId: itemId,
+    });
   });
 
   revalidatePetPages();
@@ -117,7 +127,7 @@ export async function feedPet(formData: FormData) {
     // 升級新增的上限（hpGain）也補進當前 HP，避免升級瞬間多出空心、HP 比例下降
     const newHp = Math.min(leveled.maxHp, pet.hp + item.hpRestore + leveled.hpGain);
 
-    await tx
+    const [walletAfter] = await tx
       .update(pets)
       .set({
         hp: newHp,
@@ -128,7 +138,19 @@ export async function feedPet(formData: FormData) {
         coins: sql`${pets.coins} + ${leveled.coinReward}`,
         updatedAt: new Date(),
       })
-      .where(eq(pets.userId, userId));
+      .where(eq(pets.userId, userId))
+      .returning({ coins: pets.coins });
+
+    // 僅在實際升級（有金幣獎勵）時記一筆，餵食本身不增減金幣
+    if (walletAfter && leveled.coinReward > 0) {
+      await recordCoin(tx, {
+        userId,
+        amount: leveled.coinReward,
+        balanceAfter: walletAfter.coins,
+        reason: "levelup",
+        description: "寵物升級獎勵",
+      });
+    }
 
     return leveled.levelsGained > 0
       ? { level: leveled.level, levels: leveled.levelsGained }
@@ -149,18 +171,30 @@ export async function claimCheckin() {
     Date.UTC(taipei.getUTCFullYear(), taipei.getUTCMonth(), taipei.getUTCDate()) -
       8 * 3600 * 1000,
   );
-  // 原子條件式：唯有今天尚未簽到（lastCheckIn 為空或早於今日起點）的列才會被更新並發獎
-  const res = await db
-    .update(pets)
-    .set({ coins: sql`${pets.coins} + ${CHECKIN_REWARD}`, lastCheckIn: now, updatedAt: now })
-    .where(
-      and(
-        eq(pets.userId, userId),
-        or(isNull(pets.lastCheckIn), lt(pets.lastCheckIn, startOfTodayTaipei)),
-      ),
-    )
-    .returning({ userId: pets.userId });
-  if (res.length === 0) return; // 今天已簽到
+  // 原子條件式：唯有今天尚未簽到（lastCheckIn 為空或早於今日起點）的列才會被更新並發獎。
+  // 包進交易，讓金幣 update 與紀錄寫入成敗一致。
+  const claimed = await db.transaction(async (tx) => {
+    const res = await tx
+      .update(pets)
+      .set({ coins: sql`${pets.coins} + ${CHECKIN_REWARD}`, lastCheckIn: now, updatedAt: now })
+      .where(
+        and(
+          eq(pets.userId, userId),
+          or(isNull(pets.lastCheckIn), lt(pets.lastCheckIn, startOfTodayTaipei)),
+        ),
+      )
+      .returning({ coins: pets.coins });
+    if (res.length === 0) return false; // 今天已簽到
+    await recordCoin(tx, {
+      userId,
+      amount: CHECKIN_REWARD,
+      balanceAfter: res[0].coins,
+      reason: "checkin",
+      description: "每日簽到",
+    });
+    return true;
+  });
+  if (!claimed) return;
   revalidatePetPages();
 }
 
@@ -187,13 +221,25 @@ const HEAL_COST = 20;
 export async function healPet() {
   const userId = await requireUserId();
   await getOrCreatePet(userId); // 確保寵物存在
-  // 原子條件式：補滿 HP 並扣費，唯有金幣足夠的列才更新 → 杜絕並發雙重治療 / 負餘額
-  const res = await db
-    .update(pets)
-    .set({ hp: sql`${pets.maxHp}`, coins: sql`${pets.coins} - ${HEAL_COST}`, updatedAt: new Date() })
-    .where(and(eq(pets.userId, userId), gte(pets.coins, HEAL_COST)))
-    .returning({ userId: pets.userId });
-  if (res.length === 0) throw new Error("金幣不足");
+  // 原子條件式：補滿 HP 並扣費，唯有金幣足夠的列才更新 → 杜絕並發雙重治療 / 負餘額。
+  // 包進交易，讓扣款與紀錄寫入成敗一致。
+  const healed = await db.transaction(async (tx) => {
+    const res = await tx
+      .update(pets)
+      .set({ hp: sql`${pets.maxHp}`, coins: sql`${pets.coins} - ${HEAL_COST}`, updatedAt: new Date() })
+      .where(and(eq(pets.userId, userId), gte(pets.coins, HEAL_COST)))
+      .returning({ coins: pets.coins });
+    if (res.length === 0) return false;
+    await recordCoin(tx, {
+      userId,
+      amount: -HEAL_COST,
+      balanceAfter: res[0].coins,
+      reason: "heal",
+      description: "寵物治療",
+    });
+    return true;
+  });
+  if (!healed) throw new Error("金幣不足");
 
   revalidatePetPages();
 }

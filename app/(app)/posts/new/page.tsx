@@ -42,7 +42,7 @@ export default async function NewPostPage({
           發佈新提問
         </h1>
         <p className="mt-xs text-body-md text-on-surface-variant">
-          清楚描述你的問題並附上相關資料。每次發問可獲得 10 金幣；解答被採納時，回答者可獲得 20 金幣。
+          清楚描述你的問題並附上相關資料。每次發問可獲得 20 金幣；解答被採納時，回答者可獲得 20 金幣。
         </p>
       </div>
 

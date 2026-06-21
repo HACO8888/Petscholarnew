@@ -2,10 +2,11 @@ import { redirect } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users, posts, pets, comments, departments } from "@/db/schema";
+import { users, posts, pets, comments, departments, coinTransactions } from "@/db/schema";
 import { formatDateTime } from "@/lib/format";
 import { petTitle } from "@/lib/pet";
 import AvatarUpload from "@/components/AvatarUpload";
+import CoinHistoryDialog from "@/components/CoinHistoryDialog";
 import { updateProfile } from "./actions";
 
 const GENDER_OPTIONS = [
@@ -88,6 +89,21 @@ export default async function ProfilePage() {
     .orderBy(desc(posts.createdAt));
 
   const questionCount = questionRows.length;
+
+  // 金幣紀錄：最近 100 筆異動（最新在上），供「總金幣」卡片點開的彈窗顯示
+  const coinTxRows = await db
+    .select({
+      id: coinTransactions.id,
+      amount: coinTransactions.amount,
+      balanceAfter: coinTransactions.balanceAfter,
+      reason: coinTransactions.reason,
+      description: coinTransactions.description,
+      createdAt: coinTransactions.createdAt,
+    })
+    .from(coinTransactions)
+    .where(eq(coinTransactions.userId, userId))
+    .orderBy(desc(coinTransactions.createdAt))
+    .limit(100);
 
   // 成就解鎖判定（真實資料）
   const achievements = [
@@ -193,11 +209,7 @@ export default async function ProfilePage() {
             <span className="font-label-md text-label-md text-tertiary font-bold">{petTitle(petLevel)}</span>
             <span className="font-label-md text-label-md text-secondary">目前等級</span>
           </div>
-          <div className="bg-surface rounded-lg p-md flex flex-col justify-center items-center text-center border border-surface-container shadow-sm">
-            <span className="material-symbols-outlined text-primary mb-xs" style={{ fontVariationSettings: "'FILL' 1" }}>monetization_on</span>
-            <span className="font-headline-md text-headline-md text-on-surface">{petCoins.toLocaleString()}</span>
-            <span className="font-label-md text-label-md text-secondary">總金幣</span>
-          </div>
+          <CoinHistoryDialog coins={petCoins} transactions={coinTxRows} />
           <div className="bg-surface rounded-lg p-md flex flex-col justify-center items-center text-center border border-surface-container shadow-sm col-span-2">
             <span className="material-symbols-outlined text-secondary mb-xs" style={{ fontVariationSettings: "'FILL' 1" }}>question_answer</span>
             <span className="font-headline-md text-headline-md text-on-surface">{answerCount}</span>
