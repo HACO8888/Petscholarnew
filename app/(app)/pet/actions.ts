@@ -136,6 +136,8 @@ export async function feedPet(formData: FormData) {
         maxHp: leveled.maxHp,
         // 升級獎勵金幣：每升一級 +20×新等級（連升多級已逐級累加）
         coins: sql`${pets.coins} + ${leveled.coinReward}`,
+        // 餵食＝重置飢餓計時器（epoch 毫秒），從現在重新起算每小時扣血
+        hpUpdatedAt: Date.now(),
         updatedAt: new Date(),
       })
       .where(eq(pets.userId, userId))
@@ -198,23 +200,6 @@ export async function claimCheckin() {
   revalidatePetPages();
 }
 
-/** 時間流逝：HP 隨時間下降（最低 0），餓了就要餵
- *  注意："use server" 檔案只能 export async function，故常數不可 export。 */
-const TIME_PASS_HP_LOSS = 50;
-
-export async function simulateTimePass() {
-  const userId = await requireUserId();
-  const pet = await getOrCreatePet(userId);
-  const newHp = Math.max(0, pet.hp - TIME_PASS_HP_LOSS);
-
-  await db
-    .update(pets)
-    .set({ hp: newHp, updatedAt: new Date() })
-    .where(eq(pets.userId, userId));
-
-  revalidatePetPages();
-}
-
 /** 治療寵物：花費金幣把 HP 補滿至 maxHp（金幣不足則 throw） */
 const HEAL_COST = 20;
 
@@ -226,7 +211,13 @@ export async function healPet() {
   const healed = await db.transaction(async (tx) => {
     const res = await tx
       .update(pets)
-      .set({ hp: sql`${pets.maxHp}`, coins: sql`${pets.coins} - ${HEAL_COST}`, updatedAt: new Date() })
+      // 治療補滿 HP，同時重置飢餓計時器（epoch 毫秒，視同一次照顧）
+      .set({
+        hp: sql`${pets.maxHp}`,
+        coins: sql`${pets.coins} - ${HEAL_COST}`,
+        hpUpdatedAt: Date.now(),
+        updatedAt: new Date(),
+      })
       .where(and(eq(pets.userId, userId), gte(pets.coins, HEAL_COST)))
       .returning({ coins: pets.coins });
     if (res.length === 0) return false;

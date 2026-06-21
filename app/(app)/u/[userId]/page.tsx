@@ -10,7 +10,7 @@ import {
   studyRoomMembers,
   type Role,
 } from "@/db/schema";
-import { statusFromHp } from "@/lib/pet";
+import { statusFromHp, applyHpDecay } from "@/lib/pet";
 import PetMascot from "@/components/PetMascot";
 
 const ROLE_BADGES: Record<Role, { label: string; cls: string }> = {
@@ -57,6 +57,7 @@ export default async function PublicProfilePage({
       level: pets.level,
       hp: pets.hp,
       maxHp: pets.maxHp,
+      hpUpdatedAt: pets.hpUpdatedAt,
       equippedHat: pets.equippedHat,
       equippedBackground: pets.equippedBackground,
       equippedRareStyle: pets.equippedRareStyle,
@@ -94,7 +95,9 @@ export default async function PublicProfilePage({
   const isSelf = session.user.id === user.id;
 
   const petName = pet?.name?.trim() || "未命名小精靈";
-  const petFace = pet ? statusFromHp(pet.hp, pet.maxHp).face : "🙂";
+  // 以即時飢餓衰減後的 HP 決定表情（公開頁唯讀，不寫回；本人載入時才落地扣血）
+  const liveHp = pet ? applyHpDecay(pet.hp, pet.hpUpdatedAt).hp : 0;
+  const petFace = pet ? statusFromHp(liveHp, pet.maxHp).face : "🙂";
 
   const stats = [
     {

@@ -4,6 +4,7 @@ import {
   timestamp,
   primaryKey,
   integer,
+  bigint,
   varchar,
   boolean,
   jsonb,
@@ -162,6 +163,10 @@ export const pets = pgTable("pet", {
   equippedBackground: boolean("equipped_background").notNull().default(false),
   equippedRareStyle: boolean("equipped_rare_style").notNull().default(false),
   lastCheckIn: timestamp("last_check_in"),
+  // 飢餓衰減錨點：上次「餵食/治療」或上次結算扣血的 epoch 毫秒。
+  // 刻意用 bigint(ms) 而非 timestamp：timestamp without time zone 經 postgres-js 來回會有
+  // 時區/精度偏移（讀回與寫入差 8 小時），整數毫秒則完全免疫。0＝尚未錨定（載入時補為現在）。
+  hpUpdatedAt: bigint("hp_updated_at_ms", { mode: "number" }).notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

@@ -1,21 +1,74 @@
-import { eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { pets } from "@/db/schema";
 import type { Pet } from "@/db/schema";
 
 export const HP_PER_HEART = 100;
 export const CHECKIN_REWARD = 20;
+// 飢餓衰減：未餵食時每滿一小時扣 20 點生命值（滿血 500 約 25 小時歸零）。
+export const HP_DECAY_PER_HOUR = 20;
+const HP_DECAY_INTERVAL_MS = 60 * 60 * 1000;
 
-/** 取得使用者寵物，不存在則建立預設值 */
+/**
+ * 依「距上次餵食的實際經過時間」計算飢餓衰減（純函式，不碰 DB，可於任何顯示處重算）。
+ * 錨點與現在皆為 epoch 毫秒。以整數小時結算：每滿一小時扣 HP_DECAY_PER_HOUR，
+ * 不足一小時的餘數保留到下次；HP 最低 0。
+ * 回傳衰減後 hp、前進後的錨點（ms）、以及本次實際扣掉的量 decayed。
+ */
+export function applyHpDecay(
+  hp: number,
+  hpUpdatedAtMs: number,
+  nowMs: number = Date.now(),
+): { hp: number; hpUpdatedAtMs: number; decayed: number } {
+  const hours = Math.floor((nowMs - hpUpdatedAtMs) / HP_DECAY_INTERVAL_MS);
+  if (!hpUpdatedAtMs || hours <= 0 || hp <= 0) {
+    return { hp: Math.max(0, hp), hpUpdatedAtMs, decayed: 0 };
+  }
+  const newHp = Math.max(0, hp - hours * HP_DECAY_PER_HOUR);
+  // 錨點只前進「已結算的整數小時」，保留不足一小時的餘數繼續累積
+  const newAnchorMs = hpUpdatedAtMs + hours * HP_DECAY_INTERVAL_MS;
+  return { hp: newHp, hpUpdatedAtMs: newAnchorMs, decayed: hp - newHp };
+}
+
+/**
+ * 將飢餓衰減落地寫回 DB。回傳套用衰減後的最新寵物狀態。
+ * 用 lt(錨點 < 新錨點) 做條件式寫入：整數比較精確，且能擋下過期讀的覆蓋
+ * （例如另一請求已餵食把錨點推到更新的時間時，本次過期計算不會蓋回去）。
+ */
+async function persistHpDecay(pet: Pet): Promise<Pet> {
+  // 尚未錨定（理論上不會發生：新寵物 insert 即帶現在時間、現有列已回填）：補為現在當作剛餵食
+  if (!pet.hpUpdatedAt) {
+    const nowMs = Date.now();
+    await db
+      .update(pets)
+      .set({ hpUpdatedAt: nowMs })
+      .where(and(eq(pets.userId, pet.userId), eq(pets.hpUpdatedAt, 0)));
+    return { ...pet, hpUpdatedAt: nowMs };
+  }
+
+  const decayed = applyHpDecay(pet.hp, pet.hpUpdatedAt);
+  if (decayed.decayed <= 0) return pet;
+  await db
+    .update(pets)
+    .set({ hp: decayed.hp, hpUpdatedAt: decayed.hpUpdatedAtMs, updatedAt: new Date() })
+    .where(and(eq(pets.userId, pet.userId), lt(pets.hpUpdatedAt, decayed.hpUpdatedAtMs)));
+  return { ...pet, hp: decayed.hp, hpUpdatedAt: decayed.hpUpdatedAtMs };
+}
+
+/** 取得使用者寵物（不存在則建立並錨定現在），並先套用飢餓衰減後再回傳。 */
 export async function getOrCreatePet(userId: string): Promise<Pet> {
   const [existing] = await db
     .select()
     .from(pets)
     .where(eq(pets.userId, userId))
     .limit(1);
-  if (existing) return existing;
+  if (existing) return persistHpDecay(existing);
 
-  await db.insert(pets).values({ userId }).onConflictDoNothing();
+  // 新寵物：錨點設為現在，避免一建立就被當成長期未餵食而扣血
+  await db
+    .insert(pets)
+    .values({ userId, hpUpdatedAt: Date.now() })
+    .onConflictDoNothing();
   const [created] = await db
     .select()
     .from(pets)
